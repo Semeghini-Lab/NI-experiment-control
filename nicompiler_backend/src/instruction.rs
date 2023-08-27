@@ -1,6 +1,4 @@
-//! # Instruction Module
-//!
-//! This module provides definitions and implementations for instruction-related functionalities.
+//! Provides definitions and implementations for instruction-related functionalities.
 //!
 //! ## Main Structures and Enumerations:
 //!
@@ -80,22 +78,22 @@ pub struct Instruction {
 impl Instruction {
     /// Constructs an `Instruction` object.
     ///
-    /// This method serves as the foundational constructor upon which custom constructor 
-    /// wrappers for new instructions should be built. For each instruction type, 
-    /// it ensures that the `args` dictionary contains the required keys. 
-    /// 
+    /// This method serves as the foundational constructor upon which custom constructor
+    /// wrappers for new instructions should be built. For each instruction type,
+    /// it ensures that the `args` dictionary contains the required keys.
+    ///
     /// Missing keys will cause a panic.
     ///
     /// # Examples
     ///
-    /// Constructing a new `CONST` instruction 
-    /// (this is effectively the underlying implementation for [`Instruction::new_const`], 
+    /// Constructing a new `CONST` instruction
+    /// (this is effectively the underlying implementation for [`Instruction::new_const`],
     /// the more convenient constructor):
     ///
     /// ```
     /// use nicompiler_backend::instruction::*;
     /// use std::collections::HashMap;
-    /// 
+    ///
     /// let mut const_args = InstrArgs::new();
     /// const_args.insert("value".to_string(), 1.0);
     /// let const_instr = Instruction::new(InstrType::CONST, const_args);
@@ -110,7 +108,7 @@ impl Instruction {
     /// let const_instr = Instruction::new(InstrType::CONST, const_args);
     /// ```
     ///
-    /// The panic message will be: 
+    /// The panic message will be:
     /// `thread 'main' panicked at 'Expected instr type CONST to contain key value'`.
     ///
     /// Constructing a new `SINE` instruction:
@@ -139,7 +137,7 @@ impl Instruction {
 
     /// Evaluates the instruction and populates the given array view with float-point values.
     ///
-    /// This method takes a mutable array view (`t_arr`) and modifies its values in-place based on the instruction type and its arguments. 
+    /// This method takes a mutable array view (`t_arr`) and modifies its values in-place based on the instruction type and its arguments.
     ///
     /// - For `InstrType::CONST`, the array will be filled with the constant value specified by the `value` argument.
     /// - For `InstrType::SINE`, a sinusoidal waveform is generated using the arguments `freq`, `amplitude`, `offset`, and `phase`. Default values are used if certain arguments are not provided.
@@ -211,9 +209,9 @@ impl Instruction {
     ///
     /// Constructing a sine instruction with a specified frequency, and DC offset. Amplitude and phase will use any default values defined elsewhere:
     ///
-    /// --- 
+    /// ---
     /// # use nicompiler_backend::instruction::*;
-    /// 
+    ///
     /// let sine_instr = Instruction::new_sine(10.0, None, None, Some(1.0));
     /// ---
     ///
@@ -262,8 +260,8 @@ impl fmt::Display for Instruction {
 /// - `end_pos` is exclusive.
 ///
 /// `InstrBook` implements ordering based on `start_pos` to facilitate sorting.
-/// editing phase: defined interval, and whether to keep value after defined interval. 
-/// For instruction interval, `start_pos` is inclusive while `end_pos` is exclusive. 
+/// editing phase: defined interval, and whether to keep value after defined interval.
+/// For instruction interval, `start_pos` is inclusive while `end_pos` is exclusive.
 /// We implemented ordering for `InstrBook` to allow sorting based on `start_pos`.
 ///
 pub struct InstrBook {
@@ -301,7 +299,7 @@ impl InstrBook {
     /// let instruction = Instruction::new(InstrType::CONST, [("value".to_string(), 1.0)].iter().cloned().collect());
     /// let book = InstrBook::new(5, 5, true, instruction);
     /// ```
-    /// 
+    ///
     /// The panic message will be:
     /// `Instruction { /* ... */ } end_pos 5 should be strictly greater than start_pos 5`.
     pub fn new(start_pos: usize, end_pos: usize, keep_val: bool, instr: Instruction) -> Self {

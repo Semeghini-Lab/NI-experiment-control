@@ -3,8 +3,8 @@ use numpy;
 use pyo3::prelude::*;
 use std::collections::HashMap;
 
-use crate::device::*;
 use crate::channel::*;
+use crate::device::*;
 use crate::instruction::*;
 use crate::utils::*;
 

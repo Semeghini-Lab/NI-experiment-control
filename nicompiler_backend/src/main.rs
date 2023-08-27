@@ -1,13 +1,13 @@
 pub mod channel;
-mod device;
-mod experiment;
-mod utils;
-mod instruction; 
+pub mod device;
+pub mod experiment;
+pub mod instruction;
+pub mod utils;
 
 use crate::channel::*;
-use crate::instruction::*;
 use crate::device::*;
 use crate::experiment::*;
+use crate::instruction::*;
 use crate::utils::*;
 
 fn main() {
