@@ -1,15 +1,13 @@
-//! `utils` module for `nicompiler_backend`.
-//!
-//! This module provides a collection of utility functions and structures primarily focused on time-tracking and extracting specific data from string patterns.
+//! Provides a collection of utility functions and structures primarily focused on
+//! time-tracking and extracting specific data from string patterns.
 //!
 //! Main features:
-//! - **TickTimer**: A utility struct that allows easy time-tracking and measures elapsed time in milliseconds since the UNIX epoch. 
+//! - **TickTimer**: A utility struct that allows easy time-tracking and measures
+//! elapsed time in milliseconds since the UNIX epoch.
 //!   It's particularly useful for performance measurement and debugging.
-//! - **extract_port_line_numbers**: A function that extracts port and line numbers from a specific string pattern (`port[number]/line[number]`).
+//! - **extract_port_line_numbers**: A function that extracts port and line numbers from a
+//! specific string pattern (`port[number]/line[number]`).
 //!   It's a quick way to parse such patterns when the exact format is known in advance.
-//!
-//! Note: Some functions and methods in this module do not perform comprehensive input validation and may panic if given unexpected input.
-//! Ensure to provide data in expected formats to avoid runtime errors.
 //!
 //! # Examples
 //!
@@ -35,7 +33,6 @@
 //!
 //! Refer to individual function and struct documentation for detailed usage and examples.
 
-
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// A utility class for time-tracking.
@@ -53,9 +50,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 ///
 /// let elapsed = timer.tick(); // Returns milliseconds since last tick.
 /// println!("Elapsed time since last tick: {}ms", elapsed);
-/// 
+///
 /// // Some more code here.
-/// 
+///
 /// timer.tick_print("Time since last tick"); // Prints the elapsed time with a message, and returns duration
 /// ```
 pub struct TickTimer {
@@ -109,12 +106,11 @@ impl TickTimer {
     }
 }
 
-
 /// Extracts the port and line numbers from a given channel string.
 ///
-/// This function assumes that the input string is of the form `port[number]/line[number]` 
+/// This function assumes that the input string is of the form `port[number]/line[number]`
 /// (e.g., `port0/line32`). It returns the port and line numbers as a tuple.
-/// Note: The function does not perform any checks on the input format, so ensure that 
+/// Note: The function does not perform any checks on the input format, so ensure that
 /// the input string adheres to the expected format before calling this function.
 ///
 /// # Arguments

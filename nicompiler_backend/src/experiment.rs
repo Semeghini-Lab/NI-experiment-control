@@ -37,7 +37,7 @@ pub trait BaseExperiment {
     fn add_device_base(&mut self, dev: Device) {
         // Duplicate check
         let dev_name = dev.physical_name();
-        let is_primary = dev.is_primary();
+        // let is_primary = dev.is_primary();
         assert!(
             !self.devices().contains_key(dev_name),
             "Device {} already registered. Registered devices are {:?}",
@@ -45,45 +45,58 @@ pub trait BaseExperiment {
             self.devices().keys().collect::<Vec<_>>()
         );
         // Synchronization check
-        assert!(
-            !(is_primary && self.devices().values().any(|d| d.is_primary())),
-            "Cannot register another primary device {}",
-            dev_name
-        );
+        // assert!(
+        //     !(is_primary && self.devices().values().any(|d| d.is_primary())),
+        //     "Cannot register another primary device {}",
+        //     dev_name
+        // );
         self.devices_().insert(dev_name.to_string(), dev);
     }
 
     fn add_ao_device(
         &mut self,
         physical_name: &str,
-        trig_line: &str,
-        is_primary: bool,
         samp_rate: f64,
+        samp_clk_src: Option<&str>, 
+        trig_line: Option<&str>,    
+        is_primary: Option<bool>,    
+        ref_clk_src: Option<&str>,   
+        ref_clk_rate: Option<f64>,   
     ) {
         self.add_device_base(Device::new(
             physical_name,
-            trig_line,
-            DeviceType::AODevice,
-            is_primary,
+            TaskType::AO,
             samp_rate,
+            samp_clk_src,
+            trig_line,
+            is_primary,
+            ref_clk_src,
+            ref_clk_rate,
         ));
     }
-
+    
     fn add_do_device(
         &mut self,
         physical_name: &str,
-        trig_line: &str,
-        is_primary: bool,
         samp_rate: f64,
+        samp_clk_src: Option<&str>,  
+        trig_line: Option<&str>,     
+        is_primary: Option<bool>,    
+        ref_clk_src: Option<&str>,  
+        ref_clk_rate: Option<f64>,   
     ) {
         self.add_device_base(Device::new(
             physical_name,
-            trig_line,
-            DeviceType::DODevice,
-            is_primary,
+            TaskType::DO,
             samp_rate,
+            samp_clk_src,
+            trig_line,
+            is_primary,
+            ref_clk_src,
+            ref_clk_rate,
         ));
     }
+    
 
     fn edit_stop_time(&self) -> f64 {
         self.devices()
@@ -108,10 +121,10 @@ pub trait BaseExperiment {
     }
 
     fn compile_with_stoptime(&mut self, stop_time: f64) {
-        assert!(
-            self.devices().values().any(|dev| dev.is_primary()),
-            "Cannot compile an experiment with no primary device"
-        );
+        // assert!(
+        //     self.devices().values().any(|dev| dev.is_primary()),
+        //     "Cannot compile an experiment with no primary device"
+        // );
         self.devices_()
             .values_mut()
             .for_each(|dev| dev.compile(((stop_time) * dev.samp_rate()) as usize));
@@ -149,7 +162,7 @@ pub trait BaseExperiment {
     }
 
     // TEMPLATE METHODS (for forwarding device and channel methods)
-    fn typed_device_op<F, R>(&mut self, dev_name: &str, dev_type: DeviceType, mut f: F) -> R
+    fn typed_device_op<F, R>(&mut self, dev_name: &str, task_type: TaskType, mut f: F) -> R
     where
         F: FnMut(&mut Device) -> R,
     {
@@ -158,7 +171,7 @@ pub trait BaseExperiment {
         self.assert_has_device(dev_name);
         let dev = self.devices_().get_mut(dev_name).unwrap();
         assert!(
-            dev.device_type() == dev_type,
+            dev.task_type() == task_type,
             "Device {} is incompatible with instruction",
             dev_name
         );
@@ -180,7 +193,7 @@ pub trait BaseExperiment {
         &mut self,
         dev_name: &str,
         chan_name: &str,
-        dev_type: DeviceType,
+        task_type: TaskType,
         mut f: F,
     ) -> R
     where
@@ -191,7 +204,7 @@ pub trait BaseExperiment {
         self.assert_device_has_channel(dev_name, chan_name);
         let dev = self.devices_().get_mut(dev_name).unwrap();
         assert!(
-            dev.device_type() == dev_type,
+            dev.task_type() == task_type,
             "Channel {}/{} is incompatible with instruction",
             dev_name,
             chan_name
@@ -223,9 +236,17 @@ pub trait BaseExperiment {
         start_pos: usize,
         end_pos: usize,
         nsamps: usize,
+        require_streamable: bool,
+        require_editable: bool,
     ) -> Array2<f64> {
         self.device_op(dev_name, |dev| {
-            (*dev).calc_signal_nsamps(start_pos, end_pos, nsamps)
+            (*dev).calc_signal_nsamps(
+                start_pos,
+                end_pos,
+                nsamps,
+                require_streamable,
+                require_editable,
+            )
         })
     }
 
@@ -242,13 +263,13 @@ pub trait BaseExperiment {
     }
 
     fn add_ao_channel(&mut self, dev_name: &str, channel_id: usize) {
-        self.typed_device_op(dev_name, DeviceType::AODevice, |dev| {
+        self.typed_device_op(dev_name, TaskType::AO, |dev| {
             (*dev).add_channel(&format!("ao{}", channel_id))
         });
     }
 
     fn add_do_channel(&mut self, dev_name: &str, port_id: usize, line_id: usize) {
-        self.typed_device_op(dev_name, DeviceType::DODevice, |dev| {
+        self.typed_device_op(dev_name, TaskType::DO, |dev| {
             (*dev).add_channel(&format!("port{}/line{}", port_id, line_id))
         });
     }
@@ -263,7 +284,7 @@ pub trait BaseExperiment {
         value: f64,
         keep_val: bool,
     ) {
-        self.typed_channel_op(dev_name, chan_name, DeviceType::AODevice, |chan| {
+        self.typed_channel_op(dev_name, chan_name, TaskType::AO, |chan| {
             (*chan).constant(value, t, duration, keep_val);
         });
     }
@@ -280,32 +301,32 @@ pub trait BaseExperiment {
         phase: Option<f64>,
         dc_offset: Option<f64>,
     ) {
-        self.typed_channel_op(dev_name, chan_name, DeviceType::AODevice, |chan| {
+        self.typed_channel_op(dev_name, chan_name, TaskType::AO, |chan| {
             let instr = Instruction::new_sine(freq, amplitude, phase, dc_offset);
             (*chan).add_instr(instr, t, duration, keep_val)
         });
     }
 
     fn high(&mut self, dev_name: &str, chan_name: &str, t: f64, duration: f64) {
-        self.typed_channel_op(dev_name, chan_name, DeviceType::DODevice, |chan| {
+        self.typed_channel_op(dev_name, chan_name, TaskType::DO, |chan| {
             (*chan).constant(1., t, duration, false);
         });
     }
 
     fn low(&mut self, dev_name: &str, chan_name: &str, t: f64, duration: f64) {
-        self.typed_channel_op(dev_name, chan_name, DeviceType::DODevice, |chan| {
+        self.typed_channel_op(dev_name, chan_name, TaskType::DO, |chan| {
             (*chan).constant(0., t, duration, false);
         });
     }
 
     fn go_high(&mut self, dev_name: &str, chan_name: &str, t: f64) {
-        self.typed_channel_op(dev_name, chan_name, DeviceType::DODevice, |chan| {
+        self.typed_channel_op(dev_name, chan_name, TaskType::DO, |chan| {
             (*chan).constant(1., t, 1. / (*chan).samp_rate(), true);
         });
     }
 
     fn go_low(&mut self, dev_name: &str, chan_name: &str, t: f64) {
-        self.typed_channel_op(dev_name, chan_name, DeviceType::DODevice, |chan| {
+        self.typed_channel_op(dev_name, chan_name, TaskType::DO, |chan| {
             (*chan).constant(0., t, 1. / (*chan).samp_rate(), true);
         });
     }
@@ -338,37 +359,50 @@ macro_rules! impl_exp_boilerplate {
                 }
             }
 
-            pub fn add_ao_device(
+            fn add_ao_device(
                 &mut self,
                 physical_name: &str,
-                trig_line: &str,
-                is_primary: bool,
                 samp_rate: f64,
+                samp_clk_src: Option<&str>,  
+                trig_line: Option<&str>,    
+                is_primary: Option<bool>,   
+                ref_clk_src: Option<&str>,  
+                ref_clk_rate: Option<f64>,  
             ) {
-                BaseExperiment::add_ao_device(
-                    self,
+                self.add_device_base(Device::new(
                     physical_name,
+                    TaskType::AO,
+                    samp_rate,
+                    samp_clk_src,
                     trig_line,
                     is_primary,
-                    samp_rate,
-                );
+                    ref_clk_src,
+                    ref_clk_rate,
+                ));
             }
-
-            pub fn add_do_device(
+            
+            fn add_do_device(
                 &mut self,
                 physical_name: &str,
-                trig_line: &str,
-                is_primary: bool,
                 samp_rate: f64,
+                samp_clk_src: Option<&str>,  
+                trig_line: Option<&str>,    
+                is_primary: Option<bool>,   
+                ref_clk_src: Option<&str>,  
+                ref_clk_rate: Option<f64>,   
             ) {
-                BaseExperiment::add_do_device(
-                    self,
+                self.add_device_base(Device::new(
                     physical_name,
+                    TaskType::DO,
+                    samp_rate,
+                    samp_clk_src,
                     trig_line,
                     is_primary,
-                    samp_rate,
-                );
+                    ref_clk_src,
+                    ref_clk_rate,
+                ));
             }
+            
 
             pub fn edit_stop_time(&self) -> f64 {
                 BaseExperiment::edit_stop_time(self)
@@ -415,6 +449,16 @@ macro_rules! impl_exp_boilerplate {
                 BaseExperiment::add_do_channel(self, dev_name, port_id, line_id);
             }
 
+            pub fn device_compiled_channel_names(&mut self, dev_name: &str) -> Vec<String> {
+                self.device_op(dev_name, |dev| {
+                    (*dev)
+                        .compiled_channels(false, true)
+                        .iter()
+                        .map(|chan| chan.physical_name().to_string())
+                        .collect()
+                })
+            }
+
             pub fn calc_signal(
                 &mut self,
                 dev_name: &str,
@@ -425,12 +469,15 @@ macro_rules! impl_exp_boilerplate {
             ) -> PyResult<PyObject> {
                 self.assert_has_device(dev_name);
                 let samp_rate = self.devices().get(dev_name).unwrap().samp_rate();
+                // To python, only expose editable channels
                 let arr = BaseExperiment::device_calc_signal_nsamps(
                     self,
                     dev_name,
                     (t_start * samp_rate) as usize,
                     (t_end * samp_rate) as usize,
                     nsamps,
+                    false,
+                    true,
                 );
                 Ok(numpy::PyArray::from_array(py, &arr).to_object(py))
             }
