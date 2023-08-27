@@ -2,11 +2,11 @@
 //!
 //! ## Main Structures and Enumerations:
 //!
-//! - `InstrType`: An enumeration that defines the types of instructions supported, including `CONST` for constant values and `SINE` for sinusoidal waves.
+//! - [`InstrType`]: An enumeration that defines the types of instructions supported, including `CONST` for constant values and `SINE` for sinusoidal waves.
 //!
-//! - `Instruction`: Represents a general instruction composed of a type (`InstrType`) and a set of arguments (`InstrArgs`). It offers methods for creating specific instruction types conveniently and for evaluating them.
+//! - [`Instruction`]: Represents a general instruction composed of a type (`InstrType`) and a set of arguments (`InstrArgs`). It offers methods for creating specific instruction types conveniently and for evaluating them.
 //!
-//! - `InstrBook`: Manages an instruction along with its associated metadata during the experiment editing phase, capturing details like the defined interval and whether to retain a value after the defined interval.
+//! - [`InstrBook`]: Manages an instruction along with its associated metadata during the experiment editing phase, capturing details like the defined interval and whether to retain a value after the defined interval.
 //!
 //! ## Utilities:
 //!
@@ -123,14 +123,14 @@ impl Instruction {
     /// let sine_instr = Instruction::new(InstrType::SINE, sine_args);
     /// ```
     pub fn new(instr_type: InstrType, args: InstrArgs) -> Self {
-        let panic_key = |key| {
+        let panic_no_key = |key| {
             if !args.contains_key(key) {
                 panic!("Expected instr type {} to contain key {}", instr_type, key)
             }
         };
         match instr_type {
-            InstrType::CONST => panic_key("value"),
-            InstrType::SINE => panic_key("freq"),
+            InstrType::CONST => panic_no_key("value"),
+            InstrType::SINE => panic_no_key("freq"),
         };
         Instruction { instr_type, args }
     }

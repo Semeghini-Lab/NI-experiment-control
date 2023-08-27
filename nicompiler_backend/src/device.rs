@@ -1,12 +1,49 @@
 //! Implements struct and methods corresponding to NI devices. See [`BaseDevice`] for
 //! implementation details.
 //!
-//! A NI control system corresponds to devices (cards) directly attached the computer via
-//! PCIe/USB, or a PXIe chassis connected via a PCIe link card which, in turn, hosts multiple
-//! PXIe cards. In this library, every `Device` entity corresponds to a particular task for
-//! a physical device (e.g. analogue output for `PXI1Slot1`). A `Device`, trivially implementing
-//! the [`BaseDevice`] trait, keeps tracks of of the physical channels associated with the device
+//! A NI control system consists of one or both of the components:
+//! 1. Devices (cards) directly attached the computer via PCIe/USB.
+//! 2. A PCIe link card connected to a PXIe chassis, which hosts multiple PXIe cards.
+//!
+//!
+//! ## Device
+//! In this library, every `Device` object corresponds to a particular task for
+//! a physical device (e.g. analogue output for `PXI1Slot1`). A `Device` trivially implements the
+//! [`BaseDevice`] trait by supplying field methods.
+//!
+//! The fields of [`Device]` keeps tracks of of the physical channels associated with the device
 //! as well as device-wide data such as device name, trigger line, and synchronization behavior.
+//!
+//! The [`Device`] struct is the primary structure used to interact with NI hardware. It groups multiple
+//! channels, each of which corresponds to a physical channel on an NI device. This struct provides
+//! easy access to various properties of the device, such as its physical name, task type, and
+//! several clock and trigger configurations.
+//! For editing and compiling behavior of devices, see the [`BaseDevice`] trait.
+//!
+//! [`Device`] fields:
+//! - `channels`: A collection of channels associated with this device.
+//! - `physical_name`: Name of the device as seen by the NI driver.
+//! - `task_type`: Specifies the task type associated with the device.
+//! - `samp_rate`: The sampling rate of the device in Hz.
+//! - `samp_clk_src`: Optional source of the sampling clock, supply `None` for on-board clock source.
+//! - `trig_line`: Optional identifier for the port through which to import / export the task start trigger,
+//! supply `None` for trivial triggering behavior
+//! - `is_primary`: Optional Boolean indicating if the device is the primary device. Determines whether
+//! to export (`true`) or (`import`) the start trigger of the NI-task associated with this device through `trig_line`.
+//! In case that any device in an experiment has nontrivial triggering behavior, one and only one of the devices
+//! must be primary.
+//! - `ref_clk_src`: Optional source of the reference clock to phase-lock the device clock to. Supply `None` for
+//! trivial reference clock behavior
+//! - `ref_clk_rate`: Optional rate of the reference clock in Hz.
+//!
+//!
+//! ### Editable and streamable channels in devices
+//! Library users create and edit editable channels. During compilation, based on the device's task type,
+//! the library may internally add streamable channels.
+//! For more details on editable and streamable channels, see the editable v.s. streamable section in
+//! [`channel` module].
+//!
+//! [`channel` module]: crate::channel
 
 use ndarray::{s, Array1, Array2};
 use regex::Regex;
@@ -16,7 +53,33 @@ use crate::channel::*;
 use crate::instruction::*;
 use crate::utils::*;
 
-// Trait-implementation of expectations for a device
+/// The `BaseDevice` trait defines the fundamental operations and attributes of a National Instruments (NI) device.
+///
+/// This trait abstracts the common functionalities that an NI device should possess, regardless of its specific hardware details or task type. Implementers of this trait will have access to core functionalities like channel management, device status checks, signal compilation, and more.
+///
+/// ## Typical Use
+///
+/// A type implementing `BaseDevice` is primarily used to interact with the associated NI hardware, manage its channels, and perform operations like signal generation, editing, and compilation.
+///
+/// # Trait Methods and Their Functionality:
+///
+/// - **Field methods**: These provide direct access to the properties of a device, such as its channels, physical name, sampling rate, and various configuration parameters.
+///
+/// - **Channel management**: Methods like `editable_channels`, `editable_channels_`, and `add_channel` allow for the retrieval and manipulation of channels associated with the device.
+///
+/// - **Device status checks**: Methods like `is_compiled`, `is_edited`, and `is_fresh_compiled` enable checking the compilation and editing status of the device's channels.
+///
+/// - **Cache operations**: The methods `clear_edit_cache` and `clear_compile_cache` are used to clear the edit and compile caches of the device's channels, respectively.
+///
+/// - **Compilation**: The `compile` method takes care of the signal compilation process for the device's channels. For Digital Output (DO) channels, it provides additional functionality to merge line channels into port channels.
+///
+/// - **Signal generation**: The `fill_signal_nsamps` and `calc_signal_nsamps` methods are central to signal generation, allowing for the sampling of float-point values from compiled instructions based on various criteria.
+///
+/// - **Utility functions**: Methods like `unique_port_numbers` offer utility functionalities specific to certain task types, aiding in operations like identifying unique ports in Digital Output (DO) devices.
+///
+/// # Implementing `BaseDevice`:
+///
+/// When creating a new type that represents an NI device, implementing this trait ensures that the type has all the necessary methods and behaviors typical of NI devices. Implementers can then extend or override these methods as necessary to provide device-specific behavior or optimizations.
 pub trait BaseDevice {
     // Field methods
     fn channels(&self) -> &HashMap<String, Channel>;
@@ -24,20 +87,20 @@ pub trait BaseDevice {
     fn physical_name(&self) -> &str;
     fn task_type(&self) -> TaskType;
     fn samp_rate(&self) -> f64;
-    fn samp_clk_src(&self) -> Option<&str>;  
-    fn trig_line(&self) -> Option<&str>;    
-    fn is_primary(&self) -> Option<bool>;   
-    fn ref_clk_src(&self) -> Option<&str>; 
+    fn samp_clk_src(&self) -> Option<&str>;
+    fn trig_line(&self) -> Option<&str>;
+    fn is_primary(&self) -> Option<bool>;
+    fn ref_clk_src(&self) -> Option<&str>;
     fn ref_clk_rate(&self) -> Option<f64>;
-    
 
-    // Channels produced by edits. For DO, this means the line-channels
+    /// Returns a vector of references to editable channels
     fn editable_channels(&self) -> Vec<&Channel> {
         self.channels()
             .values()
             .filter(|&chan| chan.editable())
             .collect()
     }
+    /// Returns a vector of mutable references to editable channels
     fn editable_channels_(&mut self) -> Vec<&mut Channel> {
         self.channels_()
             .values_mut()
@@ -45,13 +108,32 @@ pub trait BaseDevice {
             .collect()
     }
 
+    /// Adds a new channel to the device.
+    ///
+    /// This base method validates the provided `physical_name` based on the device's `task_type`
+    /// to ensure it adheres to the expected naming convention for the respective task type.
+    ///
+    /// # Naming Conventions:
+    /// - For `TaskType::AO`: Channels should be named following the pattern "ao(number)"
+    ///   (e.g., "ao0", "ao1").
+    /// - For `TaskType::DO`: Channels should be named following the pattern "port(number)/line(number)"
+    ///   (e.g., "port0/line1").
+    ///
+    /// # Panics
+    /// - If the provided `physical_name` does not adhere to the expected naming convention for the
+    ///   associated task type.
+    /// - If a channel with the same `physical_name` already exists within the device.
+    ///
+    /// # Arguments
+    /// - `physical_name`: Name of the channel as seen by the NI driver, which must adhere to the
+    ///   naming conventions detailed above.
     fn add_channel(&mut self, physical_name: &str) {
         // Check the physical_name format
         let (name_match_string, name_format_description) = match self.task_type() {
-            TaskType::AO => (String::from(r"^ao\d+$"), String::from("ao[number]")),
+            TaskType::AO => (String::from(r"^ao\d+$"), String::from("ao(number)")),
             TaskType::DO => (
                 String::from(r"^port\d+/line\d+$"),
-                String::from("port[number]/line[number]"),
+                String::from("port(number)/line(number)"),
             ),
         };
 
@@ -79,33 +161,55 @@ pub trait BaseDevice {
             .insert(physical_name.to_string(), new_channel);
     }
 
-    // Channel-broadcast methods
+    /// A device is compiled if any of its editable channels are compiled.
     fn is_compiled(&self) -> bool {
         self.editable_channels()
             .iter()
             .any(|channel| channel.is_compiled())
     }
+    /// A device is marked edited if any of its editable channels are edited.
     fn is_edited(&self) -> bool {
         self.editable_channels()
             .iter()
             .any(|channel| channel.is_edited())
     }
+    /// A device is marked fresh-compiled if all if its editable channels are freshly compiled.
     fn is_fresh_compiled(&self) -> bool {
         self.editable_channels()
             .iter()
             .all(|channel| channel.is_fresh_compiled())
     }
+    /// Clears the edit-cache fields for all editable channels.
     fn clear_edit_cache(&mut self) {
         self.editable_channels_()
             .iter_mut()
             .for_each(|chan| chan.clear_edit_cache());
     }
+    /// Clears the compile-cache fields for all editable channels.
     fn clear_compile_cache(&mut self) {
         self.editable_channels_()
             .iter_mut()
             .for_each(|chan| chan.clear_compile_cache());
     }
 
+    /// Compiles all editable channels to produce a continuous instruction stream.
+    ///
+    /// The method starts by compiling each individual editable channel to obtain a continuous
+    /// stream of instructions. If the device type is `TaskType::DO` (Digital Output), an additional
+    /// processing step is performed. All the line channels belonging to the same port are merged
+    /// into a single, streamable port channel that is non-editable. This aggregated port channel
+    /// contains constant instructions whose integer values are determined by the combined state
+    /// of all the lines of the corresponding port. Specifically, the `n`th bit of the integer
+    /// value of the instruction corresponds to the boolean state of the `n`th line.
+    ///
+    /// # Port Channel Aggregation
+    /// Each instruction inside the aggregated port channel is a constant instruction. The value of
+    /// this instruction is an integer, where its `n`th bit represents the boolean state of the
+    /// `n`th line. This way, the combined state of all lines in a port is efficiently represented
+    /// by a single integer value, allowing for streamlined execution and efficient data transfer.
+    ///
+    /// # Arguments
+    /// - `stop_pos`: The stop position used to compile the channels.
     fn compile(&mut self, stop_pos: usize) {
         self.editable_channels_()
             .iter_mut()
@@ -157,6 +261,17 @@ pub trait BaseDevice {
         }
     }
 
+    /// Returns a vector of compiled channels based on the given criteria.
+    ///
+    /// Filters the device's channels based on their compiled state and optional properties such as
+    /// streamability and editability.
+    ///
+    /// # Arguments
+    /// - `require_streamable`: If `true`, only compiled channels marked as streamable will be included in the result.
+    /// - `require_editable`: If `true`, only compiled channels marked as editable will be included in the result.
+    ///
+    /// # Returns
+    /// A `Vec` containing references to the channels that match the provided criteria.
     fn compiled_channels(&self, require_streamable: bool, require_editable: bool) -> Vec<&Channel> {
         self.channels()
             .values()
@@ -168,6 +283,13 @@ pub trait BaseDevice {
             .collect()
     }
 
+    /// Calculates the maximum stop time among all compiled channels.
+    ///
+    /// Iterates over all the compiled channels in the device, regardless of their streamability or
+    /// editability, and determines the maximum stop time.
+    ///
+    /// # Returns
+    /// A `f64` representing the maximum stop time (in seconds) across all compiled channels.
     fn compiled_stop_time(&self) -> f64 {
         self.compiled_channels(false, false)
             .iter()
@@ -175,6 +297,12 @@ pub trait BaseDevice {
             .fold(0.0, f64::max)
     }
 
+    /// Calculates the maximum stop time among all editable channels.
+    ///
+    /// Iterates over all the editable channels in the device and determines the maximum stop time.
+    ///
+    /// # Returns
+    /// A `f64` representing the maximum stop time (in seconds) across all editable channels.
     fn edit_stop_time(&self) -> f64 {
         self.editable_channels()
             .iter()
@@ -182,6 +310,28 @@ pub trait BaseDevice {
             .fold(0.0, f64::max)
     }
 
+    /// Generates a signal by sampling float-point values from compiled instructions.
+    ///
+    /// This method fills a given buffer with signal values based on the compiled instructions of the device's
+    /// channels. Depending on the requirements, it can either generate signals intended for actual driver
+    /// writing or for debugging editing intentions.
+    ///
+    /// # Arguments
+    /// - `start_pos`: The starting position in the sequence of compiled instructions.
+    /// - `end_pos`: The ending position in the sequence of compiled instructions.
+    /// - `nsamps`: The number of samples to generate.
+    /// - `buffer`: A mutable reference to a 2D array. The first axis corresponds to the channel index and
+    ///    the second axis corresponds to the sample index.
+    /// - `require_streamable`: If `true`, only signals from channels marked as streamable will be generated.
+    /// - `require_editable`: If `true`, signals will be generated according to editing intentions for debugging purposes.
+    ///
+    /// # Panics
+    /// This method will panic if:
+    /// - The first dimension of the buffer does not match the number of channels that fulfill the provided requirements.
+    /// - The second dimension of the buffer does not match the provided `nsamps` value.
+    ///
+    /// # TODO Notes
+    /// The generation of signals from channels can be parallelized for performance improvements.
     fn fill_signal_nsamps(
         &self,
         start_pos: usize,
@@ -222,6 +372,28 @@ pub trait BaseDevice {
         }
     }
 
+    /// Computes and returns the signal values for specified channels in a device.
+    ///
+    /// This method calculates the signal values by sampling float-point values from compiled instructions
+    /// of the device's channels. Depending on the requirements, the signal can be either intended for actual
+    /// driver writing or for debugging editing intentions. For AO (Analog Output) devices, the returned buffer
+    /// will contain time data.
+    ///
+    /// # Arguments
+    /// - `start_pos`: The starting position in the sequence of compiled instructions.
+    /// - `end_pos`: The ending position in the sequence of compiled instructions.
+    /// - `nsamps`: The number of samples to generate.
+    /// - `require_streamable`: If `true`, only signals from channels marked as streamable will be generated.
+    /// - `require_editable`: If `true`, signals will be generated according to editing intentions for debugging purposes.
+    ///
+    /// # Returns
+    /// A 2D array with the computed signal values. The first axis corresponds to the channel index and the
+    /// second axis corresponds to the sample index.
+    ///
+    /// # Panics
+    /// This method will panic if:
+    /// - There are no channels that fulfill the provided requirements.
+    /// - The device's task type is not AO (Analog Output) when initializing the buffer with time data.
     fn calc_signal_nsamps(
         &self,
         start_pos: usize,
@@ -239,7 +411,6 @@ pub trait BaseDevice {
             require_streamable,
             require_editable
         );
-        let mut timer = TickTimer::new();
         let mut buffer = Array2::from_elem((num_chans, nsamps), 0.);
         // Only AOChannel needs to initialize buffer with time data
         if self.task_type() == TaskType::AO {
@@ -263,6 +434,17 @@ pub trait BaseDevice {
         buffer
     }
 
+    /// Retrieves a list of unique port numbers from the device's channels.
+    ///
+    /// This utility function is primarily used with DO (Digital Output) devices to identify and operate
+    /// on unique ports. It scans through the compiled channels of the device, filtering for those that are
+    /// editable, and extracts the unique port numbers associated with them.
+    ///
+    /// # Returns
+    /// A vector of unique port numbers identified in the device's channels.
+    ///
+    /// # Panics
+    /// The method will panic if it's invoked on a device that is not of task type DO.
     fn unique_port_numbers(&self) -> Vec<usize> {
         assert!(
             self.task_type() == TaskType::DO,
@@ -281,7 +463,6 @@ pub trait BaseDevice {
     }
 }
 
-
 /// Represents a National Instruments (NI) device.
 ///
 /// A `Device` is the primary structure used to interact with NI hardware. It groups multiple
@@ -292,13 +473,17 @@ pub trait BaseDevice {
 ///
 /// # Fields
 /// - `channels`: A collection of channels associated with this device.
-/// - `physical_name`: An identifier for the device as seen by the NI driver.
+/// - `physical_name`: Name of the device as seen by the NI driver.
 /// - `task_type`: Specifies the task type associated with the device.
 /// - `samp_rate`: The sampling rate of the device in Hz.
-/// - `samp_clk_src`: Optional source of the sampling clock.
-/// - `trig_line`: Optional identifier for the trigger line.
-/// - `is_primary`: Optional Boolean indicating if the device is the primary device.
-/// - `ref_clk_src`: Optional source of the reference clock.
+/// - `samp_clk_src`: Optional source of the sampling clock, supply `None` for on-board clock source.
+/// - `trig_line`: Optional identifier for the port through which to import / export the task start trigger,
+/// supply `None` for trivial triggering behavior
+/// - `is_primary`: Optional Boolean indicating if the device is the primary device. Determines whether
+/// to export (`true`) or (`import`) the start trigger of the NI-task associated with this device through `trig_line`.
+/// In case that any device in an experiment has nontrivial triggering behavior, one and only one of the devices
+/// must be primary.
+/// - `ref_clk_src`: Optional source of the reference clock to phase-lock the device clock to.
 /// - `ref_clk_rate`: Optional rate of the reference clock in Hz.
 pub struct Device {
     channels: HashMap<String, Channel>,

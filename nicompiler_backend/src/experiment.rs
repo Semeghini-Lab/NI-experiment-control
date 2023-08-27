@@ -57,11 +57,11 @@ pub trait BaseExperiment {
         &mut self,
         physical_name: &str,
         samp_rate: f64,
-        samp_clk_src: Option<&str>, 
-        trig_line: Option<&str>,    
-        is_primary: Option<bool>,    
-        ref_clk_src: Option<&str>,   
-        ref_clk_rate: Option<f64>,   
+        samp_clk_src: Option<&str>,
+        trig_line: Option<&str>,
+        is_primary: Option<bool>,
+        ref_clk_src: Option<&str>,
+        ref_clk_rate: Option<f64>,
     ) {
         self.add_device_base(Device::new(
             physical_name,
@@ -74,16 +74,16 @@ pub trait BaseExperiment {
             ref_clk_rate,
         ));
     }
-    
+
     fn add_do_device(
         &mut self,
         physical_name: &str,
         samp_rate: f64,
-        samp_clk_src: Option<&str>,  
-        trig_line: Option<&str>,     
-        is_primary: Option<bool>,    
-        ref_clk_src: Option<&str>,  
-        ref_clk_rate: Option<f64>,   
+        samp_clk_src: Option<&str>,
+        trig_line: Option<&str>,
+        is_primary: Option<bool>,
+        ref_clk_src: Option<&str>,
+        ref_clk_rate: Option<f64>,
     ) {
         self.add_device_base(Device::new(
             physical_name,
@@ -96,7 +96,6 @@ pub trait BaseExperiment {
             ref_clk_rate,
         ));
     }
-    
 
     fn edit_stop_time(&self) -> f64 {
         self.devices()
@@ -363,11 +362,11 @@ macro_rules! impl_exp_boilerplate {
                 &mut self,
                 physical_name: &str,
                 samp_rate: f64,
-                samp_clk_src: Option<&str>,  
-                trig_line: Option<&str>,    
-                is_primary: Option<bool>,   
-                ref_clk_src: Option<&str>,  
-                ref_clk_rate: Option<f64>,  
+                samp_clk_src: Option<&str>,
+                trig_line: Option<&str>,
+                is_primary: Option<bool>,
+                ref_clk_src: Option<&str>,
+                ref_clk_rate: Option<f64>,
             ) {
                 self.add_device_base(Device::new(
                     physical_name,
@@ -380,16 +379,16 @@ macro_rules! impl_exp_boilerplate {
                     ref_clk_rate,
                 ));
             }
-            
+
             fn add_do_device(
                 &mut self,
                 physical_name: &str,
                 samp_rate: f64,
-                samp_clk_src: Option<&str>,  
-                trig_line: Option<&str>,    
-                is_primary: Option<bool>,   
-                ref_clk_src: Option<&str>,  
-                ref_clk_rate: Option<f64>,   
+                samp_clk_src: Option<&str>,
+                trig_line: Option<&str>,
+                is_primary: Option<bool>,
+                ref_clk_src: Option<&str>,
+                ref_clk_rate: Option<f64>,
             ) {
                 self.add_device_base(Device::new(
                     physical_name,
@@ -402,7 +401,6 @@ macro_rules! impl_exp_boilerplate {
                     ref_clk_rate,
                 ));
             }
-            
 
             pub fn edit_stop_time(&self) -> f64 {
                 BaseExperiment::edit_stop_time(self)

@@ -1,17 +1,18 @@
-//! Implements struct and methods corresponding to NI-hardware channels. See [`BaseChannel`] for
+//! Struct and methods corresponding to NI-hardware channels. See [`BaseChannel`] for
 //! implementation details.
 //!
 //! Channels constitute the fundamental unit of interaction with NI devices, and between NI
 //! devices and controlled hardware. A `Channel` instance, trivially implementing the [`BaseChannel`]
-//! trait, corresponds to a physical channel on a specific NI device and, by extension,
+//! trait, corresponds to a physical channel on a NI device and, by extension,
 //! a controllable physical quantity (e.g. laser on/off, coil current).
 //!
 //! ## Editing behavior
 //! During editing, the user effectively adds [`InstrBook`] instances (instructions with associated
-//! intervals) through wrapper methods into the `instr_list` field, which functions as an edit cache.
-//! This field maintains a sorted list of newly added instruction books.
+//! intervals) into the `instr_list` field through wrapper methods. 
+//! The `instr_list` field functions as an edit cache and  maintains a sorted list of newly added instruction books.
 //!
 //! ## Compilation behavior
+//! Compilation is analogous to "flushing" the edit cache of an experiment. 
 //! During compilation, instructions within the edit cache via `instr_list` — which could
 //! be disjointed — are expanded according to their `keep_val` property and combined to
 //! produce a continuous stream of [`Instruction`], which is stored in `instr_end` and `instr_val`.
@@ -28,7 +29,7 @@
 //!  - `fresh_compiled`: An internal boolean value that indicates whether the compiled results
 //!    (stored in `instr_end` and `instr_val`) are up-to-date with the content of the edit cache.
 //!
-//! ## Editable and Streamable Channels
+//! ## Channel property: "editable" and "streamable"
 //!
 //! For AO (Analog Output) channels, each edited channel corresponds directly to a NI-DAQmx channel.
 //! However, the situation becomes nuanced when we consider DO (Digital Output) channels.

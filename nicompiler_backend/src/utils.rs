@@ -2,10 +2,10 @@
 //! time-tracking and extracting specific data from string patterns.
 //!
 //! Main features:
-//! - **TickTimer**: A utility struct that allows easy time-tracking and measures
+//! - [`TickTimer`]: A utility struct that allows easy time-tracking and measures
 //! elapsed time in milliseconds since the UNIX epoch.
 //!   It's particularly useful for performance measurement and debugging.
-//! - **extract_port_line_numbers**: A function that extracts port and line numbers from a
+//! - [`extract_port_line_numbers`]: A function that extracts port and line numbers from a
 //! specific string pattern (`port[number]/line[number]`).
 //!   It's a quick way to parse such patterns when the exact format is known in advance.
 //!
