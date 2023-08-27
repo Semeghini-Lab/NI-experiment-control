@@ -1,6 +1,7 @@
 use ndarray::{array, s};
 use std::collections::BTreeSet;
 
+use crate::instruction::*;
 use crate::utils::*;
 
 pub trait BaseChannel {

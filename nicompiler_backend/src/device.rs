@@ -1,9 +1,10 @@
-use regex::Regex;
-use std::ops::AddAssign;
-use std::collections::{BTreeSet, HashMap};
 use ndarray::{s, Array1, Array2};
+use regex::Regex;
+use std::collections::{BTreeSet, HashMap};
+use std::ops::AddAssign;
 
 use crate::channel::*;
+use crate::instruction::*;
 use crate::utils::*;
 
 #[derive(PartialEq, Clone, Copy)]
@@ -166,12 +167,14 @@ pub trait BaseDevice {
     }
 
     fn unique_port_numbers(&self) -> Vec<usize> {
-        assert!(self.device_type() == DeviceType::DODevice,
-                "unique ports should only be invoked for DODevices, but {} is not",
-                self.physical_name());
-        
+        assert!(
+            self.device_type() == DeviceType::DODevice,
+            "unique ports should only be invoked for DODevices, but {} is not",
+            self.physical_name()
+        );
+
         let mut port_numbers = BTreeSet::new();
-        
+
         self.compiled_channels().iter().for_each(|chan| {
             // Capture the port
             let physical_name = &chan.physical_name();
@@ -180,21 +183,27 @@ pub trait BaseDevice {
         port_numbers.into_iter().collect()
     }
 
-    // The only difference here is that for DODevices, we need to add the port channels together 
+    // The only difference here is that for DODevices, we need to add the port channels together
     fn calc_stream_signal(&self, start_pos: usize, end_pos: usize) -> Array2<f64> {
-        let chan_signal = self.calc_signal_nsamps(start_pos, end_pos, end_pos-start_pos);
+        let chan_signal = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos);
         match self.device_type() {
             DeviceType::AODevice => chan_signal, // AODevice, each channel directly corresponds to NI-DAQ channel
             DeviceType::DODevice => {
                 let port_numbers = self.unique_port_numbers();
-                let mut port_signal = Array2::from_elem((port_numbers.len(), end_pos-start_pos), 0.);
+                let mut port_signal =
+                    Array2::from_elem((port_numbers.len(), end_pos - start_pos), 0.);
                 let compiled_channels = self.compiled_channels();
-                let port_lines = compiled_channels.iter().map(|chan| extract_port_line_numbers(chan.physical_name()));
+                let port_lines = compiled_channels
+                    .iter()
+                    .map(|chan| extract_port_line_numbers(chan.physical_name()));
                 for (i, (port, line)) in port_lines.enumerate() {
                     for (j, port_number) in port_numbers.iter().enumerate() {
                         if port == *port_number {
-                            let exponentiated = chan_signal.row(i).to_owned().mapv(|x| x*2.0f64.powf(line as f64));
-                            port_signal.row_mut(j).add_assign(&exponentiated);                            
+                            let exponentiated = chan_signal
+                                .row(i)
+                                .to_owned()
+                                .mapv(|x| x * 2.0f64.powf(line as f64));
+                            port_signal.row_mut(j).add_assign(&exponentiated);
                         }
                     }
                 }

@@ -3,8 +3,9 @@ use numpy;
 use pyo3::prelude::*;
 use std::collections::HashMap;
 
-use crate::channel::*;
 use crate::device::*;
+use crate::channel::*;
+use crate::instruction::*;
 use crate::utils::*;
 
 pub trait BaseExperiment {

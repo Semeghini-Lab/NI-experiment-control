@@ -1,11 +1,14 @@
+pub mod channel;
 mod device;
-mod utils;
-mod channel;
 mod experiment;
-use crate::device::*;
+mod utils;
+mod instruction; 
+
 use crate::channel::*;
-use crate::utils::*;
+use crate::instruction::*;
+use crate::device::*;
 use crate::experiment::*;
+use crate::utils::*;
 
 fn main() {
     // let mut dev = Device::new("PXI1Slot6", "PXI_Trig7", DeviceType::DODevice, true, 1e7);
@@ -19,5 +22,11 @@ fn main() {
     exp.high("PXI1Slot6", "port0/line0", 1., 4.);
     exp.high("PXI1Slot6", "port0/line4", 2., 5.);
     exp.compile_with_stoptime(10.);
-    println!("{:?}", exp.devices().get("PXI1Slot6").unwrap().calc_stream_signal(0, 10))
+    println!(
+        "{:?}",
+        exp.devices()
+            .get("PXI1Slot6")
+            .unwrap()
+            .calc_stream_signal(0, 10)
+    )
 }
