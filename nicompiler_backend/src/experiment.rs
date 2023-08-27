@@ -1,3 +1,9 @@
+//! Implements [`Experiment`] and main trait [`BaseExperiment`], which constitute the highest 
+//! level of abstraction for interacting with NI tasks and the main API through which python 
+//! processes invoke the rust implementation. 
+//! 
+
+
 use ndarray::Array2;
 use numpy;
 use pyo3::prelude::*;
@@ -9,6 +15,7 @@ use crate::instruction::*;
 use crate::utils::*;
 
 pub trait BaseExperiment {
+    // FIELD methods
     fn devices(&self) -> &HashMap<String, Device>;
     fn devices_(&mut self) -> &mut HashMap<String, Device>;
 
@@ -336,6 +343,45 @@ pub struct Experiment {
     devices: HashMap<String, Device>,
 }
 
+/// A macro to generate boilerplate implementations for structs representing experiments.
+///
+/// This macro assists in the conversion between Rust's trait system and Python's class system.
+/// Given that PyO3 doesn't support exposing trait methods directly to Python, this macro wraps
+/// each [`BaseExperiment`] trait method with a direct implementation, facilitating its export to Python.
+///
+/// The majority of methods are exported with their arguments and types preserved. 
+/// Any deviations from this convention should be explicitly noted and elaborated upon.
+///
+/// Usage:
+/// ```rust
+/// use nicompiler_backend::device::*;
+/// use nicompiler_backend::channel::*;
+/// use nicompiler_backend::*;
+/// use pyo3::prelude::*;
+/// use std::collections::HashMap;
+/// 
+/// #[pyclass]
+/// struct CustomExperiment {
+///     devices: HashMap<String, Device>,
+///     some_property: f64,
+/// }
+/// impl_exp_boilerplate!(CustomExperiment);
+/// 
+/// // Implement additional methods which can be exposed to python
+/// #[pymethods]
+/// impl CustomExperiment {
+///     #[new]
+///     pub fn new(some_property: f64) -> Self {
+///         Self {
+///             devices: HashMap::new(),
+///             some_property
+///         }
+///     }
+/// }
+/// ```
+///
+/// This will generate the required implementations and additional Python bindings for `CustomExperiment`.
+
 #[macro_export]
 macro_rules! impl_exp_boilerplate {
     ($exp_type: ty) => {
@@ -350,14 +396,6 @@ macro_rules! impl_exp_boilerplate {
 
         #[pymethods]
         impl $exp_type {
-            // EXPERIMENT METHODS
-            #[new]
-            pub fn new() -> Self {
-                Self {
-                    devices: HashMap::new(),
-                }
-            }
-
             fn add_ao_device(
                 &mut self,
                 physical_name: &str,
@@ -541,4 +579,16 @@ macro_rules! impl_exp_boilerplate {
         }
     };
 }
+
+#[pymethods]
+impl Experiment {
+    // EXPERIMENT METHODS
+    #[new]
+    pub fn new() -> Self {
+        Self {
+            devices: HashMap::new(),
+        }
+    }
+}
+
 impl_exp_boilerplate!(Experiment);

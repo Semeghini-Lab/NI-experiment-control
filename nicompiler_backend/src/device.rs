@@ -63,21 +63,29 @@ use crate::utils::*;
 ///
 /// # Trait Methods and Their Functionality:
 ///
-/// - **Field methods**: These provide direct access to the properties of a device, such as its channels, physical name, sampling rate, and various configuration parameters.
+/// - **Field methods**: These provide direct access to the properties of a device, such as its channels, physical name, 
+/// sampling rate, and various configuration parameters.
 ///
-/// - **Channel management**: Methods like `editable_channels`, `editable_channels_`, and `add_channel` allow for the retrieval and manipulation of channels associated with the device.
+/// - **Channel management**: Methods like [`BaseDevice::editable_channels`], [`BaseDevice::editable_channels_`], and 
+/// [`BaseDevice::add_channel`] allow for the retrieval and manipulation of channels associated with the device.
 ///
-/// - **Device status checks**: Methods like `is_compiled`, `is_edited`, and `is_fresh_compiled` enable checking the compilation and editing status of the device's channels.
+/// - **Device status checks**: Methods like [`BaseDevice::is_compiled`], [`BaseDevice::is_edited`], and 
+/// [`BaseDevice::is_fresh_compiled`] enable checking the compilation and editing status of the device's channels.
 ///
-/// - **Cache operations**: The methods `clear_edit_cache` and `clear_compile_cache` are used to clear the edit and compile caches of the device's channels, respectively.
+/// - **Cache operations**: The methods [`BaseDevice::clear_edit_cache`] and [`BaseDevice::clear_compile_cache`] are 
+/// used to clear the edit and compile caches of the device's channels, respectively.
 ///
-/// - **Compilation**: The `compile` method takes care of the signal compilation process for the device's channels. For Digital Output (DO) channels, it provides additional functionality to merge line channels into port channels.
+/// - **Compilation**: The [`BaseDevice::compile`] method takes care of the signal compilation process for the device's 
+/// channels. For Digital Output (DO) channels, it provides additional functionality to merge line channels into port channels.
 ///
-/// - **Signal generation**: The `fill_signal_nsamps` and `calc_signal_nsamps` methods are central to signal generation, allowing for the sampling of float-point values from compiled instructions based on various criteria.
+/// - **Signal generation**: The [`BaseDevice::fill_signal_nsamps`] and [`BaseDevice::calc_signal_nsamps`] methods are 
+/// central to signal generation, allowing for the sampling of float-point values from compiled instructions based on 
+/// various criteria.
 ///
-/// - **Utility functions**: Methods like `unique_port_numbers` offer utility functionalities specific to certain task types, aiding in operations like identifying unique ports in Digital Output (DO) devices.
+/// - **Utility functions**: Methods like [`BaseDevice::unique_port_numbers`] offer utility functionalities specific to certain 
+/// task types, aiding in operations like identifying unique ports in Digital Output (DO) devices.
 ///
-/// # Implementing `BaseDevice`:
+/// # Implementing [`BaseDevice`]:
 ///
 /// When creating a new type that represents an NI device, implementing this trait ensures that the type has all the necessary methods and behaviors typical of NI devices. Implementers can then extend or override these methods as necessary to provide device-specific behavior or optimizations.
 pub trait BaseDevice {
