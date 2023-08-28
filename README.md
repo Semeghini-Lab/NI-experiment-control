@@ -22,7 +22,7 @@ While low-level implementations ensure versatility and performance, they complic
 
 Our project aims to bridge these challenges. At its heart, it taps into Rust's performance and safety, coupled with its seamless C and Python interfacing. By integrating with the NI-DAQmx C driver library and offering a Python API through `PyO3`, we aim for a balance between performance and ease of use. The support for analogue and digital output tasks, along with synchronization capabilities, makes this project comprehensive for NI device integration.
 
-## Code Structure
+## Structure of this project
 
 ### Python library wrapper: `niexpctrl`
 
