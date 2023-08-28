@@ -1,7 +1,7 @@
 # NI-experiment-control
 A python library for experiment-level abstraction of National Instrument (NI) devices built on Rust
 
-# National Instrument (NI) Integration with `nicompiler_backend`
+# National Instrument (NI) Integration
 
 National Instrument (NI) has long been a preferred choice for building experimental control systems, owing to the versatility, cost-effectiveness, extensibility, and robust documentation of its hardware. Their substantial documentation spans from system design [NI-DAQmx Documentation](https://www.ni.com/docs/en-US/bundle/ni-daqmx/page/daqhelp/daqhelp.html) to APIs for both [ANSI C](https://www.ni.com/docs/en-US/bundle/ni-daqmx-c-api-ref/page/cdaqmx/help_file_title.html) and [Python](https://nidaqmx-python.readthedocs.io).
 
