@@ -22,6 +22,8 @@ export_optimized:
 	maturin develop --release
 
 publish: 
-	@echo "Updating tests, docs, and publishing crate"
+	@echo "Updating tests, docs, and exporting to python, and publishing crate"
 	cargo fmt && cargo doc && cargo test 
 	git commit -am "publish update" && git push 
+	maturin develop --release
+	
