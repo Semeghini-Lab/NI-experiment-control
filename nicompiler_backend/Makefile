@@ -18,12 +18,11 @@ export:
 
 export_optimized:
 	@echo "Building python and rust library with heavy optimization ..."
-	cargo build --release
 	maturin develop --release
 
 publish: 
 	@echo "Updating tests, docs, and exporting to python, and publishing crate"
-	cargo fmt && cargo doc && cargo test 
 	git commit -am "publish update" && git push 
+	cargo fmt && cargo doc && cargo test 
 	maturin develop --release
-	
+	cargo publish

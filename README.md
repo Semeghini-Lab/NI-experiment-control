@@ -18,18 +18,32 @@ Low-level system implementations promise versatility and performance but at the 
 
 ## Introducing `NI-experiment-control`
 
-This project is designed to bridge these challenges. At its core, it leverages the performance and safety guarantees of Rust as well as its convenient interface with C and python. By interfacing seamlessly with the NI-DAQmx C driver library and providing a Python API via `PyO3`, we seek the best of both worlds. Coupled with an optional high-level Python wrapper (currently under development), researchers can design experiments in an expressive language, leaving the Rust backend to handle streaming and concurrency.
+This project is designed to bridge these challenges. At its core, it leverages the performance and safety guarantees of Rust as well as its convenient interface with C and python. By interfacing seamlessly with the NI-DAQmx C driver library and providing a Python API via `PyO3`, we seek the best of both worlds. Coupled with an optional high-level Python wrapper module, researchers can design experiments in an expressive language, leaving the Rust backend to handle streaming and concurrency.
 
 Currently, this crate supports analogue and digital output tasks, along with synchronization between NI devices through shared start-triggers, sampling clocks, or phase-locked reference clocks.
 
 ## Code Structure
 
 ### `niexpctrl`
-The `niexpctrl` folder features an optional python module of the same name providing convenient wrappers around the python methods exposed in `nicompiler_backend` and, optionally, `niexpctrl_backend` (if it is found). It provides a complete set of functionalities for conveniently designing, visualizing, and streaming multi-device NI output tasks. 
+The `niexpctrl` folder features an optional python module of the same name providing convenient wrappers around the python methods exposed in `nicompiler_backend` and, optionally, `niexpctrl_backend` if it is found. It provides a complete set of functionalities for conveniently designing, visualizing, and streaming multi-device NI output tasks. 
 
 ### `nicompiler_backend`
 The `nicompiler_backend` folder features a rust crate of the same name. Via `PyO3`, it exposes a python-accessible `Experiment` 
-class through which to define a multi-device NI experiment. The `nicompiler_backend` may also be used as a standalone python or rust library in the absence of NI devices. 
+class through which to define a multi-device NI experiment. The `nicompiler_backend` may also be used as a standalone python or rust library in an experiment-design environment without NI devices. 
 
 ### `niexpctrl_backend`
-The `niexpctrl_backend` crate extends on the `nicompiler_backend` crate to provide a python-accessible `Experiment` class which additionally supports streaming. 
+The `niexpctrl_backend` crate extends on the `nicompiler_backend` crate to provide a python-accessible `Experiment` class which can additionally be streamed to NI devices. 
+
+## Installation
+The following installation instruction is for Windows, for which NI provides the most comprehensive driver support. 
+### Installing Rust
+(fill in details here)
+### Installing the experiment compiler
+1. clone the repository and enter the repository
+2. Activate the python (anaconda) environment in which you wish to install `nicompiler_backend`. 
+3. Run `cd nicompiler_backend && make export_optimized` to install the `nicompiler_backend`.
+4. [placeholder for installing `niexpctrl`]
+
+### Installing the experimental control component
+1. Install the experiment compiler.
+2. 
