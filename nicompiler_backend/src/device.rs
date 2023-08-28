@@ -44,7 +44,10 @@
 //! the library may internally add streamable channels.
 //! For more details on editable and streamable channels, see the editable v.s. streamable section in
 //! [`channel` module].
-//!
+//! 
+//! ### Synchronization methods for devices
+//! Each device's synchronization behavior is specified by its constructor arguments. 
+//! Refer to the [`Device`] struct for a more detailed explanation. 
 //! [`channel` module]: crate::channel
 
 use ndarray::{s, Array1, Array2};
@@ -211,7 +214,7 @@ pub trait BaseDevice {
     /// Compiles all editable channels to produce a continuous instruction stream.
     ///
     /// The method starts by compiling each individual editable channel to obtain a continuous
-    /// stream of instructions (also see[`BaseChannel::compile`]). 
+    /// stream of instructions (also see[`BaseChannel::compile`]).
     /// If the device type is `TaskType::DO` (Digital Output), an additional
     /// processing step is performed. All the line channels belonging to the same port are merged
     /// into a single, streamable port channel that is non-editable. This aggregated port channel
@@ -304,7 +307,7 @@ pub trait BaseDevice {
     ///
     /// Iterates over all the compiled channels in the device, regardless of their streamability or
     /// editability, and determines the maximum stop time.
-    /// See [`BaseChannel::compiled_stop_time`] for more information. 
+    /// See [`BaseChannel::compiled_stop_time`] for more information.
     ///
     /// # Returns
     /// A `f64` representing the maximum stop time (in seconds) across all compiled channels.
@@ -318,7 +321,7 @@ pub trait BaseDevice {
     /// Calculates the maximum stop time among all editable channels.
     ///
     /// Iterates over all the editable channels in the device and determines the maximum stop time.
-    /// See [`BaseChannel::edit_stop_time`] for more information. 
+    /// See [`BaseChannel::edit_stop_time`] for more information.
     ///
     /// # Returns
     /// A `f64` representing the maximum stop time (in seconds) across all editable channels.

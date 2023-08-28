@@ -14,7 +14,7 @@
 //! The NI driver, while versatile, demands that output signals be pre-sampled and relayed to the device's output-buffer.
 //! Consider an experiment that runs for an extended duration (e.g., 10 minutes) and requires high time-resolution (e.g.,
 //! 1MHz for 10 analogue f64 channels). Pre-sampling the entire waveform becomes both computationally demanding and
-//! memory-intensive (requiring around `~44.7Gb` for storage). A more practical approach would be streaming the signal,
+//! memory-intensive (requiring around ~44.7Gb for storage). A more practical approach would be streaming the signal,
 //! where a fraction of the signal is sampled and relayed while the preceding chunk is executed. This approach reduces
 //! memory overhead while retaining signal integrity.
 //!

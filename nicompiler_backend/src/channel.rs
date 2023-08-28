@@ -99,6 +99,8 @@ pub trait BaseChannel {
     fn samp_rate(&self) -> f64;
     fn physical_name(&self) -> &str;
     fn task_type(&self) -> TaskType;
+    /// The `fresh_compiled` field is set to true by each [`BaseChannel::compile`] call and
+    /// `false` by each [`BaseChannel::add_instr`].  
     fn is_fresh_compiled(&self) -> bool;
     /// Provies a reference to the edit cache of instrbook list.
     fn instr_list(&self) -> &BTreeSet<InstrBook>;
