@@ -1,5 +1,5 @@
 # NI-experiment-control
-A python library for experiment-level abstraction of National Instrument (NI) devices built on Rust
+A python library for experiment-level abstraction of National Instrument (NI) devices with a rust backend. 
 
 # National Instrument (NI) Integration
 
@@ -11,7 +11,7 @@ National Instrument (NI) has long been a preferred choice for building experimen
 The NI driver, while versatile, demands that output signals be pre-sampled and relayed to the device's output-buffer. Consider an experiment that runs for an extended duration (e.g., 10 minutes) and requires high time-resolution (e.g., 1MHz for 10 analogue f64 channels). Pre-sampling the entire waveform becomes both computationally demanding and memory-intensive (requiring around `~44.7Gb` for storage). A more practical approach would be streaming the signal, where a fraction of the signal is sampled and relayed while the preceding chunk is executed. This approach reduces memory overhead while retaining signal integrity.
 
 ### 2. Device-Centric Abstraction
-NI drivers typically interface at the device level, with software "Task" entities corresponding to specific device channels. Modern experiments, however, often require capabilities that exceed a single NI card. Using a NI experimental control system consisting of multiple devices necessitates managing multiple device tasks concurrently, a problem fraught with complexity. Ideally, researchers should interface with the entire system holistically rather than grappling with individual devices and their concurrent tasks.
+NI drivers typically interface at the device level, with software "task" entities corresponding to specific device channels. Modern experiments, however, often require capabilities that exceed a single NI card. Using a NI experimental control system consisting of multiple devices necessitates managing multiple device tasks concurrently, a problem fraught with complexity. Ideally, researchers should interface with the entire system holistically rather than grappling with individual devices and their concurrent tasks.
 
 ### 3. Trade-offs between High vs. Low-Level Implementation
 Low-level system implementations promise versatility and performance but at the expense of development ease. Conversely, a Python-based solution encourages rapid development but may be marred by performance bottlenecks, especially when dealing with concurrent streaming across multiple devices.

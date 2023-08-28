@@ -4,7 +4,7 @@ all: test
 # Define the test target
 test:
 	@echo "Running tests..."
-	cargo test
+	cargo doc && cargo test
 
 run:
 	@echo "Running the main function..."
@@ -20,3 +20,8 @@ export_optimized:
 	@echo "Building python and rust library with heavy optimization ..."
 	cargo build --release
 	maturin develop --release
+
+publish: 
+	@echo "Updating tests, docs, and publishing crate"
+	cargo fmt && cargo doc && cargo test 
+	git commit -am "publish update" && git push 

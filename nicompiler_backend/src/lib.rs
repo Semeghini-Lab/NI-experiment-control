@@ -19,7 +19,7 @@
 //! memory and computational overhead while maintaining signal integrity.
 //!
 //! ### 2. Device-Centric Abstraction
-//! NI drivers typically interface at the device level, with software "Task" entities corresponding to specific device channels.
+//! NI drivers typically interface at the device level, with software "task" entities corresponding to specific device channels.
 //! Modern experiments, however, often require capabilities that exceed a single NI card. Using a NI experimental control system
 //! consisting of multiple devices necessitates managing multiple device tasks concurrently, a problem fraught with complexity.
 //! Ideally, researchers should interface with the entire system holistically rather than grappling with individual devices
