@@ -1,6 +1,7 @@
-//! Implements [`Experiment`] and main trait [`BaseExperiment`], which constitute the highest 
-//! level of abstraction for interacting with NI tasks and the main API through which python 
-//! processes invoke the rust implementation. 
+//! Implements the main trait [`BaseExperiment`] for the [`Experiment`] struct, which constitute the highest 
+//! level of abstraction for interacting with NI tasks. The [`Experiment`] task, together 
+//! with its implementation, constitute the main API through which python 
+//! processes invoke the rust backend
 //! 
 
 
@@ -67,7 +68,8 @@ pub trait BaseExperiment {
         samp_clk_src: Option<&str>,
         trig_line: Option<&str>,
         is_primary: Option<bool>,
-        ref_clk_src: Option<&str>,
+        ref_clk_line: Option<&str>,
+        import_ref_clk: Option<bool>,
         ref_clk_rate: Option<f64>,
     ) {
         self.add_device_base(Device::new(
@@ -77,7 +79,8 @@ pub trait BaseExperiment {
             samp_clk_src,
             trig_line,
             is_primary,
-            ref_clk_src,
+            ref_clk_line,
+            import_ref_clk,
             ref_clk_rate,
         ));
     }
@@ -89,7 +92,8 @@ pub trait BaseExperiment {
         samp_clk_src: Option<&str>,
         trig_line: Option<&str>,
         is_primary: Option<bool>,
-        ref_clk_src: Option<&str>,
+        ref_clk_line: Option<&str>,
+        import_ref_clk: Option<bool>,
         ref_clk_rate: Option<f64>,
     ) {
         self.add_device_base(Device::new(
@@ -99,7 +103,8 @@ pub trait BaseExperiment {
             samp_clk_src,
             trig_line,
             is_primary,
-            ref_clk_src,
+            ref_clk_line,
+            import_ref_clk,
             ref_clk_rate,
         ));
     }
@@ -403,7 +408,8 @@ macro_rules! impl_exp_boilerplate {
                 samp_clk_src: Option<&str>,
                 trig_line: Option<&str>,
                 is_primary: Option<bool>,
-                ref_clk_src: Option<&str>,
+                ref_clk_line: Option<&str>,
+                import_ref_clk: Option<bool>,
                 ref_clk_rate: Option<f64>,
             ) {
                 self.add_device_base(Device::new(
@@ -413,7 +419,8 @@ macro_rules! impl_exp_boilerplate {
                     samp_clk_src,
                     trig_line,
                     is_primary,
-                    ref_clk_src,
+                    ref_clk_line,
+                    import_ref_clk,
                     ref_clk_rate,
                 ));
             }
@@ -425,7 +432,8 @@ macro_rules! impl_exp_boilerplate {
                 samp_clk_src: Option<&str>,
                 trig_line: Option<&str>,
                 is_primary: Option<bool>,
-                ref_clk_src: Option<&str>,
+                ref_clk_line: Option<&str>,
+                import_ref_clk: Option<bool>,
                 ref_clk_rate: Option<f64>,
             ) {
                 self.add_device_base(Device::new(
@@ -435,7 +443,8 @@ macro_rules! impl_exp_boilerplate {
                     samp_clk_src,
                     trig_line,
                     is_primary,
-                    ref_clk_src,
+                    ref_clk_line,
+                    import_ref_clk,
                     ref_clk_rate,
                 ));
             }
@@ -582,7 +591,22 @@ macro_rules! impl_exp_boilerplate {
 
 #[pymethods]
 impl Experiment {
-    // EXPERIMENT METHODS
+    /// Constructor for the `Experiment` class.
+    ///
+    /// This constructor initializes an instance of the `Experiment` class with an empty collection of devices.
+    /// The underlying representation of this collection is a hashmap where device names (strings) map to their 
+    /// respective `Device` objects.
+    ///
+    /// # Returns
+    /// - An `Experiment` instance with no associated devices.
+    ///
+    /// # Example (python)
+    /// ```python
+    /// from nicompiler_backend import Experiment
+    /// 
+    /// exp = Experiment()
+    /// assert len(exp.devices()) == 0
+    /// ```
     #[new]
     pub fn new() -> Self {
         Self {

@@ -32,8 +32,10 @@
 //! to export (`true`) or (`import`) the start trigger of the NI-task associated with this device through `trig_line`.
 //! In case that any device in an experiment has nontrivial triggering behavior, one and only one of the devices
 //! must be primary.
-//! - `ref_clk_src`: Optional source of the reference clock to phase-lock the device clock to. Supply `None` for
-//! trivial reference clock behavior
+//! - `ref_clk_line`: Optional channel to import or export the reference clock the phase-lock phase-locks to. 
+//! Supply `None` for trivial reference clock behavior. 
+//! - `import_ref_clk`: Optional indicator for whether to import reference clock signal from `ref_clk_line` or to 
+//! export the 10Mhz on-board reference clock to `ref_clk_line`. Supply `None` for neither. 
 //! - `ref_clk_rate`: Optional rate of the reference clock in Hz.
 //!
 //!
@@ -98,7 +100,8 @@ pub trait BaseDevice {
     fn samp_clk_src(&self) -> Option<&str>;
     fn trig_line(&self) -> Option<&str>;
     fn is_primary(&self) -> Option<bool>;
-    fn ref_clk_src(&self) -> Option<&str>;
+    fn ref_clk_line(&self) -> Option<&str>;
+    fn import_ref_clk(&self) -> Option<bool>;
     fn ref_clk_rate(&self) -> Option<f64>;
 
     /// Returns a vector of references to editable channels
@@ -491,7 +494,7 @@ pub trait BaseDevice {
 /// to export (`true`) or (`import`) the start trigger of the NI-task associated with this device through `trig_line`.
 /// In case that any device in an experiment has nontrivial triggering behavior, one and only one of the devices
 /// must be primary.
-/// - `ref_clk_src`: Optional source of the reference clock to phase-lock the device clock to.
+/// - `ref_clk_line`: Optional source of the reference clock to phase-lock the device clock to.
 /// - `ref_clk_rate`: Optional rate of the reference clock in Hz.
 pub struct Device {
     channels: HashMap<String, Channel>,
@@ -503,7 +506,8 @@ pub struct Device {
     samp_clk_src: Option<String>,
     trig_line: Option<String>,
     is_primary: Option<bool>,
-    ref_clk_src: Option<String>,
+    ref_clk_line: Option<String>,
+    import_ref_clk: Option<bool>,
     ref_clk_rate: Option<f64>,
 }
 
@@ -520,7 +524,9 @@ impl Device {
     /// - `samp_clk_src`: Optional source for the sampling clock.
     /// - `trig_line`: Optional identifier for the device's trigger line.
     /// - `is_primary`: Optional flag indicating if this is the primary device (imports or exports trigger line).
-    /// - `ref_clk_src`: Optional source for the device's reference clock.
+    /// - `ref_clk_line`: Optional line (channel) to import or export the device's reference clock.
+    /// - `import_ref_clk`: Optional indicator whether to import (`true`) or export (`false`) reference clock. Use 
+    /// `None` for trivial behavior
     /// - `ref_clk_rate`: Optional rate of the reference clock in Hz.
     ///
     /// # Returns
@@ -532,7 +538,8 @@ impl Device {
         samp_clk_src: Option<&str>,
         trig_line: Option<&str>,
         is_primary: Option<bool>,
-        ref_clk_src: Option<&str>,
+        ref_clk_line: Option<&str>,
+        import_ref_clk: Option<bool>,
         ref_clk_rate: Option<f64>,
     ) -> Self {
         Self {
@@ -545,7 +552,8 @@ impl Device {
             samp_clk_src: samp_clk_src.map(String::from),
             trig_line: trig_line.map(String::from),
             is_primary: is_primary,
-            ref_clk_src: ref_clk_src.map(String::from),
+            ref_clk_line: ref_clk_line.map(String::from),
+            import_ref_clk: import_ref_clk,
             ref_clk_rate: ref_clk_rate,
         }
     }
@@ -576,8 +584,11 @@ impl BaseDevice for Device {
     fn is_primary(&self) -> Option<bool> {
         self.is_primary
     }
-    fn ref_clk_src(&self) -> Option<&str> {
-        self.ref_clk_src.as_deref()
+    fn ref_clk_line(&self) -> Option<&str> {
+        self.ref_clk_line.as_deref()
+    }
+    fn import_ref_clk(&self) -> Option<bool> {
+        self.import_ref_clk
     }
     fn ref_clk_rate(&self) -> Option<f64> {
         self.ref_clk_rate
