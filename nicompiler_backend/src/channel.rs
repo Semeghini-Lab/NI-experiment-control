@@ -8,11 +8,11 @@
 //!
 //! ## Editing behavior
 //! During editing, the user effectively adds [`InstrBook`] instances (instructions with associated
-//! intervals) into the `instr_list` field through wrapper methods. 
+//! intervals) into the `instr_list` field through wrapper methods.
 //! The `instr_list` field functions as an edit cache and  maintains a sorted list of newly added instruction books.
 //!
 //! ## Compilation behavior
-//! Compilation is analogous to "flushing" the edit cache of an experiment. 
+//! Compilation is analogous to "flushing" the edit cache of an experiment.
 //! During compilation, instructions within the edit cache via `instr_list` — which could
 //! be disjointed — are expanded according to their `keep_val` property and combined to
 //! produce a continuous stream of [`Instruction`], which is stored in `instr_end` and `instr_val`.

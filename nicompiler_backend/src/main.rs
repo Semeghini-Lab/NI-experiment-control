@@ -8,8 +8,7 @@ use crate::device::*;
 use crate::experiment::*;
 fn main() {
     let mut exp = Experiment::new();
-    exp.add_do_device("PXI1Slot6", 1e6, None, None,
-                        None, None, None, None,);
+    exp.add_do_device("PXI1Slot6", 1e6, None, None, None, None, None, None);
     exp.add_do_channel("PXI1Slot6", 0, 0);
     exp.add_do_channel("PXI1Slot6", 0, 4);
     exp.high("PXI1Slot6", "port0/line0", 1., 4.);

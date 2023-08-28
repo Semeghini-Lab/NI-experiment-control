@@ -32,10 +32,10 @@
 //! to export (`true`) or (`import`) the start trigger of the NI-task associated with this device through `trig_line`.
 //! In case that any device in an experiment has nontrivial triggering behavior, one and only one of the devices
 //! must be primary.
-//! - `ref_clk_line`: Optional channel to import or export the reference clock the phase-lock phase-locks to. 
-//! Supply `None` for trivial reference clock behavior. 
-//! - `import_ref_clk`: Optional indicator for whether to import reference clock signal from `ref_clk_line` or to 
-//! export the 10Mhz on-board reference clock to `ref_clk_line`. Supply `None` for neither. 
+//! - `ref_clk_line`: Optional channel to import or export the reference clock the phase-lock phase-locks to.
+//! Supply `None` for trivial reference clock behavior.
+//! - `import_ref_clk`: Optional indicator for whether to import reference clock signal from `ref_clk_line` or to
+//! export the 10Mhz on-board reference clock to `ref_clk_line`. Supply `None` for neither.
 //! - `ref_clk_rate`: Optional rate of the reference clock in Hz.
 //!
 //!
@@ -65,26 +65,26 @@ use crate::utils::*;
 ///
 /// # Trait Methods and Their Functionality:
 ///
-/// - **Field methods**: These provide direct access to the properties of a device, such as its channels, physical name, 
+/// - **Field methods**: These provide direct access to the properties of a device, such as its channels, physical name,
 /// sampling rate, and various configuration parameters.
 ///
-/// - **Channel management**: Methods like [`BaseDevice::editable_channels`], [`BaseDevice::editable_channels_`], and 
+/// - **Channel management**: Methods like [`BaseDevice::editable_channels`], [`BaseDevice::editable_channels_`], and
 /// [`BaseDevice::add_channel`] allow for the retrieval and manipulation of channels associated with the device.
 ///
-/// - **Device status checks**: Methods like [`BaseDevice::is_compiled`], [`BaseDevice::is_edited`], and 
+/// - **Device status checks**: Methods like [`BaseDevice::is_compiled`], [`BaseDevice::is_edited`], and
 /// [`BaseDevice::is_fresh_compiled`] enable checking the compilation and editing status of the device's channels.
 ///
-/// - **Cache operations**: The methods [`BaseDevice::clear_edit_cache`] and [`BaseDevice::clear_compile_cache`] are 
+/// - **Cache operations**: The methods [`BaseDevice::clear_edit_cache`] and [`BaseDevice::clear_compile_cache`] are
 /// used to clear the edit and compile caches of the device's channels, respectively.
 ///
-/// - **Compilation**: The [`BaseDevice::compile`] method takes care of the signal compilation process for the device's 
+/// - **Compilation**: The [`BaseDevice::compile`] method takes care of the signal compilation process for the device's
 /// channels. For Digital Output (DO) channels, it provides additional functionality to merge line channels into port channels.
 ///
-/// - **Signal generation**: The [`BaseDevice::fill_signal_nsamps`] and [`BaseDevice::calc_signal_nsamps`] methods are 
-/// central to signal generation, allowing for the sampling of float-point values from compiled instructions based on 
+/// - **Signal generation**: The [`BaseDevice::fill_signal_nsamps`] and [`BaseDevice::calc_signal_nsamps`] methods are
+/// central to signal generation, allowing for the sampling of float-point values from compiled instructions based on
 /// various criteria.
 ///
-/// - **Utility functions**: Methods like [`BaseDevice::unique_port_numbers`] offer utility functionalities specific to certain 
+/// - **Utility functions**: Methods like [`BaseDevice::unique_port_numbers`] offer utility functionalities specific to certain
 /// task types, aiding in operations like identifying unique ports in Digital Output (DO) devices.
 ///
 /// # Implementing [`BaseDevice`]:
@@ -173,30 +173,35 @@ pub trait BaseDevice {
     }
 
     /// A device is compiled if any of its editable channels are compiled.
+    /// Also see [`BaseChannel::is_compiled`]
     fn is_compiled(&self) -> bool {
         self.editable_channels()
             .iter()
             .any(|channel| channel.is_compiled())
     }
     /// A device is marked edited if any of its editable channels are edited.
+    /// Also see [`BaseChannel::is_edited`]
     fn is_edited(&self) -> bool {
         self.editable_channels()
             .iter()
             .any(|channel| channel.is_edited())
     }
     /// A device is marked fresh-compiled if all if its editable channels are freshly compiled.
+    /// Also see [`BaseChannel::is_fresh_compiled`]
     fn is_fresh_compiled(&self) -> bool {
         self.editable_channels()
             .iter()
             .all(|channel| channel.is_fresh_compiled())
     }
     /// Clears the edit-cache fields for all editable channels.
+    /// Also see [`BaseChannel::clear_edit_cache`]
     fn clear_edit_cache(&mut self) {
         self.editable_channels_()
             .iter_mut()
             .for_each(|chan| chan.clear_edit_cache());
     }
     /// Clears the compile-cache fields for all editable channels.
+    /// Also see [`BaseChannel::clear_compile_cache`]
     fn clear_compile_cache(&mut self) {
         self.editable_channels_()
             .iter_mut()
@@ -206,7 +211,8 @@ pub trait BaseDevice {
     /// Compiles all editable channels to produce a continuous instruction stream.
     ///
     /// The method starts by compiling each individual editable channel to obtain a continuous
-    /// stream of instructions. If the device type is `TaskType::DO` (Digital Output), an additional
+    /// stream of instructions (also see[`BaseChannel::compile`]). 
+    /// If the device type is `TaskType::DO` (Digital Output), an additional
     /// processing step is performed. All the line channels belonging to the same port are merged
     /// into a single, streamable port channel that is non-editable. This aggregated port channel
     /// contains constant instructions whose integer values are determined by the combined state
@@ -298,6 +304,7 @@ pub trait BaseDevice {
     ///
     /// Iterates over all the compiled channels in the device, regardless of their streamability or
     /// editability, and determines the maximum stop time.
+    /// See [`BaseChannel::compiled_stop_time`] for more information. 
     ///
     /// # Returns
     /// A `f64` representing the maximum stop time (in seconds) across all compiled channels.
@@ -311,6 +318,7 @@ pub trait BaseDevice {
     /// Calculates the maximum stop time among all editable channels.
     ///
     /// Iterates over all the editable channels in the device and determines the maximum stop time.
+    /// See [`BaseChannel::edit_stop_time`] for more information. 
     ///
     /// # Returns
     /// A `f64` representing the maximum stop time (in seconds) across all editable channels.
@@ -525,7 +533,7 @@ impl Device {
     /// - `trig_line`: Optional identifier for the device's trigger line.
     /// - `is_primary`: Optional flag indicating if this is the primary device (imports or exports trigger line).
     /// - `ref_clk_line`: Optional line (channel) to import or export the device's reference clock.
-    /// - `import_ref_clk`: Optional indicator whether to import (`true`) or export (`false`) reference clock. Use 
+    /// - `import_ref_clk`: Optional indicator whether to import (`true`) or export (`false`) reference clock. Use
     /// `None` for trivial behavior
     /// - `ref_clk_rate`: Optional rate of the reference clock in Hz.
     ///
