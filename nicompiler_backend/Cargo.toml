@@ -2,6 +2,8 @@
 name = "nicompiler_backend"
 version = "0.1.0"
 edition = "2021"
+description = "A backend interface for National Instrument (NI) integration, offering streamlined experimental control systems with Rust's performance and safety guarantees."
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
