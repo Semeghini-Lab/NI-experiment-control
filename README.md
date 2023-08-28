@@ -10,7 +10,7 @@ National Instrument (NI) has consistently been a top choice for constructing exp
 
 The NI driver, although powerful, requires pre-sampling of output signals and their relay to the device's output-buffer. This becomes a challenge, especially for long-duration experiments that also demand high time-resolution. Streaming the signal, where a part of it is sampled and relayed while the earlier segment gets executed, can address this, reducing memory overhead and ensuring signal integrity.
 
-### 2. Device-Centric Abstraction
+### 2. Device-level Abstraction
 
 NI drivers usually operate at the device level, associating software "task" entities to specific device channels. Modern experiments might demand the integration of multiple NI cards, complicating task management. A holistic system-level interface would be more intuitive than managing individual devices and tasks.
 
