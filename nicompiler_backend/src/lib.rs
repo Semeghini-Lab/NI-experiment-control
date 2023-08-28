@@ -16,14 +16,14 @@
 //! 1MHz for 10 analogue f64 channels). Pre-sampling the entire waveform becomes both computationally demanding and
 //! memory-intensive (requiring around ~44.7Gb for storage). A more practical approach would be streaming the signal,
 //! where a fraction of the signal is sampled and relayed while the preceding chunk is executed. This approach reduces
-//! memory overhead while retaining signal integrity.
+//! memory and computational overhead while maintaining signal integrity.
 //!
 //! ### 2. Device-Centric Abstraction
 //! NI drivers typically interface at the device level, with software "Task" entities corresponding to specific device channels.
 //! Modern experiments, however, often require capabilities that exceed a single NI card. Using a NI experimental control system
 //! consisting of multiple devices necessitates managing multiple device tasks concurrently, a problem fraught with complexity.
 //! Ideally, researchers should interface with the entire system holistically rather than grappling with individual devices
-//! and their concurrent tasks.
+//! and their concurrent tasks. See [`Device`] for more details on synchronization.
 //!
 //! ### 3. Trade-offs between High vs. Low-Level Implementation
 //! Low-level system implementations promise versatility and performance but at the expense of development ease. Conversely,

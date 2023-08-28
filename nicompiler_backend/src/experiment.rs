@@ -1,58 +1,38 @@
-//! # `experiment` Module - Integrating National Instrument (NI) with `nicompiler_backend`
+//! The experiment module provides the highest level of abstraction for managing NI experiments, and
+//! the single place by which methods are exposed to python.
 //!
-//! This module encapsulates the main interface for experimental control systems built around National Instrument (NI) hardware.
-//! Recognized for its versatility, cost-effectiveness, extensibility, and robust documentation, NI provides a comprehensive ecosystem
-//! for experimental setups. However, with its own set of challenges, there was a need for a more streamlined approach, which is
-//! catered by the `nicompiler_backend`.
+//! ## Overview
 //!
-//! ## Module Organization
+//! At the heart of this module lies the [`Experiment`] struct, which consists of a collection of devices.
+//! The behavior of the `Experiment` struct is primarily defined
+//! by the [`BaseExperiment`] trait, which prescribes a collection of methods for experiment management and manipulation.
 //!
-//! The `experiment` module is structured into distinct components, primarily revolving around the [`Experiment`] struct and its 
-//! associated behaviors defined by the [`BaseExperiment`] trait. The organization is as follows:
+//! The module is organized into the following primary components:
 //!
-//! - **Core Abstractions**: Central to the module are the [`Experiment`] struct and the [`BaseExperiment`] trait. They form the
-//!   foundation for representing and manipulating experiments.
-//! - **Device Interactions**: Methods that target specific devices (e.g., [`add_ao_device`], [`device_calc_signal_nsamps`]).
-//! - **Channel Interactions**: Methods targeting individual channels within devices (e.g., [`constant`], [`sine`]).
-//! - **Utilities**: Helper methods, often internal, assist in operations and assertions (e.g., [`devices_`], [`typed_device_op`]).
+//! 1. **Experiment Struct**: The main data structure representing the entire experimental setup. It houses devices
+//!    and their associated channels.
+//! 2. **Traits**: Including the pivotal [`BaseExperiment`] trait, which defines the expected behaviors and operations
+//!    possible on an `Experiment`.
+//! 3. **Macro**: The module features a macro, `impl_exp_boilerplate!`, designed to generate boilerplate code to assist
+//!    in bridging Rust's trait system and Python's class system, as well as to make the python methods extensible.
 //!
-//! ## Overview & Challenges
+//! ## Key Structures and Their Relationships
 //!
-//! The module's primary goal is to alleviate some of the challenges posed by existing NI drivers:
+//! - **Experiment**: This is the main structure that users interact with. It represents a collection of devices and
+//!   provides methods for their management.
+//! - **Device**: Each device, represented by the [`Device`] struct, corresponds to a specific piece of NI hardware.
+//!   Devices contain channels, and methods in the `Experiment` struct often redirect to these devices.
+//! - **Channel**: Channels, denoted by the [`Channel`] struct, symbolize distinct physical channels on an NI device.
+//!   They hold instructions and other functionalities specific to the channel.
+//! - **Instruction**: Instructions, housed within [`InstrBook`], define specific tasks or commands for channels.
 //!
-//! - **Streaming Deficiency**: Handling experiments requiring vast amounts of data with efficiency.
-//! - **Device-Centric Abstraction**: Simplifying the management of multiple device tasks.
-//! - **Trade-offs in Implementation**: Balancing the benefits of low-level implementations with the ease of high-level languages.
+//! ## Navigating the Module
 //!
-//! ## Solutions & Features
+//! If you're looking to:
 //!
-//! `nicompiler_backend` is introduced as a bridge over these challenges, leveraging Rust's performance and safety, and offering
-//! seamless interfacing with both C and Python.
-//!
-//! - **Expressive Experiment Design**: With an optional Python wrapper, researchers can expressively design experiments, with the 
-//!   heavy lifting done by the Rust backend.
-//! - **Device and Channel Management**: Methods like [`add_ao_device`] and [`constant`] provide fine-grained control at both device 
-//!   and channel levels.
-//!
-//! ## Deep Dive into the Crate
-//!
-//! To understand the intricacies and capabilities of this module:
-//!
-//! - Explore the [`Experiment`] struct: The heart of the module, representing a collection of devices.
-//! - Dive into the [`BaseExperiment`] trait: It defines the behavior and methods for managing and querying experiments.
-//! - For device-specific details, check out the [`Device`] and associated methods.
-//! - For channel-level operations, the [`Channel`] struct and related methods will be of interest.
-//!
-//! We invite researchers and developers to explore, utilize, and contribute to this endeavor, aiming to make experimental control 
-//! systems more efficient and user-friendly.
-//!
-//! [`Experiment`]: Experiment
-//! [`BaseExperiment`]: BaseExperiment
-//! [`add_ao_device`]: BaseExperiment::add_ao_device
-//! [`constant`]: BaseExperiment::constant
-//! [`Device`]: device::Device
-//! [`Channel`]: channel::Channel
-
+//! - **Understand core behaviors**: Dive into the [`BaseExperiment`] trait.
+//! - **Integrate with python**: Refer to the [`impl_exp_boilerplate`] macro and its source. The macro provides
+//! python-exposed wrappers for methods implemented in [`BaseExperiment`] trait.
 
 use ndarray::Array2;
 use numpy;
@@ -62,7 +42,6 @@ use std::collections::HashMap;
 use crate::channel::*;
 use crate::device::*;
 use crate::instruction::*;
-use crate::utils::*;
 
 /// This trait defines the behavior of the [`Experiment`] struct through default trait implementations.
 ///
@@ -249,6 +228,7 @@ pub trait BaseExperiment {
             // Either all d.is_primary() are None
             self.devices().values().all(|d| d.is_primary().is_none()) ||
             // Or only one d.is_primary() is Some(true)
+            dev.is_primary() == Some(false) ||
             (dev.is_primary() == Some(true) &&
             self.devices().values().filter(|d| d.is_primary() == Some(true)).count() == 0),
             "Cannot register another primary device {}",

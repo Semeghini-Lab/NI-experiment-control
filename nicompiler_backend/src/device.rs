@@ -11,7 +11,7 @@
 //! a physical device (e.g. analogue output for `PXI1Slot1`). A `Device` trivially implements the
 //! [`BaseDevice`] trait by supplying field methods.
 //!
-//! The fields of [`Device]` keeps tracks of of the physical channels associated with the device
+//! [`Device`] fields keep tracks of of the physical channels associated with the device
 //! as well as device-wide data such as device name, trigger line, and synchronization behavior.
 //!
 //! The [`Device`] struct is the primary structure used to interact with NI hardware. It groups multiple
@@ -44,10 +44,11 @@
 //! the library may internally add streamable channels.
 //! For more details on editable and streamable channels, see the editable v.s. streamable section in
 //! [`channel` module].
-//! 
+//!
 //! ### Synchronization methods for devices
-//! Each device's synchronization behavior is specified by its constructor arguments. 
-//! Refer to the [`Device`] struct for a more detailed explanation. 
+//! Each device's synchronization behavior is specified by its constructor arguments.
+//! Refer to the [`Device`] struct for a more detailed explanation.
+//!
 //! [`channel` module]: crate::channel
 
 use ndarray::{s, Array1, Array2};
@@ -500,13 +501,98 @@ pub trait BaseDevice {
 /// - `samp_rate`: The sampling rate of the device in Hz.
 /// - `samp_clk_src`: Optional source of the sampling clock, supply `None` for on-board clock source.
 /// - `trig_line`: Optional identifier for the port through which to import / export the task start trigger,
-/// supply `None` for trivial triggering behavior
+///     supply `None` for trivial triggering behavior
 /// - `is_primary`: Optional Boolean indicating if the device is the primary device. Determines whether
-/// to export (`true`) or (`import`) the start trigger of the NI-task associated with this device through `trig_line`.
-/// In case that any device in an experiment has nontrivial triggering behavior, one and only one of the devices
-/// must be primary.
+///     to export (`true`) or (`import`) the start trigger of the NI-task associated with this device through `trig_line`.
+///     In case that any device in an experiment has nontrivial triggering behavior, one and only one of the devices
+///     must be primary.
+///  `import_ref_clk`: Optional indicator whether to import (`true`) or export (`false`) reference clock. Use
+///     `None` for trivial behavior
 /// - `ref_clk_line`: Optional source of the reference clock to phase-lock the device clock to.
 /// - `ref_clk_rate`: Optional rate of the reference clock in Hz.
+///
+/// # Synchronization Methods
+///
+/// For experiments that do not require synchronization between devices, set all optional fields of `Device` to `None`.
+/// However, for more accurate and cohesive experiments, we recommend at least implementing start-trigger synchronization.
+///
+/// ## Start-trigger Synchronization
+///
+/// Relevant fields: `trig_line`, `is_primary`.
+///
+/// Refer to the official [NI documentation on start-trigger synchronization](https://www.ni.com/docs/en-US/bundle/ni-daqmx/page/mxcncpts/syncstarttrigger.html).
+///
+/// This method designates one device as the primary and others as secondary. When the experiment begins, all tasks on
+/// secondary devices are set to wait for a digital edge trigger from the `trig_line` channel. The primary device's task,
+/// on the other hand, exports its start trigger to `trig_line`.
+///
+/// **Note**: It's essential to physically connect the primary device's specified `trig_line` to the corresponding lines
+/// on secondary devices.
+///
+/// For PCIe devices, use a `PFI` label. For PXIe devices, use the label `PXI_Trig` followed by a number in the range 0-7.
+/// This backend crate ensures task synchronization such that threads handling secondary tasks always start listening for
+/// triggers before the primary thread's task begins.
+///
+/// For PXIe devices linked to a chassis, ensure that you configure trigger bus routing using NI-MAX (on Windows) or the
+/// NI Hardware Configuration Utilities (on Linux) when specifying backplane trigger lines. Detailed information can be
+/// found [here](https://www.ni.com/docs/en-US/bundle/pxi-platform-services-help/page/trigger_routing_and_reservation.html).
+///
+/// It's important to note that after starting, each device's task utilizes its internal clock, which may result in incremental
+/// drifts between devices over time. For longer signals, it's advisable to use additional synchronization methods to ensure
+/// clock alignment.
+///
+/// ### Example:
+/// Here, the primary device `PXI1Slot6` exports its start trigger to `PXI1_Trig0`, while `PXI1Slot7` imports its start
+/// trigger from the same line.
+/// ```rust
+/// use nicompiler_backend::*;
+/// let mut exp = Experiment::new();
+/// exp.add_do_device("PXI1Slot6", 1e6, None, Some("PXI1_Trig0"), Some(true), None, None, None);
+/// exp.add_do_device("PXI1Slot7", 1e6, None, Some("PXI1_Trig0"), Some(false), None, None, None);
+/// ```
+///
+/// ## Phase-lock to Reference Clock
+///
+/// Relevant fields: `ref_clk_line`, `ref_clk_rate`, `import_ref_clk`.
+///
+/// Refer to the [NI documentation on phase-lock synchronization](https://www.ni.com/docs/en-US/bundle/ni-daqmx/page/mxcncpts/syncrefclock.html).
+///
+/// A subset of NI devices support this flexible synchronization method, which allows devices synchronized in this manner
+/// to operate at different sampling rates. Devices phase-lock their on-board oscillators to an external reference at `ref_clk_line`
+/// and indicate its frequency via `ref_clk_rate`. Optionally, a device can export its 10MHz onboard reference clock to
+/// `ref_clk_line` by setting `import_ref_clk` to `false`.
+///
+/// **Note**: Devices phase-locked in this manner still require start-trigger synchronization to ensure synchronized start times.
+///
+/// ### Example:
+/// The primary device `PXI1Slot6` exports its start trigger signal to `PXI1_Trig0` and its 10MHz reference clock to `PXI1_Trig7`.
+/// The secondary device `PXI1Slot4` acts accordingly.
+/// ```rust
+/// use nicompiler_backend::*;
+/// let mut exp = Experiment::new();
+/// exp.add_ao_device("PXI1Slot3", 1e6, None, Some("PXI1_Trig0"), Some(true), Some("PXI1_Trig7"), Some(false), Some(1e7));
+/// exp.add_ao_device("PXI1Slot4", 1e6, None, Some("PXI1_Trig0"), Some(false), Some("PXI1_Trig7"), Some(true), Some(1e7));
+/// ```
+///
+/// ## Importing Sample Clock
+///
+/// Relevant fields: `samp_clk_src`.
+///
+/// Check out the [NI documentation on sample clock synchronization](https://www.ni.com/docs/en-US/bundle/ni-daqmx/page/mxcncpts/syncsampleclock.html).
+///
+/// Some NI devices do not support reference clock synchronization. As an alternative, they can directly use external
+/// clock signals for their sampling clock. However, this constrains them to operate at the same rate as the imported sample clock.
+///
+/// ### Example:
+/// Building on the previous example, an additional `PXI1Slot6` sources its sample clock from the 10MHz signal exported by `PXI1Slot3`.
+/// ```rust
+/// use nicompiler_backend::*;
+/// let mut exp = Experiment::new();
+/// exp.add_ao_device("PXI1Slot3", 1e6, None, Some("PXI1_Trig0"), Some(true), Some("PXI1_Trig7"), Some(false), Some(1e7));
+/// exp.add_ao_device("PXI1Slot4", 1e6, None, Some("PXI1_Trig0"), Some(false), Some("PXI1_Trig7"), Some(true), Some(1e7));
+/// exp.add_ao_device("PXI1Slot6", 1e7, Some("PXI1_Trig7"), Some("PXI1_Trig0"), Some(false), None, None, None);
+/// ```
+
 pub struct Device {
     channels: HashMap<String, Channel>,
 
@@ -532,7 +618,7 @@ impl Device {
     /// - `physical_name`: Name of the device as seen by the NI driver.
     /// - `task_type`: The type of task associated with the device.
     /// - `samp_rate`: Desired sampling rate in Hz.
-    /// - `samp_clk_src`: Optional source for the sampling clock.
+    /// - `samp_clk_src`: Optional line to source or export the sample clock.
     /// - `trig_line`: Optional identifier for the device's trigger line.
     /// - `is_primary`: Optional flag indicating if this is the primary device (imports or exports trigger line).
     /// - `ref_clk_line`: Optional line (channel) to import or export the device's reference clock.
@@ -561,6 +647,7 @@ impl Device {
 
             samp_rate: samp_rate,
             samp_clk_src: samp_clk_src.map(String::from),
+
             trig_line: trig_line.map(String::from),
             is_primary: is_primary,
             ref_clk_line: ref_clk_line.map(String::from),

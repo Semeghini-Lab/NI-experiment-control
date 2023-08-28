@@ -67,7 +67,6 @@ use ndarray::{array, s};
 use std::collections::BTreeSet;
 
 use crate::instruction::*;
-use crate::utils::*;
 
 /// Enum type for NI tasks. Channels are associated
 /// with a unique task type, which affects their behavior.
