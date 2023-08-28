@@ -2,8 +2,6 @@
 
 A Python library offering an experiment-level abstraction of National Instrument (NI) devices, powered by a Rust backend.
 
-## National Instrument (NI) Integration
-
 National Instrument (NI) has consistently been a top choice for constructing experimental control systems, thanks to its versatile, cost-effective, extensible hardware, and comprehensive documentation. Their detailed guides range from system design ([NI-DAQmx Documentation](https://www.ni.com/docs/en-US/bundle/ni-daqmx/page/daqhelp/daqhelp.html)) to APIs for both [ANSI C](https://www.ni.com/docs/en-US/bundle/ni-daqmx-c-api-ref/page/cdaqmx/help_file_title.html) and [Python](https://nidaqmx-python.readthedocs.io).
 
 ## Challenges with Existing Implementations
@@ -56,14 +54,14 @@ The instructions below are tailored for Windows, given NI's extensive driver sup
 
 
 
-### Installing the Experiment Compiler
+### Installing `nicompiler_backend`
 
 1. Clone the repository and navigate to it.
 2. Activate your desired Python (Anaconda) environment.
 3. Navigate to the `nicompiler_backend` directory and execute `make export_optimized` to install.
 4. (Placeholder for `niexpctrl` installation steps)
 
-### Installing the Experimental Control Component
+### Installing `niexpctrl_backend`
 
 1. First, install the experiment compiler.
 2. Download and install the [NI-DAQmx](https://www.ni.com/en/support/downloads/drivers/download.ni-daq-mx.html#484356) driver.
