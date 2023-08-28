@@ -42,9 +42,19 @@ The `niexpctrl_backend` crate builds upon `nicompiler_backend`, offering a Pytho
 
 The instructions below are tailored for Windows, given NI's extensive driver support for the platform.
 
-### Installing Rust
+### Installing Rust 
 
-(Placeholder for Rust installation details)
+1. **Download the Installer:** Navigate to the [official Rust download page](https://www.rust-lang.org/tools/install) and download the `rustup-init.exe`.
+   
+2. **Run the Installer:** Execute the `rustup-init.exe` and follow the on-screen instructions. This process will install Rust's package manager `cargo` as well.
+
+3. **Verify Installation:** After installation, open a new command prompt and  verify installiation: 
+
+
+    ```rustc --version && cargo --version```
+4. **Update PATH (if necessary):** If you encounter errors indicating `rustc` or `cargo` is not recognized, ensure that the Rust binaries are added to your system's PATH. The installer typically does this, but in case it doesn't, add `C:\Users\<YOUR_USERNAME>\.cargo\bin` to your system's PATH.
+
+
 
 ### Installing the Experiment Compiler
 
@@ -57,8 +67,13 @@ The instructions below are tailored for Windows, given NI's extensive driver sup
 
 1. First, install the experiment compiler.
 2. Download and install the [NI-DAQmx](https://www.ni.com/en/support/downloads/drivers/download.ni-daq-mx.html#484356) driver.
-3. Verify the presence of `NIDAQmx.lib` in `C:/Program Files (x86)/National Instruments/Shared/ExternalCompilerSupport/C/lib64/msvc/`. If not, update the linker arguments in `niexpctrl_backend/.cargo/config.toml` to the correct path.
-4. Navigate to the `niexpctrl_backend` directory and run `make export_optimized`.
+3. Verify the presence of the NIDAQmx static library:
+
+
+   ````C:/Program Files (x86)/National Instruments/Shared/ExternalCompilerSupport/C/lib64/msvc/NIDAQmx.lib````
+   
+   If not found, update the linker arguments in `niexpctrl_backend/.cargo/config.toml` with the correct path. 
+4. Navigate to the `niexpctrl_backend` directory and run `make export_optimized` to install. 
 5. (Placeholder for `niexpctrl` installation steps)
 
 ## Extend functionalities
