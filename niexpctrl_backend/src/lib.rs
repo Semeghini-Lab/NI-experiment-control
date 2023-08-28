@@ -5,11 +5,11 @@ pub mod experiment;
 pub mod nidaqmx;
 pub mod utils;
 
-pub use crate::nidaqmx::*;
-pub use crate::experiment::*;
-pub use crate::device::*;
-pub use crate::utils::*;
+use crate::device::*;
 pub use crate::experiment::Experiment;
+use crate::experiment::*;
+use crate::nidaqmx::*;
+use crate::utils::*;
 use nicompiler_backend::*;
 
 #[pymodule]
