@@ -1,3 +1,6 @@
+//! A standalone implementation of a rust wrapper for the NI-DAQmx C driver. 
+//! Exposes a NI task as a rust struct. 
+
 use libc;
 use ndarray::Array2;
 use std::fs::OpenOptions;
@@ -23,8 +26,6 @@ pub const DAQMX_VAL_CHANPERLINE: CInt32 = 0;
 pub const DAQMX_VAL_CHANFORALLLINES: CInt32 = 1;
 pub const DAQMX_VAL_STARTTRIGGER: CInt32 = 12491;
 pub const DAQMX_VAL_10MHZREFCLOCK: CInt32 = 12536;
-
-// Stand-alone wrapper for C-driver library
 
 #[link(name = "NIDAQmx")]
 extern "C" {
@@ -108,7 +109,38 @@ extern "C" {
     fn DAQmxGetWriteTotalSampPerChanGenerated(handle: TaskHandle, data: *mut CUint64) -> CInt32;
 }
 
-fn daqmx_call<F: FnOnce() -> CInt32>(func: F) {
+/// Calls a DAQmx C-function and handles potential errors.
+///
+/// This function is designed to automate the error handling for National Instruments (NI) DAQmx driver calls.
+/// Every DAQmx C-function call returns a `int32` which, if negative, indicates an error.
+/// It is used extensively by [`NiTask`] methods. 
+///
+/// # Parameters
+///
+/// * `func`: A closure that encapsulates the DAQmx driver call. This closure should return a `CInt32` 
+/// which represents the result of the driver call.
+///
+/// # Behavior
+///
+/// If the DAQmx driver call (contained within `func`) returns a negative error code, 
+/// this function will automatically retrieve the extended error information using `DAQmxGetExtendedErrorInfo`.
+/// It then writes the error to a log file named "nidaqmx_error.logs" and finally, panics with the error message.
+///
+/// # Examples
+///
+/// ```ignore
+/// daqmx_call(|| {
+///     // Your DAQmx driver call here
+///     DAQmxSomeFunction(param1, param2)
+/// });
+/// ```
+///
+/// # Panics
+///
+/// This function will panic if:
+/// * The DAQmx driver call returns a negative error code.
+/// * There's a failure in opening or writing to the "nidaqmx_error.logs" file.
+pub fn daqmx_call<F: FnOnce() -> CInt32>(func: F) {
     let err_code = func();
     if err_code < 0 {
         let mut err_buff = [0i8; 2048];
@@ -131,10 +163,68 @@ fn daqmx_call<F: FnOnce() -> CInt32>(func: F) {
         panic!("DAQmx Error: {}", error_string);
     }
 }
+/// Resets a specified National Instruments (NI) device.
+///
+/// This function attempts to reset the provided NI device by invoking the `DAQmxResetDevice` method.
+///
+/// # Parameters
+///
+/// * `name`: A reference to a string slice representing the name of the NI device to be reset.
+///
+/// # Behavior
+///
+/// The function first converts the provided device name to a `CString` to ensure compatibility with the C-function call.
+/// It then invokes the `daqmx_call` function to safely call the `DAQmxResetDevice` method.
+///
+/// # Safety
+///
+/// This function contains an unsafe block due to the direct interaction with the C library, specifically when calling the `DAQmxResetDevice` method.
+///
+/// # Example
+/// ```
+/// #use niexpctrl_backend::*;
+/// reset_ni_device("PXI1Slot3");
+/// ```
+///
+/// # Panics
+///
+/// This function will panic if:
+/// * There's a failure in converting the device name to a `CString`.
+/// * The `DAQmxResetDevice` call returns a negative error code (handled by `daqmx_call`).
+///
+/// # Note
+///
+/// Ensure that the device name provided is valid and that the device is accessible when invoking this function.
+
 pub fn reset_ni_device(name: &str) {
     let name_cstr = std::ffi::CString::new(name).expect("Failed to convert device name to CString");
     daqmx_call(|| unsafe { DAQmxResetDevice(name_cstr.as_ptr()) });
 }
+
+/// Represents a National Instruments (NI) DAQmx task.
+///
+/// `NiTask` encapsulates a handle to an NI-DAQmx task, providing a Rust-friendly interface to interact with the task.
+/// Creating an instance of this struct corresponds to creating a new NI-DAQmx task. Methods on the struct
+/// allow for invoking the associated DAQmx methods on the task.
+///
+/// The struct primarily holds a task handle, represented by the `handle` field, which is used for internal
+/// operations and interactions with the DAQmx C API.
+///
+/// # NI-DAQmx Reference
+///
+/// For detailed information about the underlying driver and its associated methods, refer to the 
+/// [NI-DAQmx C Reference](https://www.ni.com/docs/en-US/bundle/ni-daqmx-c-api-ref/page/cdaqmx/help_file_title.html).
+///
+/// # Examples
+///
+/// ```ignore
+/// let task = NiTask::new();
+/// // task.some_method();
+/// ```
+///
+/// # Note
+///
+/// Ensure you have the necessary NI-DAQmx drivers and libraries installed and accessible when using this struct and its associated methods.
 
 pub struct NiTask {
     handle: TaskHandle,

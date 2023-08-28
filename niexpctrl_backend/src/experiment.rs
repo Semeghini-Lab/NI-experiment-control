@@ -38,3 +38,29 @@ impl Experiment {
             .for_each(|dev| reset_ni_device(dev.physical_name()));
     }
 }
+
+#[pymethods]
+impl Experiment {
+    /// Constructor for the `Experiment` class.
+    ///
+    /// This constructor initializes an instance of the `Experiment` class with an empty collection of devices.
+    /// The underlying representation of this collection is a hashmap where device names (strings) map to their
+    /// respective `Device` objects.
+    ///
+    /// # Returns
+    /// - An `Experiment` instance with no associated devices.
+    ///
+    /// # Example (python)
+    /// ```python
+    /// from nicompiler_backend import Experiment
+    ///
+    /// exp = Experiment()
+    /// assert len(exp.devices()) == 0
+    /// ```
+    #[new]
+    pub fn new() -> Self {
+        Self {
+            devices: HashMap::new(),
+        }
+    }
+}

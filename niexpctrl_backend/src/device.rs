@@ -47,13 +47,13 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
 
         for _rep in 0..nreps {
             // For every repetition, make sure the primary device starts last
-            if self.is_primary() {
+            if self.is_primary().unwrap_or(false) {
                 (0..num_devices).for_each(|_| sem.acquire());
                 sem.release(); // Release the semaphore to restore count to 1, in preparation for the next run.
             }
             task.start();
             timer_.tick_print(&format!("{} start (restart) overhead", self.physical_name()));
-            if !self.is_primary() {
+            if !self.is_primary().unwrap_or(true) {
                 sem.release();
             }
             // Main chunk for streaming
@@ -105,53 +105,33 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
 
     fn cfg_clk_sync(&self, task: &NiTask, seq_len: &usize) {
         let seq_len = *seq_len as u64;
-        match (self.is_primary(), self.task_type()) {
-            (true, TaskType::AO) => {
-                // Primary device: must be AO, routes start trigger and 10MHz ref clock
-                assert!(self.task_type() == TaskType::AO,
-                    "Primary device {} should be AO",
-                    self.physical_name()
-                );
-                let ref_clk_out= format!("/{}/PXI_Trig7", &self.physical_name());
-                task.export_signal(
-                    DAQMX_VAL_10MHZREFCLOCK,
-                    &ref_clk_out,
-                );
-                task.export_signal(
-                    DAQMX_VAL_STARTTRIGGER,
-                    &format!("/{}/{}", &self.physical_name(), &self.trig_line()),
-                );
-                task.cfg_sample_clk("", self.samp_rate(), seq_len);
-            }
-            (true, TaskType::DO) => panic!("Primary device {} should be AO", self.physical_name()),
-            (false, TaskType::AO) => {
-                task.cfg_dig_edge_start_trigger(&format!(
-                    "/{}/{}",
-                    &self.physical_name(),
-                    &self.trig_line()
-                ));
-                let ref_clk_src = format!("/{}/PXI_Trig7", &self.physical_name());
-                task.cfg_ref_clk(&ref_clk_src, 1e7);
-                task.cfg_sample_clk("", self.samp_rate(), seq_len);
-            }
-            (false, TaskType::DO) => {
-                assert!(
-                    self.samp_rate() == 1e7,
-                    "Current synchronization scheme only supports DO at 10Mhz"
-                );
-                task.cfg_dig_edge_start_trigger(&format!(
-                    "/{}/{}",
-                    &self.physical_name(),
-                    &self.trig_line()
-                ));
-                let samp_clk_src = format!("/{}/PXI_Trig7", &self.physical_name());
-                task.cfg_sample_clk(
-                    &samp_clk_src,
-                    1e7,
-                    seq_len,
-                );
+        // Configure sample clock first
+        let samp_clk_src = self.samp_clk_src().unwrap_or("");
+        task.cfg_sample_clk(samp_clk_src, self.samp_rate(), seq_len);
+        // Configure start trigger: primary devices export, while secondary devices configure task 
+        // to expect start trigger
+        if let Some(trig_line) = self.trig_line() {
+            match self.is_primary().unwrap() {
+                true =>                 
+                    task.export_signal(
+                        DAQMX_VAL_STARTTRIGGER,
+                        &format!("/{}/{}", &self.physical_name(), trig_line),
+                    ),
+                false => 
+                    task.cfg_dig_edge_start_trigger(&format!(
+                        "/{}/{}",
+                        &self.physical_name(),
+                        trig_line,
+                    )),
             }
         };
+        // Configure reference clocking
+        if let Some(ref_clk_line) = self.ref_clk_line() {
+            match self.import_ref_clk().unwrap() {
+                true => task.cfg_ref_clk(ref_clk_line, self.ref_clk_rate().unwrap()),
+                false => task.export_signal(DAQMX_VAL_10MHZREFCLOCK, ref_clk_line)
+            };
+        }
     }
 }
 
