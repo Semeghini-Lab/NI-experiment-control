@@ -31,11 +31,16 @@ The `niexpctrl` folder features an optional python module of the same name provi
 The `nicompiler_backend` folder features a rust crate of the same name. Via `PyO3`, it exposes a python-accessible `Experiment` 
 class through which to define a multi-device NI experiment. The `nicompiler_backend` may also be used as a standalone python or rust library in an experiment-design environment without NI devices. 
 
+To access documentatation, run `cargo docs --open` within the `nicompiler_backend` folder after having installed rust. 
+
 ### `niexpctrl_backend`
 The `niexpctrl_backend` crate extends on the `nicompiler_backend` crate to provide a python-accessible `Experiment` class which can additionally be streamed to NI devices. 
 
+To access documentatation, run `cargo docs --open` within the `niexpctrl_backend` folder after having installed rust. 
+
 ## Installation
 The following installation instruction is for Windows, for which NI provides the most comprehensive driver support. 
+
 ### Installing Rust
 (fill in details here)
 ### Installing the experiment compiler
@@ -46,4 +51,7 @@ The following installation instruction is for Windows, for which NI provides the
 
 ### Installing the experimental control component
 1. Install the experiment compiler.
-2. 
+2. Download and install the [NI-DAQmx](https://www.ni.com/en/support/downloads/drivers/download.ni-daq-mx.html#484356) driver. 
+3. Ensure that `C:/Program Files (x86)/National Instruments/Shared/ExternalCompilerSupport/C/lib64/msvc/` contains `NIDAQmx.lib`, alternatively, modify the linker arguments in `niexpctrl_backend/.cargo/config.toml` to the path to NIDAQmx static library. 
+4. Run `cd niexpctrl_backend && make export_optimized` to install the `niexpctrl_backend`
+5. [placeholder for installing `niexpctrl`]
