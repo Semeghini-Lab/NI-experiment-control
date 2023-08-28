@@ -1,0 +1,72 @@
+DAQmx Error: Requested creation of a separate channel for each line is not possible when a digital port is specified as the physical channel.
+Specify a range of digital lines, such as "Dev1/port0/line0:7", as the physical channel.
+Physical Channel Name: PXI1Slot6/port0
+
+Task Name: _unnamedTask<1>
+
+Status Code: -200376
+DAQmx Error: Onboard device memory underflow. Because of system and/or bus-bandwidth limitations, the driver could not write data to the device fast enough to keep up with the device output rate.
+Reduce your sample rate. If your data transfer method is interrupts, try using DMA or USB Bulk. You can also reduce the number of programs your computer is executing concurrently.
+Task Name: _unnamedTask<0>
+
+Status Code: -200621
+DAQmx Error: Onboard device memory underflow. Because of system and/or bus-bandwidth limitations, the driver could not write data to the device fast enough to keep up with the device output rate.
+Reduce your sample rate. If your data transfer method is interrupts, try using DMA or USB Bulk. You can also reduce the number of programs your computer is executing concurrently.
+Task Name: _unnamedTask<0>
+
+Status Code: -200621
+DAQmx Error: Onboard device memory underflow. Because of system and/or bus-bandwidth limitations, the driver could not write data to the device fast enough to keep up with the device output rate.
+Reduce your sample rate. If your data transfer method is interrupts, try using DMA or USB Bulk. You can also reduce the number of programs your computer is executing concurrently.
+Task Name: _unnamedTask<2>
+
+Status Code: -200621
+DAQmx Error: Onboard device memory underflow. Because of system and/or bus-bandwidth limitations, the driver could not write data to the device fast enough to keep up with the device output rate.
+Reduce your sample rate. If your data transfer method is interrupts, try using DMA or USB Bulk. You can also reduce the number of programs your computer is executing concurrently.
+Task Name: _unnamedTask<1>
+
+Status Code: -200621
+DAQmx Error: Onboard device memory underflow. Because of system and/or bus-bandwidth limitations, the driver could not write data to the device fast enough to keep up with the device output rate.
+Reduce your sample rate. If your data transfer method is interrupts, try using DMA or USB Bulk. You can also reduce the number of programs your computer is executing concurrently.
+Task Name: _unnamedTask<2>
+
+Status Code: -200621
+DAQmx Error: Onboard device memory underflow. Because of system and/or bus-bandwidth limitations, the driver could not write data to the device fast enough to keep up with the device output rate.
+Reduce your sample rate. If your data transfer method is interrupts, try using DMA or USB Bulk. You can also reduce the number of programs your computer is executing concurrently.
+Task Name: _unnamedTask<1>
+
+Status Code: -200621
+DAQmx Error: Onboard device memory underflow. Because of system and/or bus-bandwidth limitations, the driver could not write data to the device fast enough to keep up with the device output rate.
+Reduce your sample rate. If your data transfer method is interrupts, try using DMA or USB Bulk. You can also reduce the number of programs your computer is executing concurrently.
+Task Name: _unnamedTask<0>
+
+Status Code: -200621
+DAQmx Error: Onboard device memory underflow. Because of system and/or bus-bandwidth limitations, the driver could not write data to the device fast enough to keep up with the device output rate.
+Reduce your sample rate. If your data transfer method is interrupts, try using DMA or USB Bulk. You can also reduce the number of programs your computer is executing concurrently.
+Task Name: _unnamedTask<0>
+
+Status Code: -200621
+DAQmx Error: Onboard device memory underflow. Because of system and/or bus-bandwidth limitations, the driver could not write data to the device fast enough to keep up with the device output rate.
+Reduce your sample rate. If your data transfer method is interrupts, try using DMA or USB Bulk. You can also reduce the number of programs your computer is executing concurrently.
+Task Name: _unnamedTask<0>
+
+Status Code: -200621
+DAQmx Error: Onboard device memory underflow. Because of system and/or bus-bandwidth limitations, the driver could not write data to the device fast enough to keep up with the device output rate.
+Reduce your sample rate. If your data transfer method is interrupts, try using DMA or USB Bulk. You can also reduce the number of programs your computer is executing concurrently.
+Task Name: _unnamedTask<0>
+
+Status Code: -200621
+DAQmx Error: Write cannot be performed when the auto start input to DAQmx Write is false, task is not running, and timing for the task is not configured or Timing Type is set to On Demand.
+Set auto start to true, start the task, or configure timing and specify Timing Type other than On Demand.
+Task Name: _unnamedTask<0>
+
+Status Code: -200846
+DAQmx Error: DAQmx Error: Write cannot be performed when the auto start input to DAQmx Write is false, task is not running, and timing for the task is not configured or Timing Type is set to On Demand.
+Set auto start to true, start the task, or configure timing and specify Timing Type other than On Demand.
+Task Name: _unnamedTask<2>
+
+Status Code: -200846Write cannot be performed when the auto start input to DAQmx Write is false, task is not running, and timing for the task is not configured or Timing Type is set to On Demand.
+Set auto start to true, start the task, or configure timing and specify Timing Type other than On Demand.
+Task Name: _unnamedTask<1>
+
+Status Code: -200846
+
