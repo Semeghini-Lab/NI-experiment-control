@@ -2,6 +2,28 @@ from niexpctrl_backend import Experiment as RawWrapClass
 from typing import Optional, Literal, Union
 import json
 
+# Import plotly
+PLOTLY_INSTALLED = False
+try:
+    import plotly.graph_objs
+    PLOTLY_INSTALLED = True
+except ImportError:
+    print(
+        'plotly package is not installed. You can still use the streamer, '
+        'but plotting functionality will not be available.\n'
+        'To install, run `pip install plotly` in your Python environment'
+    )
+
+
+# class OutChanBase:
+#     def __init__(self, _exp: RawWrapClass, _card_max_name: str):
+#         self._exp = _exp
+#         self._max_name = _card_max_name
+#         self.chan_name = None
+#
+#     def calc_signal(self):
+#         pass
+
 
 class NIStreamer:
 
@@ -27,16 +49,19 @@ class NIStreamer:
                 f'{json.dumps(self._chan_dict, indent=4)}'
             )
 
-        def calc_signal(self, t_start, t_end, nsamps, require_streamable, require_editable):
-            # ToDo: revisit
-            self._exp.calc_signal(
-                dev_name=self.max_name,  # FixMe[Rust]: change `dev_name` to `max_name`
-                t_start=t_start,
-                t_end=t_end,
-                nsamps=nsamps,
-                require_streamable=require_streamable,
-                require_editable=require_editable,
-            )
+        # def calc_signal(self, t_start, t_end, nsamps, require_streamable, require_editable):
+        #     # FixMe[Rust]: currently, `calc_signal()` is implemented for device-level.
+        #     #  Re-implement for channel-level
+        #
+        #     # ToDo: revisit
+        #     self._exp.calc_signal(
+        #         dev_name=self.max_name,  # FixMe[Rust]: change `dev_name` to `max_name`
+        #         t_start=t_start,
+        #         t_end=t_end,
+        #         nsamps=nsamps,
+        #         require_streamable=require_streamable,
+        #         require_editable=require_editable,
+        #     )
 
         def clear_edit_cache(self):
             self._exp.device_clear_edit_cache(dev_name=self.max_name)  # FixMe[Rust]: change `dev_name` to `max_name`
@@ -52,6 +77,7 @@ class NIStreamer:
                 self._exp = _exp
                 self._max_name = _max_name
                 self.chan_idx = chan_idx
+                self.chan_name = f'ao{chan_idx}'
 
             def constant(self, t, val):
                 # FixMe[Rust]: remove `duration` and `keep_val` arguments.
@@ -66,7 +92,7 @@ class NIStreamer:
 
                 return self._exp.constant(
                     dev_name=self._max_name,  # FixMe[Rust]: change `dev_name` to `max_name`
-                    chan_name=self.chan_idx,  # FixMe[Rust]: maybe change `chan_name` to `chan_idx`
+                    chan_name=self.chan_name,
                     t=t,
                     value=val  # FixMe[Rust]: change `value` to `val`
                 )
@@ -75,9 +101,7 @@ class NIStreamer:
                 # ToDo: try adding dur=None - when you just say "keep playing sine until further instructions"
                 self._exp.sine(
                     dev_name=self._max_name,
-                    chan_name=f'ao{self.chan_idx}',
-                    # FixMe[Rust]: here channel_id is expected to be str 'aoX', while everywhere else it is just int X.
-                    #  Also, could we change `chan_name` to `chan_idx`? `chan_name` sounds like a string, while `chan_idx` - like an int
+                    chan_name=self.chan_name,
                     t=t,
                     duration=dur,
                     amplitude=amp,
@@ -87,6 +111,28 @@ class NIStreamer:
                     keep_val=keep_val,
                 )
                 return t + dur
+
+            def calc_signal(self, t_start=None, t_end=None, nsamps=1000):
+                if not self._exp.is_fresh_compiled():
+                    self._exp.compile()
+
+                # FixMe[Rust]: implement per-channel `calc_signal()`
+                signal_arr = self._exp.calc_signal(
+                    dev_name=self._max_name,
+                    t_start=t_start if t_start is not None else 0.0,
+                    t_end=t_end if t_end is not None else self._exp.compiled_stop_time(),
+                    nsamps=nsamps,
+                    require_streamable=False,
+                    require_editable=True,
+                )
+
+                # FixMe[Rust]: temporary fix before per-channel `calc_signal()` is implemented
+                chan_idx = self._exp.device_compiled_channel_names(
+                    dev_name=self._max_name,
+                    require_streamable=False,
+                    require_editable=True,
+                ).index(self.chan_name)
+                return signal_arr[chan_idx]
 
         def add_chnl(self, chan_idx: int):
             # Raw rust-maturin wrapper call
@@ -112,20 +158,43 @@ class NIStreamer:
                 self._max_name = _max_name
                 self.port_idx = port_idx
                 self.line_idx = line_idx
+                self.chan_name = f'port{port_idx}/line{line_idx}'
 
             def go_high(self, t):
                 self._exp.go_high(
                     dev_name=self._max_name,
-                    chan_name=f'port{self.port_idx}/line{self.line_idx}',
+                    chan_name=self.chan_name,
                     t=t
                 )
 
             def go_low(self, t):
                 self._exp.go_low(
                     dev_name=self._max_name,
-                    chan_name=f'port{self.port_idx}/line{self.line_idx}',
+                    chan_name=self.chan_name,
                     t=t
                 )
+
+            def calc_signal(self, t_start=None, t_end=None, nsamps=1000):
+                if not self._exp.is_fresh_compiled():
+                    self._exp.compile()
+
+                # FixMe[Rust]: implement per-channel `calc_signal()`
+                signal_arr = self._exp.calc_signal(
+                    dev_name=self._max_name,
+                    t_start=t_start if t_start is not None else 0.0,
+                    t_end=t_end if t_end is not None else self._exp.compiled_stop_time(),
+                    nsamps=nsamps,
+                    require_streamable=False,
+                    require_editable=True,
+                )
+
+                # FixMe[Rust]: temporary fix before per-channel `calc_signal()` is implemented
+                chan_idx = self._exp.device_compiled_channel_names(
+                    dev_name=self._max_name,
+                    require_streamable=False,
+                    require_editable=True,
+                ).index(self.chan_name)
+                return signal_arr[chan_idx]
 
         def add_chnl(self, port_idx: int, line_idx: int):
             # Raw rust-maturin wrapper call
@@ -157,15 +226,16 @@ class NIStreamer:
         else:
             raise KeyError(f'There is no card with max_name "{item}"')
 
-    def __repr__(self):
-        return (
-            f'Experiment class.\n'
-            f'The following AO cards have been added already:\n'
-            f'{json.dumps(self._ao_card_dict, indent=4)}\n'
-            f'\n'
-            f'The following DO cards have been added already:\n'
-            f'{json.dumps(self._do_card_dict, indent=4)}'
-        )
+    # def __repr__(self):
+    #     # FixMe: TypeError: Object of type AOCard is not JSON serializable
+    #     return (
+    #         f'Experiment class.\n'
+    #         f'The following AO cards have been added already:\n'
+    #         f'{json.dumps(self._ao_card_dict, indent=4)}\n'
+    #         f'\n'
+    #         f'The following DO cards have been added already:\n'
+    #         f'{json.dumps(self._do_card_dict, indent=4)}'
+    #     )
 
     def add_card(
             self,
@@ -253,3 +323,27 @@ class NIStreamer:
 
     def reset_all(self):
         self._exp.reset_devices()
+
+
+def _iplot(
+        chan_obj: Union[NIStreamer.AOCard.OutChnl, NIStreamer.DOCard.OutChnl],
+        t_stat=None,
+        t_end=None,
+        nsamps=1000
+):
+    if not PLOTLY_INSTALLED:
+        raise RuntimeError('Plotly package is not installed. Run `pip install plotly` to get it.')
+
+    signal_arr = chan_obj.calc_signal(t_start=t_stat, t_end=t_end, nsamps=nsamps)
+    # trace = plotly.graph_objs.Scatter()
+
+
+
+def iplot(obj, t_stat=None, t_stop=None, renderer='HTML'):
+    # FixMe[Rust]: currently, `calc_signal()` is implemented for device-level.
+    #  Re-implement for channel-level
+
+    if not isinstance(obj, (NIStreamer.AOCard, NIStreamer.DOCard)):
+        raise NotImplementedError('Temporary: only implemented for card-level')
+
+    pass
