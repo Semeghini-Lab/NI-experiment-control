@@ -174,11 +174,10 @@ class NIStreamer:
             samp_rate: float,
             samp_clk_src: Optional[str] = None,
             # Start trigger
-            trig_mode: Optional[bool] = None,  # ToDo: maybe change to Literal['master', 'slave', None]
+            trig_mode: Union[Literal['prim', 'sec'], None] = None,
             trig_line: Optional[str] = None,
             # Reference clock
-            ref_clk_mode: Optional[Literal[True, False, None]] = None,  # Optional[bool] = None
-            # ToDo: maybe change to Literal['master', 'slave', None]
+            ref_clk_mode: Union[Literal['prim', 'sec'], None] = None,
             ref_clk_line: Optional[str] = None,
             ref_clk_rate: Optional[str] = None,
     ):
@@ -193,14 +192,21 @@ class NIStreamer:
         else:
             raise ValueError(f'Invalid card type "{card_type}". Valid type strings are "AO" and "DO"')
 
-        # physical_name,
-        # samp_rate,
-        # samp_clk_src = None,
-        # trig_line = None,
-        # is_primary = None,
-        # ref_clk_line = None,
-        # import_ref_clk = None,
-        # ref_clk_rate = None,
+        if trig_mode not in ['prim', 'sec', None]:
+            raise ValueError(f'Invalid trig_role "{trig_mode}". Valid values are "prim", "sec", and None')
+        # FixMe[Rust]: Temporary fix while Rust side hasn't been adjusted
+        if trig_mode == 'prim':
+            trig_mode = True
+        elif trig_mode == 'sec':
+            trig_mode = False
+
+        if ref_clk_mode not in ['prim', 'sec', None]:
+            raise ValueError(f'Invalid ref_clk_role "{ref_clk_mode}". Valid values are "prim", "sec", and None')
+        # FixMe[Rust]: Temporary fix while Rust side hasn't been adjusted
+        if ref_clk_mode == 'prim':
+            ref_clk_mode = True
+        elif ref_clk_mode == 'sec':
+            ref_clk_mode = False
 
         # Raw rust-maturin wrapper call
         raw_api_method(
