@@ -73,7 +73,7 @@ class NIStreamer:
 
             def sine(self, t, dur, amp, freq, phase=0, dc_offs=0, keep_val=False):
                 # ToDo: try adding dur=None - when you just say "keep playing sine until further instructions"
-                return self._exp.sine(
+                self._exp.sine(
                     dev_name=self._max_name,
                     chan_name=f'ao{self.chan_idx}',
                     # FixMe[Rust]: here channel_id is expected to be str 'aoX', while everywhere else it is just int X.
@@ -86,6 +86,7 @@ class NIStreamer:
                     dc_offset=dc_offs if dc_offs != 0 else None,  # FixMe[Rust]: better to use 0.0 instead of None for default
                     keep_val=keep_val,
                 )
+                return t + dur
 
         def add_chnl(self, chan_idx: int):
             # Raw rust-maturin wrapper call
@@ -113,14 +114,14 @@ class NIStreamer:
                 self.line_idx = line_idx
 
             def go_high(self, t):
-                return self._exp.go_high(
+                self._exp.go_high(
                     dev_name=self._max_name,
                     chan_name=f'port{self.port_idx}/line{self.line_idx}',
                     t=t
                 )
 
             def go_low(self, t):
-                return self._exp.go_low(
+                self._exp.go_low(
                     dev_name=self._max_name,
                     chan_name=f'port{self.port_idx}/line{self.line_idx}',
                     t=t
