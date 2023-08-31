@@ -39,7 +39,7 @@ class NIStreamer:
             )
 
         def clear_edit_cache(self):
-            self._exp.device_clear_edit_cache(dev_name=self.max_name)    # FixMe[Rust]: change `dev_name` to `max_name`
+            self._exp.device_clear_edit_cache(dev_name=self.max_name)  # FixMe[Rust]: change `dev_name` to `max_name`
 
         def reset(self):
             self._exp.reset_device(dev_name=self.max_name)  # FixMe[Rust]: change `dev_name` to `max_name`
@@ -229,12 +229,6 @@ class NIStreamer:
         card_obj = proxy_class(_exp=self._exp, max_name=max_name)
         target_dict[max_name] = card_obj
         return card_obj
-
-    def add_ao_card(self, *args, **kwargs):
-        return self.add_card('AO', *args, **kwargs)
-
-    def add_do_card(self, *args, **kwargs):
-        return self.add_card('DO', *args, **kwargs)
 
     def compile(self, stop_time: Optional[float] = None) -> float:
         if stop_time is None:
