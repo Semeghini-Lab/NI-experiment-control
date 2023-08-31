@@ -1,14 +1,14 @@
-from niexpctrl_backend import Experiment as RawExpWrap
-from typing import Optional, Literal
+from niexpctrl_backend import Experiment as RawWrapClass
+from typing import Optional, Literal, Union
 import json
 
 
-class Experiment:
+class NIStreamer:
 
     # ToDo: method to print entire device/channel tree
 
     class _BaseCard:
-        def __init__(self, _exp: RawExpWrap, max_name: str):
+        def __init__(self, _exp: RawWrapClass, max_name: str):
             self._exp = _exp
             self.max_name = max_name
             self._chan_dict = {}
@@ -48,7 +48,7 @@ class Experiment:
 
         class OutChnl:
             # ToDo: implement __repr__()
-            def __init__(self, _exp: RawExpWrap, _max_name: str, chan_idx: int):
+            def __init__(self, _exp: RawWrapClass, _max_name: str, chan_idx: int):
                 self._exp = _exp
                 self._max_name = _max_name
                 self.chan_idx = chan_idx
@@ -106,7 +106,7 @@ class Experiment:
 
         class OutChnl:
             # ToDo: implement __repr__()
-            def __init__(self, _exp: RawExpWrap, _max_name: str, port_idx: int, line_idx: int):
+            def __init__(self, _exp: RawWrapClass, _max_name: str, port_idx: int, line_idx: int):
                 self._exp = _exp
                 self._max_name = _max_name
                 self.port_idx = port_idx
@@ -144,7 +144,7 @@ class Experiment:
             return chnl_obj
 
     def __init__(self):
-        self._exp = RawExpWrap()
+        self._exp = RawWrapClass()
         self._ao_card_dict = dict()
         self._do_card_dict = dict()
 
@@ -183,12 +183,12 @@ class Experiment:
             ref_clk_rate: Optional[str] = None,
     ):
         if card_type == 'AO':
-            raw_api_method = RawExpWrap.add_ao_device
-            proxy_class = Experiment.AOCard
+            raw_api_method = RawWrapClass.add_ao_device
+            proxy_class = NIStreamer.AOCard
             target_dict = self._ao_card_dict
         elif card_type == 'DO':
-            raw_api_method = RawExpWrap.add_do_device
-            proxy_class = Experiment.DOCard
+            raw_api_method = RawWrapClass.add_do_device
+            proxy_class = NIStreamer.DOCard
             target_dict = self._do_card_dict
         else:
             raise ValueError(f'Invalid card type "{card_type}". Valid type strings are "AO" and "DO"')
