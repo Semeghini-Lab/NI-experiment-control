@@ -4,9 +4,10 @@ from typing import Optional, Union, Literal
 
 
 class BaseCard:
-    def __init__(self, _dll: RawDLL, max_name: str):
+    def __init__(self, _dll: RawDLL, max_name: str, nickname=None):
         self._dll = _dll
         self.max_name = max_name
+        self._nickname = nickname
         self._chan_dict = {}
 
     def __getitem__(self, item):
@@ -22,6 +23,13 @@ class BaseCard:
             f'The following output channels have been added:\n'
             f'{self._chan_dict}'
         )
+
+    @property
+    def nickname(self):
+        if self._nickname is not None:
+            return self._nickname
+        else:
+            return self.max_name
 
     def clear_edit_cache(self):
         self._dll.device_clear_edit_cache(dev_name=self.max_name)  # FixMe[Rust]: change `dev_name` to `max_name`
