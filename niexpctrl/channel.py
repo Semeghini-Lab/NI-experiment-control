@@ -6,11 +6,23 @@ class BaseChan:
     def __init__(
             self,
             _dll: RawDLL,
-            _card_max_name: str
+            _card_max_name: str,
+            nickname: str = None
     ):
         self._dll = _dll
         self._card_max_name = _card_max_name
-        self.chan_name = None  # subclasses must over-write this attribute
+        self._nickname = nickname
+
+    @property
+    def chan_name(self):
+        raise NotImplementedError
+
+    @property
+    def nickname(self):
+        if self._nickname is not None:
+            return self._nickname
+        else:
+            return self.chan_name
 
     def clear_edit_cache(self):
         self._dll.channel_clear_edit_cache(
@@ -30,11 +42,14 @@ class BaseChan:
         # ToDo: until then go inefficient but safe - recompile from scratch every time
         self._dll.compile()
 
+        t_start = t_start if t_start is not None else 0.0
+        t_end = t_end if t_end is not None else self._dll.compiled_stop_time()
+
         # FixMe[Rust]: implement per-channel `calc_signal()`
         signal_arr = self._dll.calc_signal(
             dev_name=self._card_max_name,
-            t_start=t_start if t_start is not None else 0.0,
-            t_end=t_end if t_end is not None else self._dll.compiled_stop_time(),
+            t_start=t_start,
+            t_end=t_end,
             nsamps=nsamps,
             require_streamable=False,
             require_editable=True,
@@ -46,23 +61,21 @@ class BaseChan:
             require_streamable=False,
             require_editable=True,
         ).index(self.chan_name)
-        return signal_arr[chan_idx]
+
+        return t_start, t_end, signal_arr[chan_idx]
 
 
 class AOChan(BaseChan):
-    def __init__(
-            self,
-            _dll: RawDLL,
-            _card_max_name: str,
-            chan_idx: int
-    ):
+    def __init__(self, _dll: RawDLL, _card_max_name: str, chan_idx: int):
         # ToDo[Tutorial]: pass through all arguments to parent's __init__, maybe with *args, **kwargs,
         #  but such that argument completion hints are still coming through.
 
         BaseChan.__init__(self, _dll=_dll, _card_max_name=_card_max_name)
-
         self.chan_idx = chan_idx
-        self.chan_name = f'ao{chan_idx}'
+
+    @property
+    def chan_name(self):
+        return f'ao{self.chan_idx}'
 
     def constant(self, t, val):
         # FixMe[Rust]: remove `duration` and `keep_val` arguments.
@@ -105,7 +118,10 @@ class DOChan(BaseChan):
 
         self.port_idx = port_idx
         self.line_idx = line_idx
-        self.chan_name = f'port{port_idx}/line{line_idx}'
+
+    @property
+    def chan_name(self):
+        return f'port{self.port_idx}/line{self.line_idx}'
 
     def go_high(self, t):
         self._dll.go_high(
