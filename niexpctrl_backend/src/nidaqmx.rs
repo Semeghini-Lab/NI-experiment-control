@@ -1,5 +1,66 @@
-//! A standalone implementation of a rust wrapper for the NI-DAQmx C driver. 
-//! Exposes a NI task as a rust struct. 
+//! Provides a minimal rust wrapper for parts of the NI-DAQmx C library.
+//!
+//! ## Overview
+//!
+//! The core of this module is the `NiTask` struct which represents an NI-DAQmx task. It encapsulates
+//! a handle to an NI-DAQmx task and provides methods that map to various DAQmx C-functions, enabling
+//! users to perform operations like creating analog or digital channels, configuring sampling rates,
+//! and writing data to channels.
+//!
+//! Additionally, the module provides utility functions like `daqmx_call` and `reset_ni_device` to
+//! simplify error handling and device interactions.
+//!
+//! ## Usage
+//!
+//! Typical usage involves creating an instance of the `NiTask` struct, configuring it (e.g., setting
+//! up channels, setting clock rates), and then invoking operations (e.g., starting the task, writing
+//! data). All operations are abstracted through safe Rust methods, ensuring type safety and reducing
+//! the likelihood of runtime errors.
+//!
+//! ## Safety and Error Handling
+//!
+//! Given that this module interfaces with a C library, many of the calls involve unsafe Rust blocks.
+//! To mitigate potential issues, this module provides the `daqmx_call` function that wraps DAQmx
+//! C-function calls, checks for errors, and handles them appropriately (e.g., logging and panicking).
+//! ***In addition to printing, NI-DAQmx driver errors are saved in `nidaqmx_error.logs` file in the
+//! directory of the calling shell.
+//!
+//! ## Constants and Types
+//!
+//! To ensure type safety and clarity, the module defines several type aliases (e.g., `CConstStr`,
+//! `CUint32`) and constants (e.g., `DAQMX_VAL_RISING`, `DAQMX_VAL_VOLTS`) that map to their C
+//! counterparts. These are used throughout the module to ensure that function signatures and calls
+//! match their expected types.
+//!
+//! ## Cleanup and Resource Management
+//!
+//! The `NiTask` struct implements the `Drop` trait, ensuring that resources (like the DAQmx task handle)
+//! are cleaned up properly when an instance goes out of scope. This behavior reduces the chance of
+//! resource leaks.
+//!
+//! ## External Dependencies
+//!
+//! This module depends on the `libc` crate for C types and the `ndarray` crate for multi-dimensional
+//! arrays. It also uses the `std::fs` and `std::io` modules for file operations, specifically for logging
+//! errors.
+//!
+//! ## Example
+//!
+//! ```ignore
+//! #use niexpctrl_backend::*;
+//! let task = NiTask::new();
+//! task.create_ao_chan("Dev1/ao0");
+//! task.cfg_sample_clk("", 1000.0, 1000);
+//! // ... other configurations and operations ...
+//! task.start();
+//! // ... write data, wait, etc. ...
+//! task.stop();
+//! ```
+//!
+//! ## Further Reading
+//!
+//! For more details on the NI-DAQmx C driver and its capabilities, please refer to the
+//! [NI-DAQmx C Reference](https://www.ni.com/docs/en-US/bundle/ni-daqmx-c-api-ref/page/cdaqmx/help_file_title.html).
 
 use libc;
 use ndarray::Array2;
@@ -113,16 +174,16 @@ extern "C" {
 ///
 /// This function is designed to automate the error handling for National Instruments (NI) DAQmx driver calls.
 /// Every DAQmx C-function call returns a `int32` which, if negative, indicates an error.
-/// It is used extensively by [`NiTask`] methods. 
+/// It is used extensively by [`NiTask`] methods.
 ///
 /// # Parameters
 ///
-/// * `func`: A closure that encapsulates the DAQmx driver call. This closure should return a `CInt32` 
+/// * `func`: A closure that encapsulates the DAQmx driver call. This closure should return a `CInt32`
 /// which represents the result of the driver call.
 ///
 /// # Behavior
 ///
-/// If the DAQmx driver call (contained within `func`) returns a negative error code, 
+/// If the DAQmx driver call (contained within `func`) returns a negative error code,
 /// this function will automatically retrieve the extended error information using `DAQmxGetExtendedErrorInfo`.
 /// It then writes the error to a log file named "nidaqmx_error.logs" and finally, panics with the error message.
 ///
@@ -181,8 +242,8 @@ pub fn daqmx_call<F: FnOnce() -> CInt32>(func: F) {
 /// This function contains an unsafe block due to the direct interaction with the C library, specifically when calling the `DAQmxResetDevice` method.
 ///
 /// # Example
-/// ```
-/// #use niexpctrl_backend::*;
+/// ```ignore
+/// # use niexpctrl_backend::*;
 /// reset_ni_device("PXI1Slot3");
 /// ```
 ///
@@ -212,7 +273,7 @@ pub fn reset_ni_device(name: &str) {
 ///
 /// # NI-DAQmx Reference
 ///
-/// For detailed information about the underlying driver and its associated methods, refer to the 
+/// For detailed information about the underlying driver and its associated methods, refer to the
 /// [NI-DAQmx C Reference](https://www.ni.com/docs/en-US/bundle/ni-daqmx-c-api-ref/page/cdaqmx/help_file_title.html).
 ///
 /// # Examples
