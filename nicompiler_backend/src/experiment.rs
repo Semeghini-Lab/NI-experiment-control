@@ -1110,6 +1110,49 @@ pub trait BaseExperiment {
         self.channel_op(dev_name, chan_name, |chan| (*chan).clear_edit_cache());
     }
 
+    /// Calculates the sampled signal for a given channel over a specified time interval.
+    ///
+    /// The function computes the signal values based on the given start and end times,
+    /// along with the number of samples desired.
+    ///
+    /// # Arguments
+    ///
+    /// * `dev_name`: The name of the device associated with the channel.
+    /// * `chan_name`: The name of the channel for which the signal is calculated.
+    /// * `start_time`: The starting time of the sampling interval (in seconds).
+    /// * `end_time`: The ending time of the sampling interval (in seconds).
+    /// * `num_samps`: The number of samples to be computed over the specified interval.
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of `f64` containing the signal values sampled over the interval.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use nicompiler_backend::*;
+    /// let mut exp = Experiment::new();
+    /// exp.add_do_device("PXI1Slot7", 1e6, None, Some("PXI_Trig0"), Some(true), None, None, None);
+    /// exp.add_do_channel("PXI1Slot7", 0, 7);
+    /// exp.go_high("PXI1Slot7", "port0/line7", 0.5);
+    /// exp.compile_with_stoptime(1.);
+    /// let sig = exp.channel_calc_signal_nsamps("PXI1Slot7", "port0/line7", 0., 1., 10);
+    /// assert_eq!(sig[0], 0.);
+    /// assert_eq!(sig[sig.len() - 1], 1.);
+    /// ```
+    fn channel_calc_signal_nsamps(
+        &mut self,
+        dev_name: &str,
+        chan_name: &str,
+        start_time: f64,
+        end_time: f64,
+        num_samps: usize,
+    ) -> Vec<f64> {
+        self.channel_op(dev_name, chan_name, |chan| {
+            (*chan).calc_signal_nsamps(start_time, end_time, num_samps)
+        })
+    }
+
     /// Clears the compile cache of the specified channel.
     ///
     /// By invoking this method, any compiled data related to the channel will be removed. This is useful when
@@ -1400,6 +1443,19 @@ macro_rules! impl_exp_boilerplate {
 
             pub fn channel_clear_edit_cache(&mut self, dev_name: &str, chan_name: &str) {
                 BaseExperiment::channel_clear_edit_cache(self, dev_name, chan_name);
+            }
+
+            pub fn channel_calc_signal_nsamps(
+                &mut self,
+                dev_name: &str,
+                chan_name: &str,
+                start_time: f64,
+                end_time: f64,
+                num_samps: usize,
+            ) -> Vec<f64> {
+                BaseExperiment::channel_calc_signal_nsamps(
+                    self, dev_name, chan_name, start_time, end_time, num_samps,
+                )
             }
         }
     };
