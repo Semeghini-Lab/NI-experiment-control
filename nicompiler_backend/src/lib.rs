@@ -35,34 +35,46 @@
 //! `nicompiler_backend` is designed to bridge these challenges. At its core, it leverages the performance and safety
 //! guarantees of Rust as well as its convenient interface with C and python. By interfacing seamlessly with the NI-DAQmx C
 //! driver library and providing a Python API via `PyO3`, `nicompiler_backend` offers the best of both worlds.
-//! Coupled with an optional high-level Python wrapper (currently under development), researchers can design experiments
+//! Coupled with an optional high-level Python wrapper, researchers can design experiments
 //! in an expressive language, leaving the Rust backend to handle streaming and concurrency.
 //!
 //! Currently, this crate supports analogue and digital output tasks, along with synchronization between NI devices through
 //! shared start-triggers, sampling clocks, or phase-locked reference clocks.
 //!
-//! ## Crate Structure
+//! # Navigating the Crate
+//! 
+//! The `nicompiler_backend` crate is organized into primary modules - [`experiment`], [`device`], [`channel`], and [`instruction`]. 
+//! Each serves specific functionality within the crate. Here's a quick guide to help you navigate:
 //!
-//! ### Experiment
-//! An [`Experiment`] in `nicompiler_backend` is conceptualized as a collection
-//! of devices, each identified by its physical name as recognized by the NI driver.
+//! ### [`experiment`] Module: Your Starting Point
+//! 
+//! If you're a typical user, you'll likely spend most of your time here. 
+//! 
+//! - **Overview**: An [`Experiment`] is viewed as a collection of devices, each identified by its name as recognized by the NI driver.
+//! - **Usage**: The `Experiment` object is the primary entity exposed to Python. It provides methods for experiment-wide, device-wide, and channel-wide operations.
+//! - **Key Traits & Implementations**: Refer to the [`BaseExperiment`] trait for Rust methods and usage examples. For Python method signatures, check the direct implementations in [`Experiment`], which simply wrap `BaseExperiment` implementations.
 //!
-//! ### Device
-//! Each [`Device`] corresponds to a specific piece of NI hardware within the control system. Devices maintain metadata like
-//! physical names, sampling rates, trigger behaviors, and more (detailed in [`Device`]). For implementation details, refer
-//! to the [`BaseDevice`] trait and the [`device`] module. Furthermore, devices comprise a collection of channels, each indexed
-//! by its physical name.
+//! ### [`device`] Module: Delving into Devices
 //!
-//! ### Channel
-//! A [`Channel`] represents a distinct physical channel on an NI device. Channels manage a list of non-overlapping [`InstrBook`],
-//! which, post-compilation, can be sampled to produce floating-point signals.
+//! If you're keen on understanding or customizing device-specific details, this module is for you.
 //!
-//! ### Instruction
-//! Each [`InstrBook`] contains an [`Instruction`] paired with edit-time metadata like `start_pos`, `end_pos`, and `keep_val`.
-//! An [`Instruction`] is defined by an instruction type ([`InstrType`]) and a set of parameters stored as key-value pairs.
+//! - **Overview**: Each [`Device`] relates to a unique piece of NI hardware in the control system. It contains essential metadata such as physical names, sampling rates, and trigger behaviors.
+//! - **Key Traits & Implementations**: See the [`BaseDevice`] trait and the entire [`device`] module for more insights. Devices also hold a set of channels, each referred to by its physical name.
 //!
-//! We invite you to delve deeper into the crate, explore its capabilities, and join us in refining and extending this
-//! endeavor to make experimental control systems efficient and researcher-friendly.
+//! ### [`channel`] Module: Channel Instructions & Behaviors
+//!
+//! Ideal for those wanting to understand how instructions are managed or need to design a new [`TaskType`] as well as `TaskType`-specific customized channel behavior. 
+//! 
+//! - **Overview**: A [`Channel`] signifies a specific physical channel on an NI device. It administers a series of non-overlapping [`InstrBook`] which, after compilation, can be sampled to render floating-point signals.
+//!
+//! ### [`instruction`] Module: Deep Dive into Instructions
+//!
+//! For those interested in the intricacies of how instructions are defined and executed.
+//! 
+//! - **Overview**: Each [`InstrBook`] holds an [`Instruction`] coupled with edit-time metadata, like `start_pos`, `end_pos`, and `keep_val`. An [`Instruction`] is crafted from an instruction type ([`InstrType`]) and a set of parameters in key-value pairs.
+//!
+//! We encourage users to explore each module to fully grasp the capabilities and structure of the crate. Whether you're here for a quick setup or to contribute, the `nicompiler_backend` crate is designed to cater to both needs.
+
 
 use pyo3::prelude::*;
 // use pyo3::wrap_pyfunction;

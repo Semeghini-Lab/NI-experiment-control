@@ -60,6 +60,7 @@ use crate::instruction::*;
 /// 3. Channel-targeted methods which alter or query the behavior of a particular channel
 ///     - [`constant`], [`sine`], [`high`], [`low`], [`go_high`], [`go_low`]
 ///     - [`channel_clear_compile_cache`], [`channel_clear_edit_cache`]
+///     - [`channel_calc_signal_nsamps`]
 /// 4. Internal helper methods which are not exposed to python
 ///     - [`devices`], [`devices_`]
 ///     - [`assert_has_device`], [`assert_device_has_channel`]
@@ -100,6 +101,7 @@ use crate::instruction::*;
 /// [`channel_clear_compile_cache`]: BaseExperiment::channel_clear_compile_cache
 /// [`channel_clear_edit_cache`]: BaseExperiment::channel_clear_edit_cache
 /// [`device_compiled_channel_names`]: BaseExperiment::device_compiled_channel_names
+/// [`channel_calc_signal_nsamps`]: BaseExperiment::channel_calc_signal_nsamps
 
 pub trait BaseExperiment {
     // FIELD methods
