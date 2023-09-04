@@ -52,9 +52,9 @@ use crate::utils::*;
 ///
 /// - **Field methods**: These provide direct access to the properties of a device, such as its channels, physical name,
 /// sampling rate, and various configuration parameters.
-/// 
-/// - **Synchronization configuration**: Customize the synchronization behavior of devices via [`BaseDevice::cfg_trig`], 
-/// [`BaseDevice::cfg_ref_clk`], [`BaseDevice::cfg_samp_clk_src`]. See [`Device`] for more details. 
+///
+/// - **Synchronization configuration**: Customize the synchronization behavior of devices via [`BaseDevice::cfg_trig`],
+/// [`BaseDevice::cfg_ref_clk`], [`BaseDevice::cfg_samp_clk_src`]. See [`Device`] for more details.
 ///
 /// - **Channel management**: Methods like [`BaseDevice::editable_channels`], [`BaseDevice::editable_channels_`], and
 /// [`BaseDevice::add_channel`] allow for the retrieval and manipulation of channels associated with the device.
@@ -74,7 +74,7 @@ use crate::utils::*;
 ///
 /// - **Utility functions**: Methods like [`BaseDevice::unique_port_numbers`] offer utility functionalities specific to certain
 /// task types, aiding in operations like identifying unique ports in Digital Output (DO) devices.
-/// 
+///
 ///
 /// # Implementing [`BaseDevice`]:
 ///
@@ -104,9 +104,9 @@ pub trait BaseDevice {
     /// Configures the sample clock source for the device.
     ///
     /// This method sets the `samp_clk_src` field of the device to the provided source string.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `src` - The name of the sample clock source.
     fn cfg_samp_clk_src(&mut self, src: &str) {
         *(self.samp_clk_src_()) = Some(src.to_string());
@@ -115,7 +115,7 @@ pub trait BaseDevice {
     /// Configures the trigger settings for the device.
     ///
     /// Depending on the value of `export_trig`, this method either:
-    /// 
+    ///
     /// * Exports the device task's start trigger to `trig_line` (if `export_trig` is `true`), or
     /// * Imports the device task's start trigger from `trig_line` (if `export_trig` is `false`).
     ///
@@ -146,7 +146,7 @@ pub trait BaseDevice {
     /// * `export_ref_clk` - A boolean that determines whether to export (if `true`) or import (if `false`) the reference clock.
     fn cfg_ref_clk(&mut self, ref_clk_line: &str, ref_clk_rate: f64, export_ref_clk: bool) {
         if export_ref_clk {
-            assert_eq!(ref_clk_rate, 1e7, 
+            assert_eq!(ref_clk_rate, 1e7,
                 "Device {} needs to explicitly acknowledge exporting 10Mhz clk by setting ref_clk_rate=1e7",
                 self.physical_name());
         }
@@ -554,7 +554,7 @@ pub trait BaseDevice {
 ///     the device is set to import the start trigger. In case that any device in an experiment has nontrivial triggering behavior,
 ///     one and only one of the devices must have `export_trig` set to `true`.
 /// - `ref_clk_line`: Optional source of the reference clock to phase-lock the device clock to.
-/// - `export_ref_clk`: Optional indicator of whether to export the reference clock. If `true`, the device exports its 
+/// - `export_ref_clk`: Optional indicator of whether to export the reference clock. If `true`, the device exports its
 ///     reference clock. If `false` or `None`, it imports the reference clock. Use `None` for trivial behavior.
 /// - `ref_clk_rate`: Optional rate of the reference clock in Hz.
 ///
@@ -596,7 +596,7 @@ pub trait BaseDevice {
 /// exp.device_cfg_trig("PXI1Slot6", "PXI1_Trig0", true);
 /// exp.device_cfg_trig("PXI1Slot7", "PXI1_Trig0", false);
 /// ```
-/// 
+///
 /// The compiler will not panic if multiple devices all export their start trigger
 /// ```
 /// # use nicompiler_backend::*;
@@ -606,8 +606,8 @@ pub trait BaseDevice {
 /// exp.device_cfg_trig("PXI1Slot6", "PXI1_Trig0", true);
 /// exp.device_cfg_trig("PXI1Slot7", "PXI1_Trig0", true);
 /// ```
-/// 
-/// The compiler **will** panic if some device is expecting a start trigger yet no device exports one. 
+///
+/// The compiler **will** panic if some device is expecting a start trigger yet no device exports one.
 /// ```should_panic
 /// # use nicompiler_backend::*;
 /// let mut exp = Experiment::new();
@@ -639,7 +639,7 @@ pub trait BaseDevice {
 /// exp.add_ao_device("PXI1Slot3", 1e6);
 /// exp.device_cfg_trig("PXI1Slot3", "PXI1_Trig0", true);
 /// exp.device_cfg_ref_clk("PXI1Slot3", "PXI1_Trig7", 1e7, true);
-/// 
+///
 /// exp.add_ao_device("PXI1Slot4", 1e6);
 /// exp.device_cfg_trig("PXI1Slot4", "PXI1_Trig0", false);
 /// exp.device_cfg_ref_clk("PXI1Slot4", "PXI1_Trig7", 1e7, false);
@@ -662,11 +662,11 @@ pub trait BaseDevice {
 /// exp.add_ao_device("PXI1Slot3", 1e6);
 /// exp.device_cfg_trig("PXI1Slot3", "PXI1_Trig0", true);
 /// exp.device_cfg_ref_clk("PXI1Slot3", "PXI1_Trig7", 1e7, true);
-/// 
+///
 /// exp.add_ao_device("PXI1Slot4", 1e6);
 /// exp.device_cfg_trig("PXI1Slot4", "PXI1_Trig0", false);
 /// exp.device_cfg_ref_clk("PXI1Slot4", "PXI1_Trig7", 1e7, false);
-/// 
+///
 /// exp.add_do_device("PXI1Slot6", 1e7);
 /// exp.device_cfg_samp_clk_src("PXI1Slot6", "PXI1_Trig7");
 /// exp.device_cfg_trig("PXI1Slot6", "PXI1_Trig0", false);
@@ -690,8 +690,8 @@ impl Device {
     /// Constructs a new `Device` instance.
     ///
     /// This constructor initializes a device with the provided parameters. The `channels` field
-    /// is initialized as an empty collection. All synchronization fields are initialized to `None` 
-    /// by default. For nontrivial synchronization behavior, use the methods [`BaseDevice::cfg_samp_clk_src`], 
+    /// is initialized as an empty collection. All synchronization fields are initialized to `None`
+    /// by default. For nontrivial synchronization behavior, use the methods [`BaseDevice::cfg_samp_clk_src`],
     /// [`BaseDevice::cfg_trig`], and [`BaseDevice::cfg_ref_clk`].
     ///
     /// # Arguments
@@ -701,11 +701,7 @@ impl Device {
     ///
     /// # Returns
     /// A new instance of `Device` with the specified configurations and all synchronization-related fields set to `None`.
-    pub fn new(
-        physical_name: &str,
-        task_type: TaskType,
-        samp_rate: f64,
-    ) -> Self {
+    pub fn new(physical_name: &str, task_type: TaskType, samp_rate: f64) -> Self {
         Self {
             channels: HashMap::new(),
 
@@ -714,11 +710,11 @@ impl Device {
             samp_rate,
 
             samp_clk_src: None,
-            trig_line: None, 
+            trig_line: None,
             export_trig: None,
-            ref_clk_line: None, 
-            export_ref_clk: None, 
-            ref_clk_rate: None, 
+            ref_clk_line: None,
+            export_ref_clk: None,
+            ref_clk_rate: None,
         }
     }
 }

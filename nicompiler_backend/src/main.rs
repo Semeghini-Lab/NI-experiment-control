@@ -46,8 +46,8 @@ fn main() {
     exp.device_cfg_samp_clk_src("PXI1Slot6", "PXI1_Trig7");
     exp.device_cfg_trig("PXI1Slot6", "PXI1_Trig0", false);
 
-    // PXI1Slot3/ao0 starts with a 1s-long 7Hz sine wave with offset 1 
-    // and unit amplitude, zero phase. Does not keep its value. 
+    // PXI1Slot3/ao0 starts with a 1s-long 7Hz sine wave with offset 1
+    // and unit amplitude, zero phase. Does not keep its value.
     exp.sine("PXI1Slot3", "ao0", 0., 1., false, 7., None, None, Some(1.));
     // Ends with a half-second long 1V constant signal which returns to zero
     exp.constant("PXI1Slot3", "ao0", 9., 0.5, 1., false);

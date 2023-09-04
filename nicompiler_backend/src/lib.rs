@@ -40,7 +40,7 @@
 //!
 //! Currently, this crate supports analogue and digital output tasks, along with synchronization between NI devices through
 //! shared start-triggers, sampling clocks, or phase-locked reference clocks.
-//! 
+//!
 //! ## Example usage
 //! ```
 //! use nicompiler_backend::*;
@@ -66,8 +66,8 @@
 //! exp.device_cfg_samp_clk_src("PXI1Slot6", "PXI1_Trig7");
 //! exp.device_cfg_trig("PXI1Slot6", "PXI1_Trig0", false);
 //!
-//! // PXI1Slot3/ao0 starts with a 1s-long 7Hz sine wave with offset 1 
-//! // and unit amplitude, zero phase. Does not keep its value. 
+//! // PXI1Slot3/ao0 starts with a 1s-long 7Hz sine wave with offset 1
+//! // and unit amplitude, zero phase. Does not keep its value.
 //! exp.sine("PXI1Slot3", "ao0", 0., 1., false, 7., None, None, Some(1.));
 //! // Ends with a half-second long 1V constant signal which returns to zero
 //! exp.constant("PXI1Slot3", "ao0", 9., 0.5, 1., false);
@@ -93,14 +93,14 @@
 //! ```
 //!
 //! # Navigating the Crate
-//! 
-//! The `nicompiler_backend` crate is organized into primary modules - [`experiment`], [`device`], [`channel`], and [`instruction`]. 
+//!
+//! The `nicompiler_backend` crate is organized into primary modules - [`experiment`], [`device`], [`channel`], and [`instruction`].
 //! Each serves specific functionality within the crate. Here's a quick guide to help you navigate:
 //!
 //! ### [`experiment`] Module: Your Starting Point
-//! 
-//! If you're a typical user, you'll likely spend most of your time here. 
-//! 
+//!
+//! If you're a typical user, you'll likely spend most of your time here.
+//!
 //! - **Overview**: An [`Experiment`] is viewed as a collection of devices, each identified by its name as recognized by the NI driver.
 //! - **Usage**: The `Experiment` object is the primary entity exposed to Python. It provides methods for experiment-wide, device-wide, and channel-wide operations.
 //! - **Key Traits & Implementations**: Refer to the [`BaseExperiment`] trait for Rust methods and usage examples. For Python method signatures, check the direct implementations in [`Experiment`], which simply wrap `BaseExperiment` implementations.
@@ -114,18 +114,17 @@
 //!
 //! ### [`channel`] Module: Channel Instructions & Behaviors
 //!
-//! Ideal for those wanting to understand how instructions are managed or need to design a new [`TaskType`] as well as `TaskType`-specific customized channel behavior. 
-//! 
+//! Ideal for those wanting to understand how instructions are managed or need to design a new [`TaskType`] as well as `TaskType`-specific customized channel behavior.
+//!
 //! - **Overview**: A [`Channel`] signifies a specific physical channel on an NI device. It administers a series of non-overlapping [`InstrBook`] which, after compilation, can be sampled to render floating-point signals.
 //!
 //! ### [`instruction`] Module: Deep Dive into Instructions
 //!
 //! For those interested in the intricacies of how instructions are defined and executed.
-//! 
+//!
 //! - **Overview**: Each [`InstrBook`] holds an [`Instruction`] coupled with edit-time metadata, like `start_pos`, `end_pos`, and `keep_val`. An [`Instruction`] is crafted from an instruction type ([`InstrType`]) and a set of parameters in key-value pairs.
 //!
 //! We encourage users to explore each module to fully grasp the capabilities and structure of the crate. Whether you're here for a quick setup or to contribute, the `nicompiler_backend` crate is designed to cater to both needs.
-
 
 use pyo3::prelude::*;
 // use pyo3::wrap_pyfunction;

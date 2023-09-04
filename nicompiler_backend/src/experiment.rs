@@ -230,16 +230,8 @@ pub trait BaseExperiment {
     /// // Adding the same device again, even with different parameters, will cause panic
     /// // exp.add_ao_device("PXI1Slot6", 1e7);
     /// ```
-    fn add_ao_device(
-        &mut self,
-        physical_name: &str,
-        samp_rate: f64,
-    ) {
-        self.add_device_base(Device::new(
-            physical_name,
-            TaskType::AO,
-            samp_rate,
-        ));
+    fn add_ao_device(&mut self, physical_name: &str, samp_rate: f64) {
+        self.add_device_base(Device::new(physical_name, TaskType::AO, samp_rate));
     }
 
     /// Registers a Digital Output (DO) device to the experiment.
@@ -259,16 +251,8 @@ pub trait BaseExperiment {
     /// // Adding the same device name will cause panic
     /// exp.add_do_device("PXI1Slot7", 1e7);
     /// ```
-    fn add_do_device(
-        &mut self,
-        physical_name: &str,
-        samp_rate: f64,
-    ) {
-        self.add_device_base(Device::new(
-            physical_name,
-            TaskType::DO,
-            samp_rate,
-        ));
+    fn add_do_device(&mut self, physical_name: &str, samp_rate: f64) {
+        self.add_device_base(Device::new(physical_name, TaskType::DO, samp_rate));
     }
 
     /// Retrieves the latest `edit_stop_time` from all registered devices.
@@ -709,7 +693,7 @@ pub trait BaseExperiment {
 
     /// Configures the sample clock source of a device in the experiment.
     ///
-    /// This method retrieves the specified device and delegates the configuration 
+    /// This method retrieves the specified device and delegates the configuration
     /// of the sample clock source to its base method [`BaseDevice::cfg_samp_clk_src`].
     ///
     /// # Arguments
@@ -719,14 +703,12 @@ pub trait BaseExperiment {
     ///
     /// See also: [`BaseDevice::cfg_samp_clk_src`]
     fn device_cfg_samp_clk_src(&mut self, dev_name: &str, src: &str) {
-        self.device_op(dev_name, |dev| {
-            (*dev).cfg_samp_clk_src(src)
-        })
+        self.device_op(dev_name, |dev| (*dev).cfg_samp_clk_src(src))
     }
 
     /// Configures the trigger settings of a device in the experiment while ensuring synchronization.
     ///
-    /// Before delegating the configuration to its base method [`BaseDevice::cfg_trig`], this method 
+    /// Before delegating the configuration to its base method [`BaseDevice::cfg_trig`], this method
     /// performs synchronization checks to ensure:
     ///
     /// 1. All devices in the experiment do not already export a trigger (`export_trig` is `None` for all devices).
@@ -747,14 +729,12 @@ pub trait BaseExperiment {
     ///
     /// See also: [`BaseDevice::cfg_trig`]
     fn device_cfg_trig(&mut self, dev_name: &str, trig_line: &str, export_trig: bool) {
-        self.device_op(dev_name, |dev| {
-            (*dev).cfg_trig(trig_line, export_trig)
-        })
+        self.device_op(dev_name, |dev| (*dev).cfg_trig(trig_line, export_trig))
     }
 
     /// Configures the reference clock settings of a device in the experiment.
     ///
-    /// This method retrieves the specified device and delegates the configuration 
+    /// This method retrieves the specified device and delegates the configuration
     /// of the reference clock settings to its base method [`BaseDevice::cfg_ref_clk`].
     ///
     /// # Arguments
@@ -765,7 +745,13 @@ pub trait BaseExperiment {
     /// * `export_ref_clk` - A boolean that determines whether to export (if `true`) or import (if `false`) the reference clock.
     ///
     /// See also: [`BaseDevice::cfg_ref_clk`]
-    fn device_cfg_ref_clk(&mut self, dev_name: &str, ref_clk_line: &str, ref_clk_rate: f64, export_ref_clk: bool) {
+    fn device_cfg_ref_clk(
+        &mut self,
+        dev_name: &str,
+        ref_clk_line: &str,
+        ref_clk_rate: f64,
+        export_ref_clk: bool,
+    ) {
         self.device_op(dev_name, |dev| {
             (*dev).cfg_ref_clk(ref_clk_line, ref_clk_rate, export_ref_clk)
         })
@@ -1241,28 +1227,12 @@ macro_rules! impl_exp_boilerplate {
 
         #[pymethods]
         impl $exp_type {
-            fn add_ao_device(
-                &mut self,
-                physical_name: &str,
-                samp_rate: f64,
-            ) {
-                BaseExperiment::add_ao_device(
-                    self,
-                    physical_name,
-                    samp_rate,
-                );
+            fn add_ao_device(&mut self, physical_name: &str, samp_rate: f64) {
+                BaseExperiment::add_ao_device(self, physical_name, samp_rate);
             }
 
-            fn add_do_device(
-                &mut self,
-                physical_name: &str,
-                samp_rate: f64,
-            ) {
-                BaseExperiment::add_do_device(
-                    self,
-                    physical_name,
-                    samp_rate,
-                );
+            fn add_do_device(&mut self, physical_name: &str, samp_rate: f64) {
+                BaseExperiment::add_do_device(self, physical_name, samp_rate);
             }
 
             pub fn edit_stop_time(&self) -> f64 {
@@ -1313,14 +1283,26 @@ macro_rules! impl_exp_boilerplate {
             pub fn device_cfg_samp_clk_src(&mut self, dev_name: &str, src: &str) {
                 BaseExperiment::device_cfg_samp_clk_src(self, dev_name, src);
             }
-            
+
             pub fn device_cfg_trig(&mut self, dev_name: &str, trig_line: &str, export_trig: bool) {
                 BaseExperiment::device_cfg_trig(self, dev_name, trig_line, export_trig);
             }
-            
-            pub fn device_cfg_ref_clk(&mut self, dev_name: &str, ref_clk_line: &str, ref_clk_rate: f64, export_ref_clk: bool) {
-                BaseExperiment::device_cfg_ref_clk(self, dev_name, ref_clk_line, ref_clk_rate, export_ref_clk);
-            }            
+
+            pub fn device_cfg_ref_clk(
+                &mut self,
+                dev_name: &str,
+                ref_clk_line: &str,
+                ref_clk_rate: f64,
+                export_ref_clk: bool,
+            ) {
+                BaseExperiment::device_cfg_ref_clk(
+                    self,
+                    dev_name,
+                    ref_clk_line,
+                    ref_clk_rate,
+                    export_ref_clk,
+                );
+            }
 
             pub fn device_compiled_channel_names(
                 &mut self,
