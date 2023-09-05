@@ -48,6 +48,14 @@ class BaseChanProxy:
         t_start = t_start if t_start is not None else 0.0
         t_end = t_end if t_end is not None else self._dll.compiled_stop_time()
 
+        # signal_arr = self._dll.channel_calc_signal_nsamps(
+        #     dev_name=self._card_max_name,
+        #     chan_name=self.chan_name,
+        #     start_time=t_start,
+        #     end_time=t_end,
+        #     num_samps=nsamps
+        # )
+
         # FixMe[Rust]: implement per-channel `calc_signal()`
         signal_arr = self._dll.calc_signal(
             dev_name=self._card_max_name,
