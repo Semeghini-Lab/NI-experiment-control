@@ -34,7 +34,6 @@ use crate::utils::{Semaphore, StreamCounter};
 use std::sync::Arc;
 
 use nicompiler_backend::*;
-use crate::niexpctrl_backend::*;
 
 /// The `StreamableDevice` trait extends the [`nicompiler_backend::BaseDevice`] trait of [`nicompiler_backend::Device`]
 /// to provide additional functionality for streaming tasks.
@@ -132,7 +131,7 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
 
         for _rep in 0..nreps {
             // For every repetition, make sure the primary device starts last
-            if self.is_primary().unwrap_or(false) {
+            if self.export_trig().unwrap_or(false) {
                 (0..num_devices).for_each(|_| sem.acquire());
                 sem.release(); // Release the semaphore to restore count to 1, in preparation for the next run.
             }
@@ -141,7 +140,7 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
                 "{} start (restart) overhead",
                 self.physical_name()
             ));
-            if !self.is_primary().unwrap_or(true) {
+            if !self.export_trig().unwrap_or(true) {
                 sem.release();
             }
             // Main chunk for streaming
@@ -239,7 +238,7 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         // Configure start trigger: primary devices export, while secondary devices configure task
         // to expect start trigger
         if let Some(trig_line) = self.trig_line() {
-            match self.is_primary().unwrap() {
+            match self.export_trig().unwrap() {
                 true => task.export_signal(
                     DAQMX_VAL_STARTTRIGGER,
                     &format!("/{}/{}", &self.physical_name(), trig_line),
@@ -253,9 +252,9 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         };
         // Configure reference clock behavior
         if let Some(ref_clk_line) = self.ref_clk_line() {
-            match self.import_ref_clk().unwrap() {
-                true => task.cfg_ref_clk(ref_clk_line, self.ref_clk_rate().unwrap()),
-                false => task.export_signal(DAQMX_VAL_10MHZREFCLOCK, ref_clk_line),
+            match self.export_ref_clk().unwrap() {
+                false => task.cfg_ref_clk(ref_clk_line, self.ref_clk_rate().unwrap()),
+                true => task.export_signal(DAQMX_VAL_10MHZREFCLOCK, ref_clk_line),
             };
         }
     }
