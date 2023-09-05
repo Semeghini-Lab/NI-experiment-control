@@ -1,13 +1,21 @@
 from niexpctrl_backend import Experiment as RawDLL
-from channel import AOChan, DOChan
+from channel import AOChanProxy, DOChanProxy
 from typing import Optional, Union, Literal
 
 
-class BaseCard:
-    def __init__(self, _dll: RawDLL, max_name: str, nickname=None):
+class BaseCardProxy:
+
+    def __init__(
+            self,
+            _dll: RawDLL,
+            max_name: str,
+            nickname=None,
+            config_info: str = None
+    ):
         self._dll = _dll
         self.max_name = max_name
         self._nickname = nickname
+        self._config_info = config_info
         self._chan_dict = {}
 
     def __getitem__(self, item):
@@ -16,12 +24,17 @@ class BaseCard:
         else:
             raise KeyError(f'There is no channel "{item}"')
 
+    # # ToDo: implement to be able to use .keys(), .values(), and .items() to see all channels reserved
+    # def __len__(self):
+    #     pass
+    #
+    # def __iter__(self):
+    #     pass
+
     def __repr__(self):
-        # ToDo: make a more informative message (card type, max_name, samp_rate, trig_mode, ...)
         return (
-            f'{self.__class__}  card.\n'
-            f'The following output channels have been added:\n'
-            f'{self._chan_dict}'
+            f'{self.max_name}\n'
+            f'config_info: {self._config_info}'
         )
 
     @property
@@ -39,25 +52,34 @@ class BaseCard:
         self._dll.reset_device(dev_name=self.max_name)  # FixMe[Rust]: change `dev_name` to `max_name`
 
 
-class AOCard(BaseCard):
-    def add_chnl(self, chan_idx: int):
+class AOCardProxy(BaseCardProxy):
+
+    def __repr__(self):
+        return 'AO card ' + super().__repr__()
+
+    def add_chnl(self, chan_idx: int, nickname: str = None):
         # Raw rust-maturin wrapper call
         self._dll.add_ao_channel(
             dev_name=self.max_name,  # FixMe[Rust]: change `dev_name` to `max_name`
             channel_id=chan_idx,  # FixMe[Rust]: maybe change `channel_id` to `chan_idx`
         )
         # Instantiate proxy object
-        chan_obj = AOChan(
+        chan_obj = AOChanProxy(
             _dll=self._dll,
             _card_max_name=self.max_name,
-            chan_idx=chan_idx
+            chan_idx=chan_idx,
+            nickname=nickname
         )
         self._chan_dict[chan_idx] = chan_obj
         return chan_obj
 
 
-class DOCard(BaseCard):
-    def add_chnl(self, port_idx: int, line_idx: int):
+class DOCardProxy(BaseCardProxy):
+
+    def __repr__(self):
+        return 'DO card ' + super().__repr__()
+
+    def add_chnl(self, port_idx: int, line_idx: int, nickname: str = None):
         # Raw rust-maturin wrapper call
         self._dll.add_do_channel(
             dev_name=self.max_name,  # FixMe[Rust]: change `dev_name` to `max_name`
@@ -67,11 +89,12 @@ class DOCard(BaseCard):
             line_id=line_idx  # FixMe[Rust]: maybe change `channel_id` to `chan_idx`
         )
         # Instantiate proxy object
-        chnl_obj = DOChan(
+        chnl_obj = DOChanProxy(
             _dll=self._dll,
             _card_max_name=self.max_name,
             port_idx=port_idx,
-            line_idx=line_idx
+            line_idx=line_idx,
+            nickname=nickname
         )
         self._chan_dict[chnl_obj.chan_name] = chnl_obj
         return chnl_obj

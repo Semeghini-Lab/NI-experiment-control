@@ -2,7 +2,7 @@ from niexpctrl_backend import Experiment as RawDLL
 # FixMe[Rust]: rename Experiment to NIStreamer
 
 
-class BaseChan:
+class BaseChanProxy:
     def __init__(
             self,
             _dll: RawDLL,
@@ -12,6 +12,9 @@ class BaseChan:
         self._dll = _dll
         self._card_max_name = _card_max_name
         self._nickname = nickname
+
+    def __repr__(self, card_info=False):
+        return f'Channel {self.chan_name} on card {self._card_max_name}'
 
     @property
     def chan_name(self):
@@ -65,12 +68,23 @@ class BaseChan:
         return t_start, t_end, signal_arr[chan_idx]
 
 
-class AOChan(BaseChan):
-    def __init__(self, _dll: RawDLL, _card_max_name: str, chan_idx: int):
+class AOChanProxy(BaseChanProxy):
+    def __init__(
+            self,
+            _dll: RawDLL,
+            _card_max_name: str,
+            chan_idx: int,
+            nickname: str = None
+    ):
         # ToDo[Tutorial]: pass through all arguments to parent's __init__, maybe with *args, **kwargs,
         #  but such that argument completion hints are still coming through.
 
-        BaseChan.__init__(self, _dll=_dll, _card_max_name=_card_max_name)
+        BaseChanProxy.__init__(
+            self,
+            _dll=_dll,
+            _card_max_name=_card_max_name,
+            nickname=nickname
+        )
         self.chan_idx = chan_idx
 
     @property
@@ -112,9 +126,21 @@ class AOChan(BaseChan):
         return t + dur
 
 
-class DOChan(BaseChan):
-    def __init__(self, _dll: RawDLL, _card_max_name: str, port_idx: int, line_idx: int):
-        BaseChan.__init__(self, _dll=_dll, _card_max_name=_card_max_name)
+class DOChanProxy(BaseChanProxy):
+    def __init__(
+            self,
+            _dll: RawDLL,
+            _card_max_name: str,
+            port_idx: int,
+            line_idx: int,
+            nickname: str = None
+    ):
+        BaseChanProxy.__init__(
+            self,
+            _dll=_dll,
+            _card_max_name=_card_max_name,
+            nickname=nickname
+        )
 
         self.port_idx = port_idx
         self.line_idx = line_idx

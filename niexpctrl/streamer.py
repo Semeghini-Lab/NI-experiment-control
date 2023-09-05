@@ -43,14 +43,16 @@ class NIStreamer:
             ref_clk_mode: Union[Literal['prim', 'sec'], None] = None,
             ref_clk_line: Optional[str] = None,
             ref_clk_rate: Optional[str] = None,
+            # Human-readable nickname
+            nickname: Optional[str] = None
     ):
         if card_type == 'AO':
             raw_api_method = RawDLL.add_ao_device
-            proxy_class = card.AOCard
+            proxy_class = card.AOCardProxy
             target_dict = self._ao_card_dict
         elif card_type == 'DO':
             raw_api_method = RawDLL.add_do_device
-            proxy_class = card.DOCard
+            proxy_class = card.DOCardProxy
             target_dict = self._do_card_dict
         else:
             raise ValueError(f'Invalid card type "{card_type}". Valid type strings are "AO" and "DO"')
@@ -88,7 +90,16 @@ class NIStreamer:
         )
 
         # Instantiate proxy object
-        card_obj = proxy_class(_dll=self._dll, max_name=max_name)
+        card_obj = proxy_class(
+            _dll=self._dll,
+            max_name=max_name,
+            nickname=nickname,
+            config_info=(
+                f'samp_rate={samp_rate}, samp_clk_src={samp_clk_src}, '
+                f'trig_mode={trig_mode}, trig_line={trig_line}, '
+                f'ref_clk_mode={ref_clk_mode}, ref_clk_line={ref_clk_line}, ref_clk_rate={ref_clk_rate}'
+            )
+        )
         target_dict[max_name] = card_obj
         return card_obj
 
