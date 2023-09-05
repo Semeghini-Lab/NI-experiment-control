@@ -597,8 +597,8 @@ pub trait BaseDevice {
 /// exp.device_cfg_trig("PXI1Slot7", "PXI1_Trig0", false);
 /// ```
 ///
-/// The compiler will not panic if multiple devices all export their start trigger
-/// ```
+/// The compiler will panic if more than one device exports trigger
+/// ```should_panic
 /// # use nicompiler_backend::*;
 /// let mut exp = Experiment::new();
 /// exp.add_do_device("PXI1Slot6", 1e6);
