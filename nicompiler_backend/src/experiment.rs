@@ -60,6 +60,7 @@ use crate::instruction::*;
 /// 3. Channel-targeted methods which alter or query the behavior of a particular channel
 ///     - [`constant`], [`sine`], [`high`], [`low`], [`go_high`], [`go_low`]
 ///     - [`channel_clear_compile_cache`], [`channel_clear_edit_cache`]
+///     - [`channel_calc_signal_nsamps`]
 /// 4. Internal helper methods which are not exposed to python
 ///     - [`devices`], [`devices_`]
 ///     - [`assert_has_device`], [`assert_device_has_channel`]
@@ -100,6 +101,7 @@ use crate::instruction::*;
 /// [`channel_clear_compile_cache`]: BaseExperiment::channel_clear_compile_cache
 /// [`channel_clear_edit_cache`]: BaseExperiment::channel_clear_edit_cache
 /// [`device_compiled_channel_names`]: BaseExperiment::device_compiled_channel_names
+/// [`channel_calc_signal_nsamps`]: BaseExperiment::channel_calc_signal_nsamps
 
 pub trait BaseExperiment {
     // FIELD methods
@@ -126,7 +128,7 @@ pub trait BaseExperiment {
     /// use nicompiler_backend::experiment::*;
     ///
     /// let mut exp = Experiment::new();
-    /// exp.add_do_device("PXI1Slot6", 1e6, None, None, None, None, None, None,);
+    /// exp.add_do_device("PXI1Slot6", 1e6,);
     /// exp.assert_has_device("PXI1Slot6");
     ///
     /// // This will panic
@@ -165,7 +167,7 @@ pub trait BaseExperiment {
     /// use nicompiler_backend::experiment::*;
     ///
     /// let mut exp = Experiment::new();
-    /// exp.add_do_device("PXI1Slot6", 1e6, None, None, None, None, None, None,);
+    /// exp.add_do_device("PXI1Slot6", 1e6,);
     /// exp.add_do_channel("PXI1Slot6", 0, 0);
     /// exp.assert_device_has_channel("PXI1Slot6", "port0/line0");
     ///
@@ -188,32 +190,16 @@ pub trait BaseExperiment {
 
     /// Helper method to add a device to the experiment's collection of devices.
     ///
-    /// This method registers a new device to the experiment ensuring that there are no duplicates
-    /// and maintaining the synchronization conditions related to primary devices.
+    /// This method registers a new device to the experiment, ensuring that there are no duplicates.
     /// Used by [`BaseExperiment::add_ao_device`] and [`BaseExperiment::add_do_device`].
     ///
     /// # Arguments
     ///
     /// * `dev`: A [`Device`] instance to be added to the experiment.
     ///
-    /// # Synchronization Check
-    ///
-    /// The method enforces synchronization rules related to primary devices:
-    ///
-    /// 1. If all devices in the experiment are non-primary (i.e., `is_primary()` returns `None` for all devices),
-    ///    then the new device can be added without any restrictions related to its primary status.
-    /// 2. If there's already a primary device (i.e., a device for which `is_primary()` returns `Some(true)`),
-    ///    then the new device must not also be primary. The experiment can only have one primary device.
-    ///
     /// # Panics
     ///
-    /// This method will panic in the following situations:
-    ///
-    /// 1. If a device with the same name as the provided `dev` is already registered in the experiment.
-    /// 2. If the synchronization conditions related to primary devices are violated.
-    /// 3. If the `trig_line` and `is_primary` options for the device are not both ignored or both specified.
-    /// 4. If any of the `ref_clk_line`, `ref_clk_rate`, and `import_ref_clk` arguments for the device are
-    ///    not all ignored or all specified together.
+    /// This method will panic if a device with the same name as the provided `dev` is already registered in the experiment.
     fn add_device_base(&mut self, dev: Device) {
         // Duplicate check
         let dev_name = dev.physical_name();
@@ -222,30 +208,6 @@ pub trait BaseExperiment {
             "Device {} already registered. Registered devices are {:?}",
             dev_name,
             self.devices().keys().collect::<Vec<_>>()
-        );
-        // Synchronization check
-        assert!(
-            // Either all d.is_primary() are None
-            self.devices().values().all(|d| d.is_primary().is_none()) ||
-            // Or only one d.is_primary() is Some(true)
-            dev.is_primary() == Some(false) ||
-            (dev.is_primary() == Some(true) &&
-            self.devices().values().filter(|d| d.is_primary() == Some(true)).count() == 0),
-            "Cannot register another primary device {}",
-            dev_name
-        );
-        // Optional argument check:
-        assert!(
-            dev.is_primary().is_none() == dev.trig_line().is_none(),
-            "trig_line and is_primary options for device {} must be both ignored or specified",
-            dev.physical_name(),
-        );
-        assert!(
-            dev.ref_clk_line().is_none() == dev.ref_clk_rate().is_none()
-                && dev.ref_clk_rate().is_none() == dev.import_ref_clk().is_none(),
-            "ref_clk_line, ref_clk_rate, and import_ref_clk arguments for device {} must be 
-            all ignored or specified",
-            dev.physical_name(),
         );
         self.devices_().insert(dev_name.to_string(), dev);
     }
@@ -259,83 +221,38 @@ pub trait BaseExperiment {
     ///
     /// * `physical_name`: A string slice that holds the name of the AO device.
     /// * `samp_rate`: Sampling rate for the AO device.
-    /// * Other parameters represent optional settings related to the device's operation,
-    /// refer to [`Device`] fields for more information.
     ///
     /// # Example
     /// ```
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
-    /// exp.add_ao_device("PXI1Slot6", 1e6, None, None, None, None, None, None);
-    /// // Adding the same device, even with different parameters, will cause panic
-    /// // exp.add_ao_device("PXI1Slot6", 1e6, None, Some("PXI_Trig0"), Some(true), None, None, None);
+    /// exp.add_ao_device("PXI1Slot6", 1e6);
+    /// // Adding the same device again, even with different parameters, will cause panic
+    /// // exp.add_ao_device("PXI1Slot6", 1e7);
     /// ```
-    fn add_ao_device(
-        &mut self,
-        physical_name: &str,
-        samp_rate: f64,
-        samp_clk_src: Option<&str>,
-        trig_line: Option<&str>,
-        is_primary: Option<bool>,
-        ref_clk_line: Option<&str>,
-        import_ref_clk: Option<bool>,
-        ref_clk_rate: Option<f64>,
-    ) {
-        self.add_device_base(Device::new(
-            physical_name,
-            TaskType::AO,
-            samp_rate,
-            samp_clk_src,
-            trig_line,
-            is_primary,
-            ref_clk_line,
-            import_ref_clk,
-            ref_clk_rate,
-        ));
+    fn add_ao_device(&mut self, physical_name: &str, samp_rate: f64) {
+        self.add_device_base(Device::new(physical_name, TaskType::AO, samp_rate));
     }
 
     /// Registers a Digital Output (DO) device to the experiment.
     ///
-    /// This method creates a DO device with the provided
-    /// parameters and registers it to the experiment.
+    /// This method creates a DO device with the specified parameters and registers it to the experiment.
     ///
     /// # Arguments
     ///
     /// * `physical_name`: A string slice that holds the name of the DO device.
     /// * `samp_rate`: Sampling rate for the DO device.
-    /// * Other parameters represent optional settings related to the device's operation,
-    /// refer to [`Device`] fields for more information.
     ///
     /// # Example
     /// ```should_panic
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
-    /// exp.add_do_device("PXI1Slot7", 1e6, None, Some("PXI_Trig0"), Some(true), None, None, None);
-    /// // Adding two primary devices will cause panic
-    /// exp.add_do_device("PXI1Slot6", 1e6, None, Some("PXI_Trig0"), Some(true), None, None, None);
+    /// exp.add_do_device("PXI1Slot7", 1e6);
+    /// // Adding the same device name will cause panic
+    /// exp.add_do_device("PXI1Slot7", 1e7);
     /// ```
-    fn add_do_device(
-        &mut self,
-        physical_name: &str,
-        samp_rate: f64,
-        samp_clk_src: Option<&str>,
-        trig_line: Option<&str>,
-        is_primary: Option<bool>,
-        ref_clk_line: Option<&str>,
-        import_ref_clk: Option<bool>,
-        ref_clk_rate: Option<f64>,
-    ) {
-        self.add_device_base(Device::new(
-            physical_name,
-            TaskType::DO,
-            samp_rate,
-            samp_clk_src,
-            trig_line,
-            is_primary,
-            ref_clk_line,
-            import_ref_clk,
-            ref_clk_rate,
-        ));
+    fn add_do_device(&mut self, physical_name: &str, samp_rate: f64) {
+        self.add_device_base(Device::new(physical_name, TaskType::DO, samp_rate));
     }
 
     /// Retrieves the latest `edit_stop_time` from all registered devices.
@@ -347,7 +264,7 @@ pub trait BaseExperiment {
     /// ```
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
-    /// exp.add_do_device("PXI1Slot6", 1e6, None, None, None, None, None, None);
+    /// exp.add_do_device("PXI1Slot6", 1e6);
     /// exp.add_do_channel("PXI1Slot6", 0, 0);
     /// exp.add_do_channel("PXI1Slot6", 0, 4);
     /// exp.high("PXI1Slot6", "port0/line0", 1., 4.); // stop time at 5
@@ -381,7 +298,7 @@ pub trait BaseExperiment {
     /// ```
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
-    /// exp.add_do_device("PXI1Slot6", 1e6, None, None, None, None, None, None);
+    /// exp.add_do_device("PXI1Slot6", 1e6);
     /// exp.add_do_channel("PXI1Slot6", 0, 0);
     /// exp.high("PXI1Slot6", "port0/line0", 1., 4.);
     ///
@@ -414,15 +331,16 @@ pub trait BaseExperiment {
     /// ```should_panic
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
-    /// exp.add_ao_device("PXI1Slot6", 1e6, None, Some("PXI_Trig0"), Some(false), None, None, None);
-    /// // This will panic as there are no primary devices
+    /// exp.add_ao_device("PXI1Slot6", 1e6);
+    /// exp.device_cfg_trig("PXI1Slot6", "PXI_Trig0", false);
+    /// // This will panic as there are no primary devices, but PXI1Slot6 is expecting a trigger source
     /// exp.compile_with_stoptime(10.0);
     /// ```
     ///
     /// ```
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
-    /// exp.add_do_device("PXI1Slot6", 1e6, None, None, None, None, None, None);
+    /// exp.add_do_device("PXI1Slot6", 1e6);
     /// exp.add_do_channel("PXI1Slot6", 0, 0);
     /// exp.high("PXI1Slot6", "port0/line0", 1., 3.);
     ///
@@ -433,14 +351,14 @@ pub trait BaseExperiment {
     /// ```
     fn compile_with_stoptime(&mut self, stop_time: f64) {
         assert!(
-            self.devices().values().all(|d| d.is_primary().is_none())
+            self.devices().values().all(|d| d.export_trig().is_none())
                 || self
                     .devices()
                     .values()
-                    .filter(|d| d.is_primary() == Some(true))
+                    .filter(|d| d.export_trig() == Some(true))
                     .count()
                     == 1,
-            "Cannot compile an experiment with no primary device"
+            "Cannot compile an experiment with devices expecting yet no device exporting trigger"
         );
         self.devices_()
             .values_mut()
@@ -535,7 +453,7 @@ pub trait BaseExperiment {
     /// ```
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
-    /// exp.add_ao_device("PXI1Slot6", 1e6, None, None, None, None, None, None);
+    /// exp.add_ao_device("PXI1Slot6", 1e6);
     /// exp.typed_device_op("PXI1Slot6", TaskType::AO, |dev| dev.clear_compile_cache());
     /// // This will panic, since we're requiring that PXI1Slot6 be DO
     /// // exp.typed_device_op("PXI1Slot6", TaskType::DO, |dev| dev.clear_compile_cache());
@@ -611,7 +529,7 @@ pub trait BaseExperiment {
     /// ```
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
-    /// exp.add_ao_device("PXI1Slot6", 1e6, None, None, None, None, None, None);
+    /// exp.add_ao_device("PXI1Slot6", 1e6);
     /// exp.add_ao_channel("PXI1Slot6", 0);
     /// exp.typed_channel_op("PXI1Slot6", "ao0", TaskType::AO, |chan| {(*chan).constant(1., 0., 1., false)});
     /// assert_eq!(exp.typed_channel_op("PXI1Slot6", "ao0", TaskType::AO,
@@ -697,7 +615,7 @@ pub trait BaseExperiment {
     /// ```
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
-    /// exp.add_ao_device("PXI1Slot3", 1e6, None, None, None, None, None, None);
+    /// exp.add_ao_device("PXI1Slot3", 1e6);
     /// exp.add_ao_channel("PXI1Slot3", 0);
     /// ```
     fn add_ao_channel(&mut self, dev_name: &str, channel_id: usize) {
@@ -727,7 +645,7 @@ pub trait BaseExperiment {
     /// ```
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
-    /// exp.add_do_device("PXI1Slot6", 1e7, None, None, None, None, None, None);
+    /// exp.add_do_device("PXI1Slot6", 1e7);
     /// exp.add_do_channel("PXI1Slot6", 0, 0); // adds channel "port0/line0"
     /// ```
     fn add_do_channel(&mut self, dev_name: &str, port_id: usize, line_id: usize) {
@@ -770,6 +688,76 @@ pub trait BaseExperiment {
                 require_streamable,
                 require_editable,
             )
+        })
+    }
+
+    /// Configures the sample clock source of a device in the experiment.
+    ///
+    /// This method retrieves the specified device and delegates the configuration
+    /// of the sample clock source to its base method [`BaseDevice::cfg_samp_clk_src`].
+    ///
+    /// # Arguments
+    ///
+    /// * `dev_name` - The name of the device to configure.
+    /// * `src` - The name of the sample clock source.
+    ///
+    /// See also: [`BaseDevice::cfg_samp_clk_src`]
+    fn device_cfg_samp_clk_src(&mut self, dev_name: &str, src: &str) {
+        self.device_op(dev_name, |dev| (*dev).cfg_samp_clk_src(src))
+    }
+
+    /// Configures the trigger settings of a device in the experiment while ensuring synchronization.
+    ///
+    /// Before delegating the configuration to its base method [`BaseDevice::cfg_trig`], this method
+    /// performs a synchronization check to ensure:
+    ///
+    /// If the current device is set to export a trigger (`export_trig` is `true`), then no other device 
+    /// in the experiment should already be exporting a trigger (`export_trig` should be `None` for all other devices).
+    ///
+    /// The experiment can only have one device that exports triggers at any given time.
+    ///
+    /// # Arguments
+    ///
+    /// * `dev_name` - The name of the device to configure.
+    /// * `trig_line` - The trigger line identifier.
+    /// * `export_trig` - A boolean that determines whether to export or import the trigger.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if the synchronization condition related to a device exporting triggers is violated.
+    ///
+    /// See also: [`BaseDevice::cfg_trig`]
+    fn device_cfg_trig(&mut self, dev_name: &str, trig_line: &str, export_trig: bool) {
+        assert!(!export_trig || 
+            (export_trig && self.devices().values().all(|dev| 
+                dev.export_trig().is_none())), 
+            "Device {} cannot export triggers since another device already exports triggers.",
+            dev_name);
+        self.device_op(dev_name, |dev| (*dev).cfg_trig(trig_line, export_trig))
+    }
+
+    /// Configures the reference clock settings of a device in the experiment.
+    ///
+    /// This method retrieves the specified device and delegates the configuration
+    /// of the reference clock settings to its base method [`BaseDevice::cfg_ref_clk`].
+    ///
+    /// # Arguments
+    ///
+    /// * `dev_name` - The name of the device to configure.
+    /// * `ref_clk_line` - The line or channel to import or export the device's reference clock.
+    /// * `ref_clk_rate` - The rate of the reference clock in Hz.
+    /// * `export_ref_clk` - A boolean that determines whether to export (if `true`) or import (if `false`) the reference clock.
+    ///
+    /// See also: [`BaseDevice::cfg_ref_clk`]
+    fn device_cfg_ref_clk(
+        &mut self,
+        dev_name: &str,
+        ref_clk_line: &str,
+        ref_clk_rate: f64,
+        export_ref_clk: bool,
+    ) {
+        self.device_op(dev_name, |dev| {
+            (*dev).cfg_ref_clk(ref_clk_line, ref_clk_rate, export_ref_clk)
         })
     }
 
@@ -818,7 +806,7 @@ pub trait BaseExperiment {
     /// ```
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
-    /// exp.add_do_device("PXI1Slot6", 1e7, None, None, None, None, None, None);
+    /// exp.add_do_device("PXI1Slot6", 1e7);
     /// // ... other operations ...
     /// exp.device_clear_compile_cache("PXI1Slot6");
     /// ```
@@ -842,7 +830,7 @@ pub trait BaseExperiment {
     /// ```
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
-    /// exp.add_do_device("PXI1Slot6", 1e7, None, None, None, None, None, None);
+    /// exp.add_do_device("PXI1Slot6", 1e7);
     /// // ... other operations ...
     /// exp.device_clear_edit_cache("PXI1Slot6");
     /// ```
@@ -876,7 +864,7 @@ pub trait BaseExperiment {
     /// ```
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
-    /// exp.add_do_device("PXI1Slot6", 1e6, None, None, None, None, None, None,);
+    /// exp.add_do_device("PXI1Slot6", 1e6,);
     /// exp.add_do_channel("PXI1Slot6", 0, 0);
     /// exp.add_do_channel("PXI1Slot6", 2, 0);
     /// exp.add_do_channel("PXI1Slot6", 2, 1);
@@ -929,7 +917,7 @@ pub trait BaseExperiment {
     /// ```
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
-    /// exp.add_do_device("PXI1Slot6", 1e6, None, None, None, None, None, None,);
+    /// exp.add_do_device("PXI1Slot6", 1e6,);
     /// exp.add_do_channel("PXI1Slot6", 0, 0);
     /// exp.add_do_channel("PXI1Slot6", 2, 0);
     /// exp.add_do_channel("PXI1Slot6", 2, 1);
@@ -984,7 +972,7 @@ pub trait BaseExperiment {
     /// ```
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
-    /// exp.add_ao_device("PXI1Slot3", 1e6, None, None, None, None, None, None,);
+    /// exp.add_ao_device("PXI1Slot3", 1e6,);
     /// exp.add_ao_channel("PXI1Slot3", 0);
     /// // t=0, duration=1, keep_val=false, freq=10Hz, amplitude=10, phase=0(default), dc_offset=0(default)
     /// exp.sine("PXI1Slot3", "ao0", 0., 1., false, 10., Some(10.), None, None);
@@ -1099,7 +1087,7 @@ pub trait BaseExperiment {
     /// ```
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
-    /// exp.add_do_device("PXI1Slot7", 1e6, None, Some("PXI_Trig0"), Some(true), None, None, None);
+    /// exp.add_do_device("PXI1Slot7", 1e6);
     /// exp.add_do_channel("PXI1Slot7", 0, 7);
     /// exp.go_high("PXI1Slot7", "port0/line7", 0.);
     /// assert_eq!(exp.is_fresh_compiled(), false);
@@ -1108,6 +1096,49 @@ pub trait BaseExperiment {
     /// ```
     fn channel_clear_edit_cache(&mut self, dev_name: &str, chan_name: &str) {
         self.channel_op(dev_name, chan_name, |chan| (*chan).clear_edit_cache());
+    }
+
+    /// Calculates the sampled signal for a given channel over a specified time interval.
+    ///
+    /// The function computes the signal values based on the given start and end times,
+    /// along with the number of samples desired.
+    ///
+    /// # Arguments
+    ///
+    /// * `dev_name`: The name of the device associated with the channel.
+    /// * `chan_name`: The name of the channel for which the signal is calculated.
+    /// * `start_time`: The starting time of the sampling interval (in seconds).
+    /// * `end_time`: The ending time of the sampling interval (in seconds).
+    /// * `num_samps`: The number of samples to be computed over the specified interval.
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of `f64` containing the signal values sampled over the interval.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use nicompiler_backend::*;
+    /// let mut exp = Experiment::new();
+    /// exp.add_do_device("PXI1Slot7", 1e6);
+    /// exp.add_do_channel("PXI1Slot7", 0, 7);
+    /// exp.go_high("PXI1Slot7", "port0/line7", 0.5);
+    /// exp.compile_with_stoptime(1.);
+    /// let sig = exp.channel_calc_signal_nsamps("PXI1Slot7", "port0/line7", 0., 1., 10);
+    /// assert_eq!(sig[0], 0.);
+    /// assert_eq!(sig[sig.len() - 1], 1.);
+    /// ```
+    fn channel_calc_signal_nsamps(
+        &mut self,
+        dev_name: &str,
+        chan_name: &str,
+        start_time: f64,
+        end_time: f64,
+        num_samps: usize,
+    ) -> Vec<f64> {
+        self.channel_op(dev_name, chan_name, |chan| {
+            (*chan).calc_signal_nsamps(start_time, end_time, num_samps)
+        })
     }
 
     /// Clears the compile cache of the specified channel.
@@ -1126,7 +1157,7 @@ pub trait BaseExperiment {
     /// ```
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
-    /// exp.add_do_device("PXI1Slot7", 1e6, None, Some("PXI_Trig0"), Some(true), None, None, None);
+    /// exp.add_do_device("PXI1Slot7", 1e6);
     /// exp.add_do_channel("PXI1Slot7", 0, 7);
     /// exp.go_high("PXI1Slot7", "port0/line7", 0.);
     /// exp.compile();
@@ -1200,52 +1231,12 @@ macro_rules! impl_exp_boilerplate {
 
         #[pymethods]
         impl $exp_type {
-            fn add_ao_device(
-                &mut self,
-                physical_name: &str,
-                samp_rate: f64,
-                samp_clk_src: Option<&str>,
-                trig_line: Option<&str>,
-                is_primary: Option<bool>,
-                ref_clk_line: Option<&str>,
-                import_ref_clk: Option<bool>,
-                ref_clk_rate: Option<f64>,
-            ) {
-                BaseExperiment::add_ao_device(
-                    self,
-                    physical_name,
-                    samp_rate,
-                    samp_clk_src,
-                    trig_line,
-                    is_primary,
-                    ref_clk_line,
-                    import_ref_clk,
-                    ref_clk_rate,
-                );
+            fn add_ao_device(&mut self, physical_name: &str, samp_rate: f64) {
+                BaseExperiment::add_ao_device(self, physical_name, samp_rate);
             }
 
-            fn add_do_device(
-                &mut self,
-                physical_name: &str,
-                samp_rate: f64,
-                samp_clk_src: Option<&str>,
-                trig_line: Option<&str>,
-                is_primary: Option<bool>,
-                ref_clk_line: Option<&str>,
-                import_ref_clk: Option<bool>,
-                ref_clk_rate: Option<f64>,
-            ) {
-                BaseExperiment::add_do_device(
-                    self,
-                    physical_name,
-                    samp_rate,
-                    samp_clk_src,
-                    trig_line,
-                    is_primary,
-                    ref_clk_line,
-                    import_ref_clk,
-                    ref_clk_rate,
-                );
+            fn add_do_device(&mut self, physical_name: &str, samp_rate: f64) {
+                BaseExperiment::add_do_device(self, physical_name, samp_rate);
             }
 
             pub fn edit_stop_time(&self) -> f64 {
@@ -1291,6 +1282,30 @@ macro_rules! impl_exp_boilerplate {
 
             pub fn add_do_channel(&mut self, dev_name: &str, port_id: usize, line_id: usize) {
                 BaseExperiment::add_do_channel(self, dev_name, port_id, line_id);
+            }
+
+            pub fn device_cfg_samp_clk_src(&mut self, dev_name: &str, src: &str) {
+                BaseExperiment::device_cfg_samp_clk_src(self, dev_name, src);
+            }
+
+            pub fn device_cfg_trig(&mut self, dev_name: &str, trig_line: &str, export_trig: bool) {
+                BaseExperiment::device_cfg_trig(self, dev_name, trig_line, export_trig);
+            }
+
+            pub fn device_cfg_ref_clk(
+                &mut self,
+                dev_name: &str,
+                ref_clk_line: &str,
+                ref_clk_rate: f64,
+                export_ref_clk: bool,
+            ) {
+                BaseExperiment::device_cfg_ref_clk(
+                    self,
+                    dev_name,
+                    ref_clk_line,
+                    ref_clk_rate,
+                    export_ref_clk,
+                );
             }
 
             pub fn device_compiled_channel_names(
@@ -1400,6 +1415,19 @@ macro_rules! impl_exp_boilerplate {
 
             pub fn channel_clear_edit_cache(&mut self, dev_name: &str, chan_name: &str) {
                 BaseExperiment::channel_clear_edit_cache(self, dev_name, chan_name);
+            }
+
+            pub fn channel_calc_signal_nsamps(
+                &mut self,
+                dev_name: &str,
+                chan_name: &str,
+                start_time: f64,
+                end_time: f64,
+                num_samps: usize,
+            ) -> Vec<f64> {
+                BaseExperiment::channel_calc_signal_nsamps(
+                    self, dev_name, chan_name, start_time, end_time, num_samps,
+                )
             }
         }
     };

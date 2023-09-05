@@ -63,7 +63,7 @@
 //! AO channels are both streamable and editable. DO line channels are editable but not streamable, and DO port
 //! channels are non-editable yet streamable.
 
-use ndarray::{array, s};
+use ndarray::{array, s, Array1};
 use std::collections::BTreeSet;
 
 use crate::instruction::*;
@@ -506,6 +506,17 @@ pub trait BaseChannel {
             self.instr_val()[i].eval_inplace(slice);
             cur_pos += instr_signal_length;
         }
+    }
+
+    /// Calls `fill_signal_nsamps` with the appropriate buffer and returns signal vector.
+    /// The in-place version `fill_signal_nsamps` is preferred to this method for efficiency.
+    /// This is mainly a wrapper to expose channel-signal sampling to Python
+    fn calc_signal_nsamps(&self, start_time: f64, end_time: f64, num_samps: usize) -> Vec<f64> {
+        let mut buffer = Array1::linspace(start_time, end_time, num_samps);
+        let start_pos = (start_time * self.samp_rate()) as usize;
+        let end_pos = (end_time * self.samp_rate()) as usize;
+        self.fill_signal_nsamps(start_pos, end_pos, num_samps, &mut buffer.view_mut());
+        buffer.to_vec()
     }
 }
 

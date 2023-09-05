@@ -32,7 +32,7 @@ Located within the `niexpctrl` directory, this optional Python module provides u
 
 The `nicompiler_backend` crate, located within `nicompiler_backend` subfolder, utilizes [PyO3](https://github.com/PyO3/pyo3) to offer a Python-accessible Experiment class tailored for multi-device NI experiments. This backend can also operate as a standalone and extensible rust or python library.
 
-To delve into the implementation details of the core design of our project, execute `cargo doc --open` within the crate's directory.
+To delve into the implementation details of the core design of our project, execute `cargo doc --open` within the crate's directory. Alternatively, visit the [published documentation](https://docs.rs/nicompiler_backend/0.2.0/nicompiler_backend/#). 
 
 ### Experiment control: `niexpctrl_backend`
 

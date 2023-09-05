@@ -5,9 +5,8 @@
 //! 1. Devices (cards) directly attached the computer via PCIe/USB.
 //! 2. A PCIe link card connected to a PXIe chassis, which hosts multiple PXIe cards.
 //!
-//!
 //! ## Device
-//! In this library, every `Device` object corresponds to a particular task for
+//! In this library, every [`Device`] object corresponds to a particular task for
 //! a physical device (e.g. analogue output for `PXI1Slot1`). A `Device` trivially implements the
 //! [`BaseDevice`] trait by supplying field methods.
 //!
@@ -19,24 +18,6 @@
 //! easy access to various properties of the device, such as its physical name, task type, and
 //! several clock and trigger configurations.
 //! For editing and compiling behavior of devices, see the [`BaseDevice`] trait.
-//!
-//! [`Device`] fields:
-//! - `channels`: A collection of channels associated with this device.
-//! - `physical_name`: Name of the device as seen by the NI driver.
-//! - `task_type`: Specifies the task type associated with the device.
-//! - `samp_rate`: The sampling rate of the device in Hz.
-//! - `samp_clk_src`: Optional source of the sampling clock, supply `None` for on-board clock source.
-//! - `trig_line`: Optional identifier for the port through which to import / export the task start trigger,
-//! supply `None` for trivial triggering behavior
-//! - `is_primary`: Optional Boolean indicating if the device is the primary device. Determines whether
-//! to export (`true`) or (`import`) the start trigger of the NI-task associated with this device through `trig_line`.
-//! In case that any device in an experiment has nontrivial triggering behavior, one and only one of the devices
-//! must be primary.
-//! - `ref_clk_line`: Optional channel to import or export the reference clock the phase-lock phase-locks to.
-//! Supply `None` for trivial reference clock behavior.
-//! - `import_ref_clk`: Optional indicator for whether to import reference clock signal from `ref_clk_line` or to
-//! export the 10Mhz on-board reference clock to `ref_clk_line`. Supply `None` for neither.
-//! - `ref_clk_rate`: Optional rate of the reference clock in Hz.
 //!
 //!
 //! ### Editable and streamable channels in devices
@@ -72,6 +53,9 @@ use crate::utils::*;
 /// - **Field methods**: These provide direct access to the properties of a device, such as its channels, physical name,
 /// sampling rate, and various configuration parameters.
 ///
+/// - **Synchronization configuration**: Customize the synchronization behavior of devices via [`BaseDevice::cfg_trig`],
+/// [`BaseDevice::cfg_ref_clk`], [`BaseDevice::cfg_samp_clk_src`]. See [`Device`] for more details.
+///
 /// - **Channel management**: Methods like [`BaseDevice::editable_channels`], [`BaseDevice::editable_channels_`], and
 /// [`BaseDevice::add_channel`] allow for the retrieval and manipulation of channels associated with the device.
 ///
@@ -91,22 +75,85 @@ use crate::utils::*;
 /// - **Utility functions**: Methods like [`BaseDevice::unique_port_numbers`] offer utility functionalities specific to certain
 /// task types, aiding in operations like identifying unique ports in Digital Output (DO) devices.
 ///
+///
 /// # Implementing [`BaseDevice`]:
 ///
 /// When creating a new type that represents an NI device, implementing this trait ensures that the type has all the necessary methods and behaviors typical of NI devices. Implementers can then extend or override these methods as necessary to provide device-specific behavior or optimizations.
 pub trait BaseDevice {
-    // Field methods
+    // Immutable accessors (getters)
     fn channels(&self) -> &HashMap<String, Channel>;
-    fn channels_(&mut self) -> &mut HashMap<String, Channel>;
     fn physical_name(&self) -> &str;
     fn task_type(&self) -> TaskType;
     fn samp_rate(&self) -> f64;
     fn samp_clk_src(&self) -> Option<&str>;
     fn trig_line(&self) -> Option<&str>;
-    fn is_primary(&self) -> Option<bool>;
+    fn export_trig(&self) -> Option<bool>;
     fn ref_clk_line(&self) -> Option<&str>;
-    fn import_ref_clk(&self) -> Option<bool>;
+    fn export_ref_clk(&self) -> Option<bool>;
     fn ref_clk_rate(&self) -> Option<f64>;
+
+    // Mutable accessors
+    fn channels_(&mut self) -> &mut HashMap<String, Channel>;
+    fn samp_clk_src_(&mut self) -> &mut Option<String>;
+    fn trig_line_(&mut self) -> &mut Option<String>;
+    fn export_trig_(&mut self) -> &mut Option<bool>;
+    fn ref_clk_line_(&mut self) -> &mut Option<String>;
+    fn export_ref_clk_(&mut self) -> &mut Option<bool>;
+    fn ref_clk_rate_(&mut self) -> &mut Option<f64>;
+
+    /// Configures the sample clock source for the device.
+    ///
+    /// This method sets the `samp_clk_src` field of the device to the provided source string.
+    ///
+    /// # Arguments
+    ///
+    /// * `src` - The name of the sample clock source.
+    fn cfg_samp_clk_src(&mut self, src: &str) {
+        *(self.samp_clk_src_()) = Some(src.to_string());
+    }
+
+    /// Configures the trigger settings for the device.
+    ///
+    /// Depending on the value of `export_trig`, this method either:
+    ///
+    /// * Exports the device task's start trigger to `trig_line` (if `export_trig` is `true`), or
+    /// * Imports the device task's start trigger from `trig_line` (if `export_trig` is `false`).
+    ///
+    /// # Arguments
+    ///
+    /// * `trig_line` - The trigger line identifier.
+    /// * `export_trig` - A boolean that determines whether to export or import the trigger.
+    fn cfg_trig(&mut self, trig_line: &str, export_trig: bool) {
+        *(self.trig_line_()) = Some(trig_line.to_string());
+        *(self.export_trig_()) = Some(export_trig);
+    }
+
+    /// Configures the reference clock settings for the device.
+    ///
+    /// If `export_ref_clk` is set to `true`, this method:
+    ///
+    /// * Exports the device's 10MHz on-board reference clock to `ref_clk_line`,
+    /// * Asserts that `ref_clk_rate` is set to 1e7 (10MHz).
+    ///
+    /// If `export_ref_clk` is set to `false`, this method:
+    ///
+    /// * Sets the device's reference clock to the designated line and rate provided by the arguments.
+    ///
+    /// # Arguments
+    ///
+    /// * `ref_clk_line` - The line or channel to import or export the device's reference clock.
+    /// * `ref_clk_rate` - The rate of the reference clock in Hz.
+    /// * `export_ref_clk` - A boolean that determines whether to export (if `true`) or import (if `false`) the reference clock.
+    fn cfg_ref_clk(&mut self, ref_clk_line: &str, ref_clk_rate: f64, export_ref_clk: bool) {
+        if export_ref_clk {
+            assert_eq!(ref_clk_rate, 1e7,
+                "Device {} needs to explicitly acknowledge exporting 10Mhz clk by setting ref_clk_rate=1e7",
+                self.physical_name());
+        }
+        *(self.ref_clk_line_()) = Some(ref_clk_line.to_string());
+        *(self.ref_clk_rate_()) = Some(ref_clk_rate);
+        *(self.export_ref_clk_()) = Some(export_ref_clk);
+    }
 
     /// Returns a vector of references to editable channels
     fn editable_channels(&self) -> Vec<&Channel> {
@@ -499,16 +546,16 @@ pub trait BaseDevice {
 /// - `physical_name`: Name of the device as seen by the NI driver.
 /// - `task_type`: Specifies the task type associated with the device.
 /// - `samp_rate`: The sampling rate of the device in Hz.
-/// - `samp_clk_src`: Optional source of the sampling clock, supply `None` for on-board clock source.
-/// - `trig_line`: Optional identifier for the port through which to import / export the task start trigger,
-///     supply `None` for trivial triggering behavior
-/// - `is_primary`: Optional Boolean indicating if the device is the primary device. Determines whether
-///     to export (`true`) or (`import`) the start trigger of the NI-task associated with this device through `trig_line`.
-///     In case that any device in an experiment has nontrivial triggering behavior, one and only one of the devices
-///     must be primary.
-///  `import_ref_clk`: Optional indicator whether to import (`true`) or export (`false`) reference clock. Use
-///     `None` for trivial behavior
+/// - `samp_clk_src`: Optional source of the sampling clock; supply `None` for on-board clock source.
+/// - `trig_line`: Optional identifier for the port through which to import/export the task start trigger.
+///     Supply `None` for trivial triggering behavior.
+/// - `export_trig`: Optional Boolean indicating if the device exports its start trigger. If `true`, the device
+///     exports the start trigger of the NI-task associated with this device through `trig_line`. If `false` or `None`,
+///     the device is set to import the start trigger. In case that any device in an experiment has nontrivial triggering behavior,
+///     one and only one of the devices must have `export_trig` set to `true`.
 /// - `ref_clk_line`: Optional source of the reference clock to phase-lock the device clock to.
+/// - `export_ref_clk`: Optional indicator of whether to export the reference clock. If `true`, the device exports its
+///     reference clock. If `false` or `None`, it imports the reference clock. Use `None` for trivial behavior.
 /// - `ref_clk_rate`: Optional rate of the reference clock in Hz.
 ///
 /// # Synchronization Methods
@@ -518,20 +565,17 @@ pub trait BaseDevice {
 ///
 /// ## Start-trigger Synchronization
 ///
-/// Relevant fields: `trig_line`, `is_primary`.
+/// Relevant fields: `trig_line`, `export_trig`.
 ///
 /// Refer to the official [NI documentation on start-trigger synchronization](https://www.ni.com/docs/en-US/bundle/ni-daqmx/page/mxcncpts/syncstarttrigger.html).
 ///
-/// This method designates one device as the primary and others as secondary. When the experiment begins, all tasks on
-/// secondary devices are set to wait for a digital edge trigger from the `trig_line` channel. The primary device's task,
-/// on the other hand, exports its start trigger to `trig_line`.
+/// This method designates one device to export its start trigger and others to import. When the experiment begins, tasks on
+/// devices with `export_trig` set to `false` are set to wait for a digital edge trigger from the `trig_line` channel. The device with `export_trig` set to `true` exports its start trigger to `trig_line`.
 ///
-/// **Note**: It's essential to physically connect the primary device's specified `trig_line` to the corresponding lines
-/// on secondary devices.
+/// **Note**: It's essential to physically connect the device that exports its trigger (where `export_trig` is `true`) to the corresponding lines on devices that import the trigger.
 ///
 /// For PCIe devices, use a `PFI` label. For PXIe devices, use the label `PXI_Trig` followed by a number in the range 0-7.
-/// This backend crate ensures task synchronization such that threads handling secondary tasks always start listening for
-/// triggers before the primary thread's task begins.
+/// This backend crate ensures task synchronization such that threads handling tasks set to import the trigger always start listening for triggers before the exporting task begins.
 ///
 /// For PXIe devices linked to a chassis, ensure that you configure trigger bus routing using NI-MAX (on Windows) or the
 /// NI Hardware Configuration Utilities (on Linux) when specifying backplane trigger lines. Detailed information can be
@@ -542,36 +586,63 @@ pub trait BaseDevice {
 /// clock alignment.
 ///
 /// ### Example:
-/// Here, the primary device `PXI1Slot6` exports its start trigger to `PXI1_Trig0`, while `PXI1Slot7` imports its start
+/// Here, the device `PXI1Slot6` exports its start trigger to `PXI1_Trig0`, while `PXI1Slot7` imports its start
 /// trigger from the same line.
-/// ```rust
-/// use nicompiler_backend::*;
+/// ```
+/// # use nicompiler_backend::*;
 /// let mut exp = Experiment::new();
-/// exp.add_do_device("PXI1Slot6", 1e6, None, Some("PXI1_Trig0"), Some(true), None, None, None);
-/// exp.add_do_device("PXI1Slot7", 1e6, None, Some("PXI1_Trig0"), Some(false), None, None, None);
+/// exp.add_do_device("PXI1Slot6", 1e6);
+/// exp.add_do_device("PXI1Slot7", 1e6);
+/// exp.device_cfg_trig("PXI1Slot6", "PXI1_Trig0", true);
+/// exp.device_cfg_trig("PXI1Slot7", "PXI1_Trig0", false);
+/// ```
+///
+/// The compiler will panic if more than one device exports trigger
+/// ```should_panic
+/// # use nicompiler_backend::*;
+/// let mut exp = Experiment::new();
+/// exp.add_do_device("PXI1Slot6", 1e6);
+/// exp.add_do_device("PXI1Slot7", 1e6);
+/// exp.device_cfg_trig("PXI1Slot6", "PXI1_Trig0", true);
+/// exp.device_cfg_trig("PXI1Slot7", "PXI1_Trig0", true);
+/// ```
+///
+/// The compiler **will** panic if some device is expecting a start trigger yet no device exports one.
+/// ```should_panic
+/// # use nicompiler_backend::*;
+/// let mut exp = Experiment::new();
+/// exp.add_do_device("PXI1Slot6", 1e6);
+/// exp.add_do_channel("PXI1Slot6", 0, 4);
+/// exp.device_cfg_trig("PXI1Slot6", "PXI1_Trig0", false);
+/// exp.go_high("PXI1Slot6", "port0/line4", 0.5);
+/// exp.compile_with_stoptime(1.); // Panics here
 /// ```
 ///
 /// ## Phase-lock to Reference Clock
 ///
-/// Relevant fields: `ref_clk_line`, `ref_clk_rate`, `import_ref_clk`.
+/// Relevant fields: `ref_clk_line`, `ref_clk_rate`, `export_ref_clk`.
 ///
 /// Refer to the [NI documentation on phase-lock synchronization](https://www.ni.com/docs/en-US/bundle/ni-daqmx/page/mxcncpts/syncrefclock.html).
 ///
 /// A subset of NI devices support this flexible synchronization method, which allows devices synchronized in this manner
 /// to operate at different sampling rates. Devices phase-lock their on-board oscillators to an external reference at `ref_clk_line`
-/// and indicate its frequency via `ref_clk_rate`. Optionally, a device can export its 10MHz onboard reference clock to
-/// `ref_clk_line` by setting `import_ref_clk` to `false`.
+/// and indicate its frequency via `ref_clk_rate`. A device can optionally export its 10MHz onboard reference clock to `ref_clk_line` by setting `export_ref_clk` to `true`.
 ///
 /// **Note**: Devices phase-locked in this manner still require start-trigger synchronization to ensure synchronized start times.
 ///
 /// ### Example:
-/// The primary device `PXI1Slot6` exports its start trigger signal to `PXI1_Trig0` and its 10MHz reference clock to `PXI1_Trig7`.
-/// The secondary device `PXI1Slot4` acts accordingly.
+/// The device `PXI1Slot6` exports its start trigger signal to `PXI1_Trig0` and its 10MHz reference clock to `PXI1_Trig7`.
+/// The device `PXI1Slot4` acts accordingly.
 /// ```rust
 /// use nicompiler_backend::*;
 /// let mut exp = Experiment::new();
-/// exp.add_ao_device("PXI1Slot3", 1e6, None, Some("PXI1_Trig0"), Some(true), Some("PXI1_Trig7"), Some(false), Some(1e7));
-/// exp.add_ao_device("PXI1Slot4", 1e6, None, Some("PXI1_Trig0"), Some(false), Some("PXI1_Trig7"), Some(true), Some(1e7));
+/// exp.add_ao_device("PXI1Slot3", 1e6);
+/// exp.device_cfg_trig("PXI1Slot3", "PXI1_Trig0", true);
+/// exp.device_cfg_ref_clk("PXI1Slot3", "PXI1_Trig7", 1e7, true);
+///
+/// exp.add_ao_device("PXI1Slot4", 1e6);
+/// exp.device_cfg_trig("PXI1Slot4", "PXI1_Trig0", false);
+/// exp.device_cfg_ref_clk("PXI1Slot4", "PXI1_Trig7", 1e7, false);
 /// ```
 ///
 /// ## Importing Sample Clock
@@ -588,11 +659,18 @@ pub trait BaseDevice {
 /// ```rust
 /// use nicompiler_backend::*;
 /// let mut exp = Experiment::new();
-/// exp.add_ao_device("PXI1Slot3", 1e6, None, Some("PXI1_Trig0"), Some(true), Some("PXI1_Trig7"), Some(false), Some(1e7));
-/// exp.add_ao_device("PXI1Slot4", 1e6, None, Some("PXI1_Trig0"), Some(false), Some("PXI1_Trig7"), Some(true), Some(1e7));
-/// exp.add_ao_device("PXI1Slot6", 1e7, Some("PXI1_Trig7"), Some("PXI1_Trig0"), Some(false), None, None, None);
+/// exp.add_ao_device("PXI1Slot3", 1e6);
+/// exp.device_cfg_trig("PXI1Slot3", "PXI1_Trig0", true);
+/// exp.device_cfg_ref_clk("PXI1Slot3", "PXI1_Trig7", 1e7, true);
+///
+/// exp.add_ao_device("PXI1Slot4", 1e6);
+/// exp.device_cfg_trig("PXI1Slot4", "PXI1_Trig0", false);
+/// exp.device_cfg_ref_clk("PXI1Slot4", "PXI1_Trig7", 1e7, false);
+///
+/// exp.add_do_device("PXI1Slot6", 1e7);
+/// exp.device_cfg_samp_clk_src("PXI1Slot6", "PXI1_Trig7");
+/// exp.device_cfg_trig("PXI1Slot6", "PXI1_Trig0", false);
 /// ```
-
 pub struct Device {
     channels: HashMap<String, Channel>,
 
@@ -602,9 +680,9 @@ pub struct Device {
 
     samp_clk_src: Option<String>,
     trig_line: Option<String>,
-    is_primary: Option<bool>,
+    export_trig: Option<bool>,
     ref_clk_line: Option<String>,
-    import_ref_clk: Option<bool>,
+    export_ref_clk: Option<bool>,
     ref_clk_rate: Option<f64>,
 }
 
@@ -612,83 +690,103 @@ impl Device {
     /// Constructs a new `Device` instance.
     ///
     /// This constructor initializes a device with the provided parameters. The `channels` field
-    /// is initialized as an empty collection.
+    /// is initialized as an empty collection. All synchronization fields are initialized to `None`
+    /// by default. For nontrivial synchronization behavior, use the methods [`BaseDevice::cfg_samp_clk_src`],
+    /// [`BaseDevice::cfg_trig`], and [`BaseDevice::cfg_ref_clk`].
     ///
     /// # Arguments
     /// - `physical_name`: Name of the device as seen by the NI driver.
     /// - `task_type`: The type of task associated with the device.
     /// - `samp_rate`: Desired sampling rate in Hz.
-    /// - `samp_clk_src`: Optional line to source or export the sample clock.
-    /// - `trig_line`: Optional identifier for the device's trigger line.
-    /// - `is_primary`: Optional flag indicating if this is the primary device (imports or exports trigger line).
-    /// - `ref_clk_line`: Optional line (channel) to import or export the device's reference clock.
-    /// - `import_ref_clk`: Optional indicator whether to import (`true`) or export (`false`) reference clock. Use
-    /// `None` for trivial behavior
-    /// - `ref_clk_rate`: Optional rate of the reference clock in Hz.
     ///
     /// # Returns
-    /// A new instance of `Device` with the specified configurations.
-    pub fn new(
-        physical_name: &str,
-        task_type: TaskType,
-        samp_rate: f64,
-        samp_clk_src: Option<&str>,
-        trig_line: Option<&str>,
-        is_primary: Option<bool>,
-        ref_clk_line: Option<&str>,
-        import_ref_clk: Option<bool>,
-        ref_clk_rate: Option<f64>,
-    ) -> Self {
+    /// A new instance of `Device` with the specified configurations and all synchronization-related fields set to `None`.
+    pub fn new(physical_name: &str, task_type: TaskType, samp_rate: f64) -> Self {
         Self {
             channels: HashMap::new(),
 
             physical_name: physical_name.to_string(),
-            task_type: task_type,
+            task_type,
+            samp_rate,
 
-            samp_rate: samp_rate,
-            samp_clk_src: samp_clk_src.map(String::from),
-
-            trig_line: trig_line.map(String::from),
-            is_primary: is_primary,
-            ref_clk_line: ref_clk_line.map(String::from),
-            import_ref_clk: import_ref_clk,
-            ref_clk_rate: ref_clk_rate,
+            samp_clk_src: None,
+            trig_line: None,
+            export_trig: None,
+            ref_clk_line: None,
+            export_ref_clk: None,
+            ref_clk_rate: None,
         }
     }
 }
 
 impl BaseDevice for Device {
+    // Immutable accessors (getters)
     fn channels(&self) -> &HashMap<String, Channel> {
         &self.channels
     }
-    fn channels_(&mut self) -> &mut HashMap<String, Channel> {
-        &mut self.channels
-    }
+
     fn physical_name(&self) -> &str {
         &self.physical_name
     }
+
     fn task_type(&self) -> TaskType {
         self.task_type
     }
+
     fn samp_rate(&self) -> f64 {
         self.samp_rate
     }
+
     fn samp_clk_src(&self) -> Option<&str> {
         self.samp_clk_src.as_deref()
     }
+
     fn trig_line(&self) -> Option<&str> {
         self.trig_line.as_deref()
     }
-    fn is_primary(&self) -> Option<bool> {
-        self.is_primary
+
+    fn export_trig(&self) -> Option<bool> {
+        self.export_trig
     }
+
     fn ref_clk_line(&self) -> Option<&str> {
         self.ref_clk_line.as_deref()
     }
-    fn import_ref_clk(&self) -> Option<bool> {
-        self.import_ref_clk
+
+    fn export_ref_clk(&self) -> Option<bool> {
+        self.export_ref_clk
     }
+
     fn ref_clk_rate(&self) -> Option<f64> {
         self.ref_clk_rate
+    }
+
+    // Mutable accessors
+    fn channels_(&mut self) -> &mut HashMap<String, Channel> {
+        &mut self.channels
+    }
+
+    fn samp_clk_src_(&mut self) -> &mut Option<String> {
+        &mut self.samp_clk_src
+    }
+
+    fn trig_line_(&mut self) -> &mut Option<String> {
+        &mut self.trig_line
+    }
+
+    fn export_trig_(&mut self) -> &mut Option<bool> {
+        &mut self.export_trig
+    }
+
+    fn ref_clk_line_(&mut self) -> &mut Option<String> {
+        &mut self.ref_clk_line
+    }
+
+    fn export_ref_clk_(&mut self) -> &mut Option<bool> {
+        &mut self.export_ref_clk
+    }
+
+    fn ref_clk_rate_(&mut self) -> &mut Option<f64> {
+        &mut self.ref_clk_rate
     }
 }

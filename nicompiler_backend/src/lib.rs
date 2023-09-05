@@ -35,34 +35,96 @@
 //! `nicompiler_backend` is designed to bridge these challenges. At its core, it leverages the performance and safety
 //! guarantees of Rust as well as its convenient interface with C and python. By interfacing seamlessly with the NI-DAQmx C
 //! driver library and providing a Python API via `PyO3`, `nicompiler_backend` offers the best of both worlds.
-//! Coupled with an optional high-level Python wrapper (currently under development), researchers can design experiments
+//! Coupled with an optional high-level Python wrapper, researchers can design experiments
 //! in an expressive language, leaving the Rust backend to handle streaming and concurrency.
 //!
 //! Currently, this crate supports analogue and digital output tasks, along with synchronization between NI devices through
 //! shared start-triggers, sampling clocks, or phase-locked reference clocks.
 //!
-//! ## Crate Structure
+//! ## Example usage
+//! ```
+//! use nicompiler_backend::*;
+//! let mut exp = Experiment::new();
+//! // Define devices and associated channels
+//! exp.add_ao_device("PXI1Slot3", 1e6);
+//! exp.add_ao_channel("PXI1Slot3", 0);
 //!
-//! ### Experiment
-//! An [`Experiment`] in `nicompiler_backend` is conceptualized as a collection
-//! of devices, each identified by its physical name as recognized by the NI driver.
+//! exp.add_ao_device("PXI1Slot4", 1e6);
+//! exp.add_ao_channel("PXI1Slot4", 0);
 //!
-//! ### Device
-//! Each [`Device`] corresponds to a specific piece of NI hardware within the control system. Devices maintain metadata like
-//! physical names, sampling rates, trigger behaviors, and more (detailed in [`Device`]). For implementation details, refer
-//! to the [`BaseDevice`] trait and the [`device`] module. Furthermore, devices comprise a collection of channels, each indexed
-//! by its physical name.
+//! exp.add_do_device("PXI1Slot6", 1e7);
+//! exp.add_do_channel("PXI1Slot6", 0, 0);
+//! exp.add_do_channel("PXI1Slot6", 0, 4);
 //!
-//! ### Channel
-//! A [`Channel`] represents a distinct physical channel on an NI device. Channels manage a list of non-overlapping [`InstrBook`],
-//! which, post-compilation, can be sampled to produce floating-point signals.
+//! // Define synchronization behavior:
+//! exp.device_cfg_trig("PXI1Slot3", "PXI1_Trig0", true);
+//! exp.device_cfg_ref_clk("PXI1Slot3", "PXI1_Trig7", 1e7, true);
 //!
-//! ### Instruction
-//! Each [`InstrBook`] contains an [`Instruction`] paired with edit-time metadata like `start_pos`, `end_pos`, and `keep_val`.
-//! An [`Instruction`] is defined by an instruction type ([`InstrType`]) and a set of parameters stored as key-value pairs.
+//! exp.device_cfg_trig("PXI1Slot4", "PXI1_Trig0", false);
+//! exp.device_cfg_ref_clk("PXI1Slot4", "PXI1_Trig7", 1e7, false);
 //!
-//! We invite you to delve deeper into the crate, explore its capabilities, and join us in refining and extending this
-//! endeavor to make experimental control systems efficient and researcher-friendly.
+//! exp.device_cfg_samp_clk_src("PXI1Slot6", "PXI1_Trig7");
+//! exp.device_cfg_trig("PXI1Slot6", "PXI1_Trig0", false);
+//!
+//! // PXI1Slot3/ao0 starts with a 1s-long 7Hz sine wave with offset 1
+//! // and unit amplitude, zero phase. Does not keep its value.
+//! exp.sine("PXI1Slot3", "ao0", 0., 1., false, 7., None, None, Some(1.));
+//! // Ends with a half-second long 1V constant signal which returns to zero
+//! exp.constant("PXI1Slot3", "ao0", 9., 0.5, 1., false);
+//!
+//! // We can also leave a defined channel empty: the device / channel will simply not be compiled
+//!
+//! // Both lines of PXI1Slot6 start with a one-second "high" at t=0 and a half-second high at t=9
+//! exp.high("PXI1Slot6", "port0/line0", 0., 1.);
+//! exp.high("PXI1Slot6", "port0/line0", 9., 0.5);
+//! // Alternatively, we can also define the same behavior via go_high/go_low
+//! exp.go_high("PXI1Slot6", "port0/line4", 0.);
+//! exp.go_low("PXI1Slot6", "port0/line4", 1.);
+//!
+//! exp.go_high("PXI1Slot6", "port0/line4", 9.);
+//! exp.go_low("PXI1Slot6", "port0/line4", 9.5);
+//!
+//! // Compile the experiment: this will stop the experiment at the last edit-time plus one tick
+//! exp.compile();
+//!
+//! // We can compile again with a specific stop_time (and add instructions in between)
+//! exp.compile_with_stoptime(10.); // Experiment signal will stop at t=10 now
+//! assert_eq!(exp.compiled_stop_time(), 10.);
+//! ```
+//!
+//! # Navigating the Crate
+//!
+//! The `nicompiler_backend` crate is organized into primary modules - [`experiment`], [`device`], [`channel`], and [`instruction`].
+//! Each serves specific functionality within the crate. Here's a quick guide to help you navigate:
+//!
+//! ### [`experiment`] Module: Your Starting Point
+//!
+//! If you're a typical user, you'll likely spend most of your time here.
+//!
+//! - **Overview**: An [`Experiment`] is viewed as a collection of devices, each identified by its name as recognized by the NI driver.
+//! - **Usage**: The `Experiment` object is the primary entity exposed to Python. It provides methods for experiment-wide, device-wide, and channel-wide operations.
+//! - **Key Traits & Implementations**: Refer to the [`BaseExperiment`] trait for Rust methods and usage examples. For Python method signatures, check the direct implementations in [`Experiment`], which simply wrap `BaseExperiment` implementations.
+//!
+//! ### [`device`] Module: Delving into Devices
+//!
+//! If you're keen on understanding or customizing device-specific details, this module is for you.
+//!
+//! - **Overview**: Each [`Device`] relates to a unique piece of NI hardware in the control system. It contains essential metadata such as physical names, sampling rates, and trigger behaviors.
+//! - **Key Traits & Implementations**: See the [`BaseDevice`] trait and the entire [`device`] module for more insights. Devices also hold a set of channels, each referred to by its physical name.
+//!
+//! ### [`channel`] Module: Channel Instructions & Behaviors
+//!
+//! Ideal for those wanting to understand how instructions are managed or need to design a new [`TaskType`] as well as `TaskType`-specific customized channel behavior.
+//!
+//! - **Overview**: A [`Channel`] signifies a specific physical channel on an NI device. It administers a series of non-overlapping [`InstrBook`] which, after compilation, can be sampled to render floating-point signals.
+//!
+//! ### [`instruction`] Module: Deep Dive into Instructions
+//!
+//! For those interested in the intricacies of how instructions are defined and executed.
+//!
+//! - **Overview**: Each [`InstrBook`] holds an [`Instruction`] coupled with edit-time metadata, like `start_pos`, `end_pos`, and `keep_val`. An [`Instruction`] is crafted from an instruction type ([`InstrType`]) and a set of parameters in key-value pairs.
+//!
+//! We encourage users to explore each module to fully grasp the capabilities and structure of the crate. Whether you're here for a quick setup or to contribute, the `nicompiler_backend` crate is designed to cater to both needs.
 
 use pyo3::prelude::*;
 // use pyo3::wrap_pyfunction;
