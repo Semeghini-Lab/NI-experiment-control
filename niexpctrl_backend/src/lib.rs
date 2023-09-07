@@ -16,6 +16,26 @@
 //!
 //! - **Utilities and Helpers:** The `utils` module provides additional utilities and helper functions. 
 //! 
+//!
+//! ## Integration with `nicompiler_backend`:
+//!
+//! This crate is designed to be a natural extension of [`nicompiler_backend`]. 
+//! The primary [`Experiment`] struct depends on, and extends its counterpart 
+//! in `nicompiler_backend`, maintaining general experiment behaviors and additionally introducing methods 
+//! specific to NI device management.
+//! **Refer to [`nicompiler_backend`] for general implementations unrelated to NI streaming behavior**. 
+//!
+//! ## Where to Start:
+//! - **Experiment Design and Control:** The [`experiment`] module provides implementation of how device tasks 
+//! are concurrently streamed. 
+//!
+//! - **Device Management:** The [`device`] module implements streaming and synchronization behavior. 
+//!
+//! - **NI-DAQmx Operations:** The [`nidaqmx`] module provides Rust wrapper methods for calling the 
+//!   NI-DAQmx C library, translating functionalities for seamless NI device operations.
+//!
+//! - **Utilities:** For general utilities and helper functionalities, explore the [`utils`] module.
+//! 
 //! ## Example usage with streaming 
 //! ### Rust
 //! Recall the same example snippet from [`nicompiler_backend`].
@@ -103,26 +123,6 @@
 //! exp.compile_with_stoptime(10.)
 //! exp.stream_exp(50., 2)
 //! ```
-//!
-//! ## Integration with `nicompiler_backend`:
-//!
-//! This crate is designed to be a natural extension of `nicompiler_backend`. 
-//! The primary `Experiment` struct depends on, and extends its counterpart 
-//! in `nicompiler_backend`, maintaining general experiment behaviors and additionally introducing methods 
-//! specific to NI device management.
-//!
-//! ## Where to Start:
-//! **Refer to [`nicompiler_backend`] for general implementations unrelated to defining NI streaming behavior. 
-//!
-//! - **Experiment Design and Control:** The [`experiment`] module provides implementation of how device tasks 
-//! are concurrently streamed. 
-//!
-//! - **Device Management:** The [`device`] module provides implementation of streaming and synchronization behavior. 
-//!
-//! - **NI-DAQmx Operations:** The [`nidaqmx`] module provides Rust wrapper methods for calling the 
-//!   NI-DAQmx C library, translating functionalities for seamless NI device operations.
-//!
-//! - **Utilities:** For general utilities and helper functionalities, explore the [`utils`] module.
 
 
 use pyo3::prelude::*;

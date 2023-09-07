@@ -1,5 +1,6 @@
 use std::cmp::min;
 
+/// Helps keep track of a position within a defined range. Used for repetitions during streaming. 
 pub struct StreamCounter {
     pos: usize,
     end_pos: usize,
