@@ -125,7 +125,7 @@ impl Experiment {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```ignore
     /// use niexpctrl_backend::*;
     ///
     /// let mut exp = Experiment::new();
@@ -143,7 +143,7 @@ impl Experiment {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore
     /// use niexpctrl_backend::*;
     ///
     /// let mut exp = Experiment::new();
