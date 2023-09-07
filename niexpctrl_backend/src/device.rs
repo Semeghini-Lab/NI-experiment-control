@@ -10,8 +10,7 @@
 //!
 //! The [`StreamableDevice`] trait extends the [`nicompiler_backend::BaseDevice`] trait,
 //! adding [`StreamableDevice::stream_task`] that allow for the streaming of instruction signals
-//! onto specified NI-DAQ devices. This implementation uses [`nidaqmx`] to interact with the NI-DAQmx driver,
-//! and [`utils`] to manage synchronization with semaphores.
+//! onto specified NI-DAQ devices.
 //!
 //! ## Key Components:
 //!

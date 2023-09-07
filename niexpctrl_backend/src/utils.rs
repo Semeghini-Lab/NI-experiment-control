@@ -6,9 +6,33 @@ pub struct StreamCounter {
     interval: usize,
 }
 
-// Keeps track of marching interval at specified "interval".
-// Upon reaching the end, starts from the beginning again
+/// `StreamCounter` is a utility struct that keeps track of a position within a defined range.
+/// This position advances in intervals, and when it reaches the end of the range, it wraps around
+/// to the beginning.
+///
+/// # Examples
+///
+/// ```
+/// use niexpctrl_backend::StreamCounter;
+/// let mut counter = StreamCounter::new(10, 3);
+/// 
+/// assert_eq!(counter.tick_next(), (0, 3));
+/// assert_eq!(counter.tick_next(), (3, 6));
+/// assert_eq!(counter.tick_next(), (6, 9));
+/// assert_eq!(counter.tick_next(), (9, 10));
+/// assert_eq!(counter.tick_next(), (0, 3));
+/// ```
 impl StreamCounter {
+    /// Creates a new `StreamCounter` with a specified end position and interval.
+    ///
+    /// # Parameters
+    ///
+    /// * `end_pos`: The end position of the range. This is exclusive.
+    /// * `interval`: The interval at which the position advances.
+    ///
+    /// # Returns
+    ///
+    /// A new `StreamCounter`.
     pub fn new(end_pos: usize, interval: usize) -> Self {
         Self {
             pos: 0,
@@ -17,14 +41,31 @@ impl StreamCounter {
         }
     }
 
+    /// Calculates the next position based on the current position and the interval.
+    /// If the calculated position exceeds or equals `end_pos`, it returns `end_pos`.
+    ///
+    /// # Returns
+    ///
+    /// The next position.
     pub fn next_pos(&mut self) -> usize {
         min(self.pos + self.interval, self.end_pos)
     }
 
+    /// Gets the current position.
+    ///
+    /// # Returns
+    ///
+    /// The current position.
     pub fn pos(&self) -> usize {
         self.pos
     }
 
+    /// Advances the position by the interval and returns a tuple of the current position and the next position.
+    /// If the position reaches `end_pos`, it wraps around to the beginning.
+    ///
+    /// # Returns
+    ///
+    /// A tuple of the form `(current_position, next_position)`.
     pub fn tick_next(&mut self) -> (usize, usize) {
         let result = (self.pos(), self.next_pos());
         self.pos = self.next_pos();
@@ -37,6 +78,34 @@ impl StreamCounter {
 
 use std::sync::{Condvar, Mutex};
 
+/// `Semaphore` is a synchronization primitive that controls access to a shared resource
+/// by multiple threads. It maintains a count, which is decremented by the `acquire` method
+/// and incremented by the `release` method. When the count is 0, the `acquire` method will block 
+/// until another thread calls `release`.
+///
+/// # Examples
+///
+/// ```
+/// use std::thread;
+/// use std::sync::Arc;
+/// use niexpctrl_backend::Semaphore;
+///
+/// let semaphore = Arc::new(Semaphore::new(1)); // Only one thread can access the critical section
+/// let mut handles = vec![];
+///
+/// for _ in 0..5 {
+///     let sem_clone = Arc::clone(&semaphore);
+///     handles.push(thread::spawn(move || {
+///         sem_clone.acquire();
+///         // critical section
+///         sem_clone.release();
+///     }));
+/// }
+///
+/// for handle in handles {
+///     handle.join().unwrap();
+/// }
+/// ```
 pub struct Semaphore {
     count: Mutex<i32>,
     condition: Condvar,
