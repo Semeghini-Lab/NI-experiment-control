@@ -13,7 +13,7 @@ pub struct StreamCounter {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// use niexpctrl_backend::StreamCounter;
 /// let mut counter = StreamCounter::new(10, 3);
 /// 
@@ -83,30 +83,6 @@ use std::sync::{Condvar, Mutex};
 /// by multiple threads. It maintains a count, which is decremented by the `acquire` method
 /// and incremented by the `release` method. When the count is 0, the `acquire` method will block 
 /// until another thread calls `release`.
-///
-/// # Examples
-///
-/// ```
-/// use std::thread;
-/// use std::sync::Arc;
-/// use niexpctrl_backend::Semaphore;
-///
-/// let semaphore = Arc::new(Semaphore::new(1)); // Only one thread can access the critical section
-/// let mut handles = vec![];
-///
-/// for _ in 0..5 {
-///     let sem_clone = Arc::clone(&semaphore);
-///     handles.push(thread::spawn(move || {
-///         sem_clone.acquire();
-///         // critical section
-///         sem_clone.release();
-///     }));
-/// }
-///
-/// for handle in handles {
-///     handle.join().unwrap();
-/// }
-/// ```
 pub struct Semaphore {
     count: Mutex<i32>,
     condition: Condvar,

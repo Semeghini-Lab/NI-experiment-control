@@ -70,3 +70,20 @@ Task Name: _unnamedTask<1>
 
 Status Code: -200846
 
+DAQmx Error: Specified route cannot be satisfied, because the hardware does not support it.
+Property: DAQmx_SampClk_Src
+Requested Value: PXI1_Trig7
+Suggested Values: PFI4, RTSI7, PXI_Star, PXIe_DSTARA
+
+Task Name: _unnamedTask<0>
+
+Status Code: -89136
+DAQmx Error: Destination terminal to be routed could not be found on the device.
+Make sure the terminal name is valid for the specified device. Refer to Measurement & Automation Explorer or your hardware documentation for valid terminal names.
+Property: DAQmx_Exported_10MHzRefClk_OutputTerm
+Destination Device: PXI1Slot3
+Destination Terminal: PXI1_Trig7
+
+Task Name: _unnamedTask<1>
+
+Status Code: -89121

@@ -44,7 +44,7 @@
 //! stream the experiment with a streaming buffer of 50ms, and two repetitions. 
 //! Refer to [`StreamableDevice::stream_task`] for more detailed information on streaming behavior. 
 //! ```
-//! use nicompiler_backend::*;
+//! use niexpctrl_backend::*;
 //! let mut exp = Experiment::new();
 //! // Define devices and associated channels
 //! exp.add_ao_device("PXI1Slot3", 1e6);
@@ -132,11 +132,11 @@ pub mod experiment;
 pub mod nidaqmx;
 pub mod utils;
 
-pub use crate::experiment::*;
+pub use crate::experiment::Experiment;
 pub use crate::device::*;
 pub use crate::nidaqmx::*;
 pub use crate::utils::*;
-use nicompiler_backend::*;
+pub use nicompiler_backend::*;
 
 #[pymodule]
 fn niexpctrl_backend(_py: Python, m: &PyModule) -> PyResult<()> {
