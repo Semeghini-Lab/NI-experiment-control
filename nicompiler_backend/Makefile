@@ -22,6 +22,7 @@ export_optimized:
 
 publish: 
 	@echo "Updating tests, docs, and exporting to python, and publishing crate"
+	git add .
 	git commit -am "publish update" && git push 
 	cargo fmt && cargo doc && cargo test 
 	maturin develop --release

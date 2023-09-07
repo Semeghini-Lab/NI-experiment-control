@@ -94,11 +94,11 @@
 //! ```
 //!
 //! ### Python
-//! Functionally the same code, additionally samples and plots the signal for `PXI1Slot6/port0/line4`. 
-//! The primary goal of the `Experiment` object is to expose a complete set of fast rust-implemented methods 
-//! for interfacing with a NI experiment. One may easily customize syntactic sugar and higher-level abstractions 
-//! by wrapping `nicompiler_backend` module in another layer of python code, 
-//! see our [project page](https://github.com/nlyu1/NI-experiment-control) for one such example. 
+//! Functionally the same code, additionally samples and plots the signal for `PXI1Slot6/port0/line4`.
+//! The primary goal of the `Experiment` object is to expose a complete set of fast rust-implemented methods
+//! for interfacing with a NI experiment. One may easily customize syntactic sugar and higher-level abstractions
+//! by wrapping `nicompiler_backend` module in another layer of python code,
+//! see our [project page](https://github.com/nlyu1/NI-experiment-control) for one such example.
 //! ```Python
 //! # Instantiate experiment, define devices and channels
 //! from nicompiler_backend import Experiment
