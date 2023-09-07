@@ -135,10 +135,7 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
                 sem.release(); // Release the semaphore to restore count to 1, in preparation for the next run.
             }
             task.start();
-            timer_.tick_print(&format!(
-                "{} start (restart) overhead",
-                self.name()
-            ));
+            timer_.tick_print(&format!("{} start (restart) overhead", self.name()));
             if !self.export_trig().unwrap_or(true) {
                 sem.release();
             }
@@ -190,20 +187,12 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
             TaskType::AO => {
                 // Require compiled, streamable channels
                 self.compiled_channels(true, false).iter().for_each(|chan| {
-                    task.create_ao_chan(&format!(
-                        "/{}/{}",
-                        &self.name(),
-                        chan.name()
-                    ));
+                    task.create_ao_chan(&format!("/{}/{}", &self.name(), chan.name()));
                 });
             }
             TaskType::DO => {
                 self.compiled_channels(true, false).iter().for_each(|chan| {
-                    task.create_do_chan(&format!(
-                        "/{}/{}",
-                        &self.name(),
-                        chan.name()
-                    ));
+                    task.create_do_chan(&format!("/{}/{}", &self.name(), chan.name()));
                 });
             }
         }
@@ -242,11 +231,9 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
                     DAQMX_VAL_STARTTRIGGER,
                     &format!("/{}/{}", &self.name(), trig_line),
                 ),
-                false => task.cfg_dig_edge_start_trigger(&format!(
-                    "/{}/{}",
-                    &self.name(),
-                    trig_line,
-                )),
+                false => {
+                    task.cfg_dig_edge_start_trigger(&format!("/{}/{}", &self.name(), trig_line,))
+                }
             }
         };
         // Configure reference clock behavior

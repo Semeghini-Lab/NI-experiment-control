@@ -1,48 +1,48 @@
 //! # `niexpctrl_backend` - NI Experiment Control and Streaming
 //!
-//! `niexpctrl_backend` provides a seamless interface to control and stream experiments involving 
-//! National Instruments (NI) devices. It extends the foundational functionalities of the [`nicompiler_backend`] crate 
-//! to define interaction behavior with NI hardware, while maintaining an optimized and user-friendly 
+//! `niexpctrl_backend` provides a seamless interface to control and stream experiments involving
+//! National Instruments (NI) devices. It extends the foundational functionalities of the [`nicompiler_backend`] crate
+//! to define interaction behavior with NI hardware, while maintaining an optimized and user-friendly
 //! interface for its users.
 //!
 //! ## Core Functionalities:
 //!
-//! - **NI Device Streaming and Control:** With the `experiment` module, users can access a refined 
-//!   version of the `Experiment` struct from `nicompiler_backend` that incorporates NI-specific 
+//! - **NI Device Streaming and Control:** With the `experiment` module, users can access a refined
+//!   version of the `Experiment` struct from `nicompiler_backend` that incorporates NI-specific
 //!   functionalities, enabling direct streaming to NI devices and their resets.
 //!
-//! - **NI-DAQmx Specific Operations:** The `nidaqmx` module offers a suite of functionalities 
+//! - **NI-DAQmx Specific Operations:** The `nidaqmx` module offers a suite of functionalities
 //!   that interfaces with the NI-DAQmx C library, translating Rust calls into NI-DAQmx specific tasks.
 //!
-//! - **Utilities and Helpers:** The `utils` module provides additional utilities and helper functions. 
-//! 
+//! - **Utilities and Helpers:** The `utils` module provides additional utilities and helper functions.
+//!
 //!
 //! ## Integration with `nicompiler_backend`:
 //!
-//! This crate is designed to be a natural extension of [`nicompiler_backend`]. 
-//! The primary [`Experiment`] struct depends on, and extends its counterpart 
-//! in `nicompiler_backend`, maintaining general experiment behaviors and additionally introducing methods 
+//! This crate is designed to be a natural extension of [`nicompiler_backend`].
+//! The primary [`Experiment`] struct depends on, and extends its counterpart
+//! in `nicompiler_backend`, maintaining general experiment behaviors and additionally introducing methods
 //! specific to NI device management.
-//! **Refer to [`nicompiler_backend`] for general implementations unrelated to NI streaming behavior**. 
+//! **Refer to [`nicompiler_backend`] for general implementations unrelated to NI streaming behavior**.
 //!
 //! ## Where to Start:
-//! - **Experiment Design and Control:** The [`experiment`] module provides implementation of how device tasks 
-//! are concurrently streamed. 
+//! - **Experiment Design and Control:** The [`experiment`] module provides implementation of how device tasks
+//! are concurrently streamed.
 //!
-//! - **Device Management:** The [`device`] module implements streaming and synchronization behavior. 
+//! - **Device Management:** The [`device`] module implements streaming and synchronization behavior.
 //!
-//! - **NI-DAQmx Operations:** The [`nidaqmx`] module provides Rust wrapper methods for calling the 
+//! - **NI-DAQmx Operations:** The [`nidaqmx`] module provides Rust wrapper methods for calling the
 //!   NI-DAQmx C library, translating functionalities for seamless NI device operations.
 //!
 //! - **Utilities:** For general utilities and helper functionalities, explore the [`utils`] module.
-//! 
-//! ## Example usage with streaming 
+//!
+//! ## Example usage with streaming
 //! ### Rust
 //! Recall the same example snippet from [`nicompiler_backend`].
-//! 
-//! We additionally call `exp.stream_exp(50., 2);` after the experiment has been designed and compiled to 
-//! stream the experiment with a streaming buffer of 50ms, and two repetitions. 
-//! Refer to [`StreamableDevice::stream_task`] for more detailed information on streaming behavior. 
+//!
+//! We additionally call `exp.stream_exp(50., 2);` after the experiment has been designed and compiled to
+//! stream the experiment with a streaming buffer of 50ms, and two repetitions.
+//! Refer to [`StreamableDevice::stream_task`] for more detailed information on streaming behavior.
 //! ```
 //! use niexpctrl_backend::*;
 //! let mut exp = Experiment::new();
@@ -87,16 +87,16 @@
 //!
 //! exp.compile_with_stoptime(10.); // Experiment signal will stop at t=10 now
 //! assert_eq!(exp.compiled_stop_time(), 10.);
-//! 
-//! exp.stream_exp(50., 2); 
+//!
+//! exp.stream_exp(50., 2);
 //! ```
-//! 
+//!
 //! ### Python
-//! Functionally the same code, additionally samples and plots the signal for `PXI1Slot6/port0/line4`. 
-//! The primary goal of the `Experiment` object is to expose a complete set of fast rust-implemented methods 
-//! for interfacing with a NI experiment. One may easily customize syntactic sugar and higher-level abstractions 
-//! by wrapping `nicompiler_backend` module in another layer of python code, 
-//! see our [project page](https://github.com/nlyu1/NI-experiment-control) for one such example. 
+//! Functionally the same code, additionally samples and plots the signal for `PXI1Slot6/port0/line4`.
+//! The primary goal of the `Experiment` object is to expose a complete set of fast rust-implemented methods
+//! for interfacing with a NI experiment. One may easily customize syntactic sugar and higher-level abstractions
+//! by wrapping `nicompiler_backend` module in another layer of python code,
+//! see our [project page](https://github.com/nlyu1/NI-experiment-control) for one such example.
 //! ```Python
 //! # Instantiate experiment, define devices and channels
 //! from nicompiler_backend import Experiment
@@ -124,7 +124,6 @@
 //! exp.stream_exp(50., 2)
 //! ```
 
-
 use pyo3::prelude::*;
 
 pub mod device;
@@ -132,8 +131,8 @@ pub mod experiment;
 pub mod nidaqmx;
 pub mod utils;
 
-pub use crate::experiment::Experiment;
 pub use crate::device::*;
+pub use crate::experiment::Experiment;
 pub use crate::nidaqmx::*;
 pub use crate::utils::*;
 pub use nicompiler_backend::*;

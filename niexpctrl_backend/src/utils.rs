@@ -1,6 +1,6 @@
 use std::cmp::min;
 
-/// Helps keep track of a position within a defined range. Used for repetitions during streaming. 
+/// Helps keep track of a position within a defined range. Used for repetitions during streaming.
 pub struct StreamCounter {
     pos: usize,
     end_pos: usize,
@@ -16,7 +16,7 @@ pub struct StreamCounter {
 /// ```ignore
 /// use niexpctrl_backend::StreamCounter;
 /// let mut counter = StreamCounter::new(10, 3);
-/// 
+///
 /// assert_eq!(counter.tick_next(), (0, 3));
 /// assert_eq!(counter.tick_next(), (3, 6));
 /// assert_eq!(counter.tick_next(), (6, 9));
@@ -81,7 +81,7 @@ use std::sync::{Condvar, Mutex};
 
 /// `Semaphore` is a synchronization primitive that controls access to a shared resource
 /// by multiple threads. It maintains a count, which is decremented by the `acquire` method
-/// and incremented by the `release` method. When the count is 0, the `acquire` method will block 
+/// and incremented by the `release` method. When the count is 0, the `acquire` method will block
 /// until another thread calls `release`.
 pub struct Semaphore {
     count: Mutex<i32>,

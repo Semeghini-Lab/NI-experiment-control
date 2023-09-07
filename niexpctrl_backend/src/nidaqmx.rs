@@ -9,8 +9,8 @@
 //!
 //! Additionally, the module provides utility functions like [`daqmx_call`] and [`reset_ni_device`] to
 //! simplify error handling and device interactions.
-//! 
-//! **Refer to implementations of the [`NiTask`] struct to see the wrapped methods and invoked 
+//!
+//! **Refer to implementations of the [`NiTask`] struct to see the wrapped methods and invoked
 //! [DAQmx C-functions](https://www.ni.com/docs/en-US/bundle/ni-daqmx-c-api-ref/page/cdaqmx/help_file_title.html)**
 //!
 //! ## Usage
@@ -339,8 +339,8 @@ impl NiTask {
     }
 
     pub fn create_ao_chan(&self, name: &str) {
-        let name_cstr = std::ffi::CString::new(name)
-            .expect("Failed to convert physical name to CString");
+        let name_cstr =
+            std::ffi::CString::new(name).expect("Failed to convert physical name to CString");
         let assigned_name_cstr = std::ffi::CString::new("").expect("");
         daqmx_call(|| unsafe {
             DAQmxCreateAOVoltageChan(
@@ -356,8 +356,8 @@ impl NiTask {
     }
 
     pub fn create_do_chan(&self, name: &str) {
-        let name_cstr = std::ffi::CString::new(name)
-            .expect("Failed to convert physical name to CString");
+        let name_cstr =
+            std::ffi::CString::new(name).expect("Failed to convert physical name to CString");
         let assigned_name_cstr = std::ffi::CString::new("").expect("");
         daqmx_call(|| unsafe {
             DAQmxCreateDOChan(
