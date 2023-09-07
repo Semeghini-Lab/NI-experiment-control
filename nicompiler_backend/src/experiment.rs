@@ -711,7 +711,7 @@ pub trait BaseExperiment {
     /// Before delegating the configuration to its base method [`BaseDevice::cfg_trig`], this method
     /// performs a synchronization check to ensure:
     ///
-    /// If the current device is set to export a trigger (`export_trig` is `true`), then no other device 
+    /// If the current device is set to export a trigger (`export_trig` is `true`), then no other device
     /// in the experiment should already be exporting a trigger (`export_trig` should be `None` for all other devices).
     ///
     /// The experiment can only have one device that exports triggers at any given time.
@@ -728,11 +728,16 @@ pub trait BaseExperiment {
     ///
     /// See also: [`BaseDevice::cfg_trig`]
     fn device_cfg_trig(&mut self, dev_name: &str, trig_line: &str, export_trig: bool) {
-        assert!(!export_trig || 
-            (export_trig && self.devices().values().all(|dev| 
-                dev.export_trig().is_none())), 
+        assert!(
+            !export_trig
+                || (export_trig
+                    && self
+                        .devices()
+                        .values()
+                        .all(|dev| dev.export_trig().is_none())),
             "Device {} cannot export triggers since another device already exports triggers.",
-            dev_name);
+            dev_name
+        );
         self.device_op(dev_name, |dev| (*dev).cfg_trig(trig_line, export_trig))
     }
 

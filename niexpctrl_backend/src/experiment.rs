@@ -1,8 +1,8 @@
-//! Extends the functionalities of an [`Experiment`] struct to enable streaming on NI devices. 
-//! 
-//! This modules defines another `Experiment` struct which 
-//! implements [`Experiment::stream_exp`] method in addition to 
-//! the [`nicompiler_backend::BaseExperiment`] trait. 
+//! Extends the functionalities of an [`Experiment`] struct to enable streaming on NI devices.
+//!
+//! This modules defines another `Experiment` struct which
+//! implements [`Experiment::stream_exp`] method in addition to
+//! the [`nicompiler_backend::BaseExperiment`] trait.
 
 use numpy;
 use pyo3::prelude::*;
@@ -25,10 +25,10 @@ impl_exp_boilerplate!(Experiment);
 
 #[pymethods]
 impl Experiment {
-    /// A multi-threading wrapper for concurrent device streaming behavior: 
-    /// Starts a thread for each compiled device within the experiment and invokes the 
+    /// A multi-threading wrapper for concurrent device streaming behavior:
+    /// Starts a thread for each compiled device within the experiment and invokes the
     /// [`StreamableDevice::stream_task`] method (refer to the method for more information on device behavior)
-    /// Lightweight, self-contained and safe parallelization. 
+    /// Lightweight, self-contained and safe parallelization.
     pub fn stream_exp(&self, stream_buftime: f64, nreps: usize) {
         // Simple parallelization: invoke stream_task for every device
         let sem_shared = Arc::new(Semaphore::new(1));

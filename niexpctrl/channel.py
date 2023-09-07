@@ -38,6 +38,10 @@ class BaseChanProxy:
         )
 
     def calc_signal(self, t_start=None, t_end=None, nsamps=1000):
+
+        # FixMe[Rust]: panic message `PanicException: Attempting to calculate signal on not-compiled channel ao0`
+        #  - add card_max_name to know which card this is about
+
         # ToDo: figure out details of edit_cache/compile_cache.
         #  `self._dll.is_fresh_compiled()` may still give True even after introducing changes???
         # if not self._dll.is_fresh_compiled():
@@ -82,7 +86,7 @@ class AOChanProxy(BaseChanProxy):
     def chan_name(self):
         return f'ao{self.chan_idx}'
 
-    def constant(self, t, val):
+    def constant(self, t, dur, val, keep_val=False):
         # FixMe[Rust]: remove `duration` and `keep_val` arguments.
         #  @Nich: Is it possible to do in Rust? Or is it better to wrap it here? How?
         #  Details:
@@ -91,14 +95,25 @@ class AOChanProxy(BaseChanProxy):
         #  Instead of using `duration` + `keep_val`,
         #  user would better just call `constant(t+duration, new_val)`
 
-        raise NotImplementedError
-
-        return self._dll.constant(
-            dev_name=self._card_max_name,  # FixMe[Rust]: change `dev_name` to `max_name`
+        self._dll.constant(
+            dev_name=self._card_max_name,
             chan_name=self.chan_name,
             t=t,
-            value=val  # FixMe[Rust]: change `value` to `val`
+            duration=dur,
+            value=val,
+            keep_val=keep_val
         )
+
+        return dur
+
+        # raise NotImplementedError
+        #
+        # return self._dll.constant(
+        #     dev_name=self._card_max_name,  # FixMe[Rust]: change `dev_name` to `max_name`
+        #     chan_name=self.chan_name,
+        #     t=t,
+        #     value=val  # FixMe[Rust]: change `value` to `val`
+        # )
 
     def sine(self, t, dur, amp, freq, phase=0, dc_offs=0, keep_val=False):
         # ToDo: try adding dur=None - when you just say "keep playing sine until further instructions"

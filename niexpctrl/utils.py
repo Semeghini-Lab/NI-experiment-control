@@ -16,6 +16,14 @@ except ImportError:
 
 
 class RendOption:
+
+    # Available renderers (from https://plotly.com/python/renderers/):
+    #         ['plotly_mimetype', 'jupyterlab', 'nteract', 'vscode',
+    #          'notebook', 'notebook_connected', 'kaggle', 'azure', 'colab',
+    #          'cocalc', 'databricks', 'json', 'png', 'jpeg', 'jpg', 'svg',
+    #          'pdf', 'browser', 'firefox', 'chrome', 'chromium', 'iframe',
+    #          'iframe_connected', 'sphinx_gallery', 'sphinx_gallery_png']
+
     browser = 'browser'
     notebook = 'notebook'
 
@@ -26,6 +34,7 @@ def iplot(chan_list, t_start=None, t_end=None, nsamps=1000, renderer='browser', 
         raise ImportError('Plotly package is not installed. Run `pip install plotly` to get it.')
 
     chan_num = len(chan_list)
+    nsamps = int(nsamps)
 
     fig = make_subplots(
         rows=len(chan_list),
