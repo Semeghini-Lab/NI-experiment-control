@@ -91,7 +91,7 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         assert!(
             self.is_compiled(),
             "Compile device {} before streaming",
-            self.physical_name()
+            self.name()
         );
 
         // (Not-done) trick: in principle, calculation of the first signal can be done independently of daqmx setup
@@ -120,14 +120,14 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         self.cfg_clk_sync(&task, &seq_len);
         timer.tick_print(&format!(
             "{} cfg (task channels, buffers, clk & sync)",
-            self.physical_name()
+            self.name()
         ));
 
         // Obtain the first signal (optional: from parallel thread), and do first bufwrite
         let signal = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
-        timer.tick_print(&format!("{} wait to receive signal", self.physical_name()));
+        timer.tick_print(&format!("{} wait to receive signal", self.name()));
         bufwrite(signal);
-        timer.tick_print(&format!("{} bufwrite", self.physical_name()));
+        timer.tick_print(&format!("{} bufwrite", self.name()));
 
         for _rep in 0..nreps {
             // For every repetition, make sure the primary device starts last
@@ -138,7 +138,7 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
             task.start();
             timer_.tick_print(&format!(
                 "{} start (restart) overhead",
-                self.physical_name()
+                self.name()
             ));
             if !self.export_trig().unwrap_or(true) {
                 sem.release();
@@ -156,12 +156,12 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
                 let signal_next_start =
                     self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
                 task.wait_until_done(stream_buftime * 2. / 1000.);
-                timer_.tick_print(&format!("{} end", self.physical_name()));
+                timer_.tick_print(&format!("{} end", self.name()));
                 task.stop();
                 bufwrite(signal_next_start);
             } else {
                 task.wait_until_done(stream_buftime * 2. / 1000.);
-                timer_.tick_print(&format!("{} end", self.physical_name()));
+                timer_.tick_print(&format!("{} end", self.name()));
                 task.stop();
             }
         }
@@ -193,8 +193,8 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
                 self.compiled_channels(true, false).iter().for_each(|chan| {
                     task.create_ao_chan(&format!(
                         "/{}/{}",
-                        &self.physical_name(),
-                        chan.physical_name()
+                        &self.name(),
+                        chan.name()
                     ));
                 });
             }
@@ -202,8 +202,8 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
                 self.compiled_channels(true, false).iter().for_each(|chan| {
                     task.create_do_chan(&format!(
                         "/{}/{}",
-                        &self.physical_name(),
-                        chan.physical_name()
+                        &self.name(),
+                        chan.name()
                     ));
                 });
             }
@@ -241,11 +241,11 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
             match self.export_trig().unwrap() {
                 true => task.export_signal(
                     DAQMX_VAL_STARTTRIGGER,
-                    &format!("/{}/{}", &self.physical_name(), trig_line),
+                    &format!("/{}/{}", &self.name(), trig_line),
                 ),
                 false => task.cfg_dig_edge_start_trigger(&format!(
                     "/{}/{}",
-                    &self.physical_name(),
+                    &self.name(),
                     trig_line,
                 )),
             }

@@ -117,7 +117,7 @@ pub trait BaseExperiment {
     ///
     /// # Arguments
     ///
-    /// * `dev_name`: Name of the device to check.
+    /// * `name`: Name of the device to check.
     ///
     /// # Panics
     ///
@@ -134,11 +134,11 @@ pub trait BaseExperiment {
     /// // This will panic
     /// // exp.assert_has_device("PXI1Slot5");
     /// ```
-    fn assert_has_device(&self, dev_name: &str) {
+    fn assert_has_device(&self, name: &str) {
         assert!(
-            self.devices().contains_key(dev_name),
+            self.devices().contains_key(name),
             "Physical device {} not found. Registered devices are {:?}",
-            dev_name,
+            name,
             self.devices().keys().collect::<Vec<_>>()
         );
     }
@@ -154,7 +154,7 @@ pub trait BaseExperiment {
     ///
     /// # Arguments
     ///
-    /// * `dev_name`: Name of the device to look into.
+    /// * `name`: Name of the device to look into.
     /// * `chan_name`: Name of the channel to check within the specified device.
     ///
     /// # Panics
@@ -176,14 +176,14 @@ pub trait BaseExperiment {
     /// ```
     ///
     /// [`assert_has_device`]: BaseExperiment::assert_has_device
-    fn assert_device_has_channel(&self, dev_name: &str, chan_name: &str) {
-        self.assert_has_device(dev_name);
-        let device = self.devices().get(dev_name).unwrap();
+    fn assert_device_has_channel(&self, name: &str, chan_name: &str) {
+        self.assert_has_device(name);
+        let device = self.devices().get(name).unwrap();
         assert!(
             device.channels().contains_key(chan_name),
             "Channel name {} not found in device {}. Registered channels are: {:?}",
             chan_name,
-            dev_name,
+            name,
             device.channels().keys().collect::<Vec<_>>()
         );
     }
@@ -202,14 +202,14 @@ pub trait BaseExperiment {
     /// This method will panic if a device with the same name as the provided `dev` is already registered in the experiment.
     fn add_device_base(&mut self, dev: Device) {
         // Duplicate check
-        let dev_name = dev.physical_name();
+        let name = dev.name();
         assert!(
-            !self.devices().contains_key(dev_name),
+            !self.devices().contains_key(name),
             "Device {} already registered. Registered devices are {:?}",
-            dev_name,
+            name,
             self.devices().keys().collect::<Vec<_>>()
         );
-        self.devices_().insert(dev_name.to_string(), dev);
+        self.devices_().insert(name.to_string(), dev);
     }
 
     /// Registers an Analog Output (AO) device to the experiment.
@@ -219,7 +219,7 @@ pub trait BaseExperiment {
     ///
     /// # Arguments
     ///
-    /// * `physical_name`: A string slice that holds the name of the AO device.
+    /// * `name`: A string slice that holds the name of the AO device.
     /// * `samp_rate`: Sampling rate for the AO device.
     ///
     /// # Example
@@ -230,8 +230,8 @@ pub trait BaseExperiment {
     /// // Adding the same device again, even with different parameters, will cause panic
     /// // exp.add_ao_device("PXI1Slot6", 1e7);
     /// ```
-    fn add_ao_device(&mut self, physical_name: &str, samp_rate: f64) {
-        self.add_device_base(Device::new(physical_name, TaskType::AO, samp_rate));
+    fn add_ao_device(&mut self, name: &str, samp_rate: f64) {
+        self.add_device_base(Device::new(name, TaskType::AO, samp_rate));
     }
 
     /// Registers a Digital Output (DO) device to the experiment.
@@ -240,7 +240,7 @@ pub trait BaseExperiment {
     ///
     /// # Arguments
     ///
-    /// * `physical_name`: A string slice that holds the name of the DO device.
+    /// * `name`: A string slice that holds the name of the DO device.
     /// * `samp_rate`: Sampling rate for the DO device.
     ///
     /// # Example
@@ -251,8 +251,8 @@ pub trait BaseExperiment {
     /// // Adding the same device name will cause panic
     /// exp.add_do_device("PXI1Slot7", 1e7);
     /// ```
-    fn add_do_device(&mut self, physical_name: &str, samp_rate: f64) {
-        self.add_device_base(Device::new(physical_name, TaskType::DO, samp_rate));
+    fn add_do_device(&mut self, name: &str, samp_rate: f64) {
+        self.add_device_base(Device::new(name, TaskType::DO, samp_rate));
     }
 
     /// Retrieves the latest `edit_stop_time` from all registered devices.
@@ -435,13 +435,13 @@ pub trait BaseExperiment {
     ///
     /// # Arguments
     ///
-    /// * `dev_name`: The name of the target device.
+    /// * `name`: The name of the target device.
     /// * `task_type`: The expected `TaskType` of the device.
     /// * `f`: A closure that defines the operation to be performed on the device. It should accept a mutable reference to a `Device` and return a value of type `R`.
     ///
     /// # Panics
     ///
-    /// 1. If a device with the given `dev_name` doesn't exist.
+    /// 1. If a device with the given `name` doesn't exist.
     /// 2. If the device's task type doesn't match the provided `task_type`.
     ///
     /// # Returns
@@ -458,18 +458,18 @@ pub trait BaseExperiment {
     /// // This will panic, since we're requiring that PXI1Slot6 be DO
     /// // exp.typed_device_op("PXI1Slot6", TaskType::DO, |dev| dev.clear_compile_cache());
     /// ```
-    fn typed_device_op<F, R>(&mut self, dev_name: &str, task_type: TaskType, mut f: F) -> R
+    fn typed_device_op<F, R>(&mut self, name: &str, task_type: TaskType, mut f: F) -> R
     where
         F: FnMut(&mut Device) -> R,
     {
         // This helper function performs checks and asserts the required device type
         // then executes closure `f` on the specified device
-        self.assert_has_device(dev_name);
-        let dev = self.devices_().get_mut(dev_name).unwrap();
+        self.assert_has_device(name);
+        let dev = self.devices_().get_mut(name).unwrap();
         assert!(
             dev.task_type() == task_type,
             "Device {} is incompatible with instruction",
-            dev_name
+            name
         );
         f(dev)
     }
@@ -481,24 +481,24 @@ pub trait BaseExperiment {
     ///
     /// # Arguments
     ///
-    /// * `dev_name`: The name of the target device.
+    /// * `name`: The name of the target device.
     /// * `f`: A closure that defines the operation to be performed on the device. It should accept a mutable reference to a `Device` and return a value of type `R`.
     ///
     /// # Panics
     ///
-    /// If a device with the given `dev_name` doesn't exist.
+    /// If a device with the given `name` doesn't exist.
     ///
     /// # Returns
     ///
     /// The return value of the closure `f`.
-    fn device_op<F, R>(&mut self, dev_name: &str, mut f: F) -> R
+    fn device_op<F, R>(&mut self, name: &str, mut f: F) -> R
     where
         F: FnMut(&mut Device) -> R,
     {
         // This helper function performs checks (existence of device) then performs closure)
         // Type-agnostic variant of typed_device_op
-        self.assert_has_device(dev_name);
-        let dev = self.devices_().get_mut(dev_name).unwrap();
+        self.assert_has_device(name);
+        let dev = self.devices_().get_mut(name).unwrap();
         f(dev)
     }
 
@@ -510,14 +510,14 @@ pub trait BaseExperiment {
     ///
     /// # Arguments
     ///
-    /// * `dev_name`: The name of the parent device.
+    /// * `name`: The name of the parent device.
     /// * `chan_name`: The name of the target channel within the device.
     /// * `task_type`: The expected `TaskType` of the parent device.
     /// * `f`: A closure that defines the operation to be performed on the channel. It should accept a mutable reference to a `Channel` and return a value of type `R`.
     ///
     /// # Panics
     ///
-    /// 1. If a device with the given `dev_name` doesn't exist.
+    /// 1. If a device with the given `name` doesn't exist.
     /// 2. If the channel with the given `chan_name` doesn't exist within the device.
     /// 3. If the device's task type doesn't match the provided `task_type`.
     ///
@@ -537,7 +537,7 @@ pub trait BaseExperiment {
     /// ```
     fn typed_channel_op<F, R>(
         &mut self,
-        dev_name: &str,
+        name: &str,
         chan_name: &str,
         task_type: TaskType,
         mut f: F,
@@ -547,12 +547,12 @@ pub trait BaseExperiment {
     {
         // This helper function performs checks and asserts the required device type
         // then executes closure `f` on the specified channel
-        self.assert_device_has_channel(dev_name, chan_name);
-        let dev = self.devices_().get_mut(dev_name).unwrap();
+        self.assert_device_has_channel(name, chan_name);
+        let dev = self.devices_().get_mut(name).unwrap();
         assert!(
             dev.task_type() == task_type,
             "Channel {}/{} is incompatible with instruction",
-            dev_name,
+            name,
             chan_name
         );
         let chan = dev.channels_().get_mut(chan_name).unwrap();
@@ -566,27 +566,27 @@ pub trait BaseExperiment {
     ///
     /// # Arguments
     ///
-    /// * `dev_name`: The name of the parent device.
+    /// * `name`: The name of the parent device.
     /// * `chan_name`: The name of the target channel within the device.
     /// * `f`: A closure that defines the operation to be performed on the channel. It should accept a mutable reference to a `Channel` and return a value of type `R`.
     ///
     /// # Panics
     ///
-    /// 1. If a device with the given `dev_name` doesn't exist.
+    /// 1. If a device with the given `name` doesn't exist.
     /// 2. If the channel with the given `chan_name` doesn't exist within the device.
     ///
     /// # Returns
     ///
     /// The return value of the closure `f`.
-    fn channel_op<F, R>(&mut self, dev_name: &str, chan_name: &str, mut f: F) -> R
+    fn channel_op<F, R>(&mut self, name: &str, chan_name: &str, mut f: F) -> R
     where
         F: FnMut(&mut Channel) -> R,
     {
         // Type-agnostic variant of typed_channel_op
-        self.assert_device_has_channel(dev_name, chan_name);
+        self.assert_device_has_channel(name, chan_name);
         let chan = self
             .devices_()
-            .get_mut(dev_name)
+            .get_mut(name)
             .unwrap()
             .channels_()
             .get_mut(chan_name)
@@ -604,12 +604,12 @@ pub trait BaseExperiment {
     ///
     /// # Arguments
     ///
-    /// * `dev_name`: The name of the target device.
+    /// * `name`: The name of the target device.
     /// * `channel_id`: The identifier for the AO channel to be added.
     ///
     /// # Panics
     ///
-    /// This method will panic if the device with the provided `dev_name` is not of `TaskType::AO`.
+    /// This method will panic if the device with the provided `name` is not of `TaskType::AO`.
     ///
     /// # Example
     /// ```
@@ -618,8 +618,8 @@ pub trait BaseExperiment {
     /// exp.add_ao_device("PXI1Slot3", 1e6);
     /// exp.add_ao_channel("PXI1Slot3", 0);
     /// ```
-    fn add_ao_channel(&mut self, dev_name: &str, channel_id: usize) {
-        self.typed_device_op(dev_name, TaskType::AO, |dev| {
+    fn add_ao_channel(&mut self, name: &str, channel_id: usize) {
+        self.typed_device_op(name, TaskType::AO, |dev| {
             (*dev).add_channel(&format!("ao{}", channel_id))
         });
     }
@@ -633,13 +633,13 @@ pub trait BaseExperiment {
     ///
     /// # Arguments
     ///
-    /// * `dev_name`: The name of the target device.
+    /// * `name`: The name of the target device.
     /// * `port_id`: The identifier for the digital port.
     /// * `line_id`: The identifier for the digital line within the port.
     ///
     /// # Panics
     ///
-    /// This method will panic if the device with the provided `dev_name` is not of `TaskType::DO`.
+    /// This method will panic if the device with the provided `name` is not of `TaskType::DO`.
     ///
     /// # Example
     /// ```
@@ -648,8 +648,8 @@ pub trait BaseExperiment {
     /// exp.add_do_device("PXI1Slot6", 1e7);
     /// exp.add_do_channel("PXI1Slot6", 0, 0); // adds channel "port0/line0"
     /// ```
-    fn add_do_channel(&mut self, dev_name: &str, port_id: usize, line_id: usize) {
-        self.typed_device_op(dev_name, TaskType::DO, |dev| {
+    fn add_do_channel(&mut self, name: &str, port_id: usize, line_id: usize) {
+        self.typed_device_op(name, TaskType::DO, |dev| {
             (*dev).add_channel(&format!("port{}/line{}", port_id, line_id))
         });
     }
@@ -698,12 +698,12 @@ pub trait BaseExperiment {
     ///
     /// # Arguments
     ///
-    /// * `dev_name` - The name of the device to configure.
+    /// * `name` - The name of the device to configure.
     /// * `src` - The name of the sample clock source.
     ///
     /// See also: [`BaseDevice::cfg_samp_clk_src`]
-    fn device_cfg_samp_clk_src(&mut self, dev_name: &str, src: &str) {
-        self.device_op(dev_name, |dev| (*dev).cfg_samp_clk_src(src))
+    fn device_cfg_samp_clk_src(&mut self, name: &str, src: &str) {
+        self.device_op(name, |dev| (*dev).cfg_samp_clk_src(src))
     }
 
     /// Configures the trigger settings of a device in the experiment while ensuring synchronization.
@@ -711,14 +711,14 @@ pub trait BaseExperiment {
     /// Before delegating the configuration to its base method [`BaseDevice::cfg_trig`], this method
     /// performs a synchronization check to ensure:
     ///
-    /// If the current device is set to export a trigger (`export_trig` is `true`), then no other device 
+    /// If the current device is set to export a trigger (`export_trig` is `true`), then no other device
     /// in the experiment should already be exporting a trigger (`export_trig` should be `None` for all other devices).
     ///
     /// The experiment can only have one device that exports triggers at any given time.
     ///
     /// # Arguments
     ///
-    /// * `dev_name` - The name of the device to configure.
+    /// * `name` - The name of the device to configure.
     /// * `trig_line` - The trigger line identifier.
     /// * `export_trig` - A boolean that determines whether to export or import the trigger.
     ///
@@ -727,13 +727,18 @@ pub trait BaseExperiment {
     /// This method will panic if the synchronization condition related to a device exporting triggers is violated.
     ///
     /// See also: [`BaseDevice::cfg_trig`]
-    fn device_cfg_trig(&mut self, dev_name: &str, trig_line: &str, export_trig: bool) {
-        assert!(!export_trig || 
-            (export_trig && self.devices().values().all(|dev| 
-                dev.export_trig().is_none())), 
+    fn device_cfg_trig(&mut self, name: &str, trig_line: &str, export_trig: bool) {
+        assert!(
+            !export_trig
+                || (export_trig
+                    && self
+                        .devices()
+                        .values()
+                        .all(|dev| dev.export_trig().is_none())),
             "Device {} cannot export triggers since another device already exports triggers.",
-            dev_name);
-        self.device_op(dev_name, |dev| (*dev).cfg_trig(trig_line, export_trig))
+            name
+        );
+        self.device_op(name, |dev| (*dev).cfg_trig(trig_line, export_trig))
     }
 
     /// Configures the reference clock settings of a device in the experiment.
@@ -743,7 +748,7 @@ pub trait BaseExperiment {
     ///
     /// # Arguments
     ///
-    /// * `dev_name` - The name of the device to configure.
+    /// * `name` - The name of the device to configure.
     /// * `ref_clk_line` - The line or channel to import or export the device's reference clock.
     /// * `ref_clk_rate` - The rate of the reference clock in Hz.
     /// * `export_ref_clk` - A boolean that determines whether to export (if `true`) or import (if `false`) the reference clock.
@@ -751,12 +756,12 @@ pub trait BaseExperiment {
     /// See also: [`BaseDevice::cfg_ref_clk`]
     fn device_cfg_ref_clk(
         &mut self,
-        dev_name: &str,
+        name: &str,
         ref_clk_line: &str,
         ref_clk_rate: f64,
         export_ref_clk: bool,
     ) {
-        self.device_op(dev_name, |dev| {
+        self.device_op(name, |dev| {
             (*dev).cfg_ref_clk(ref_clk_line, ref_clk_rate, export_ref_clk)
         })
     }
@@ -770,13 +775,13 @@ pub trait BaseExperiment {
     ///
     /// # Arguments
     ///
-    /// * `dev_name`: The name of the target device.
+    /// * `name`: The name of the target device.
     ///
     /// # Returns
     ///
     /// Returns the edit stop time for the specified device.
-    fn device_edit_stop_time(&mut self, dev_name: &str) -> f64 {
-        self.device_op(dev_name, |dev| (*dev).edit_stop_time())
+    fn device_edit_stop_time(&mut self, name: &str) -> f64 {
+        self.device_op(name, |dev| (*dev).edit_stop_time())
     }
 
     /// Retrieves the maximum `compiled_stop_time` from all registered devices.
@@ -789,8 +794,8 @@ pub trait BaseExperiment {
     /// The maximum `compiled_stop_time` across all devices.
     ///
     /// See [`BaseDevice::compiled_stop_time`] for more details on individual device stop times.
-    fn device_compiled_stop_time(&mut self, dev_name: &str) -> f64 {
-        self.device_op(dev_name, |dev| (*dev).compiled_stop_time())
+    fn device_compiled_stop_time(&mut self, name: &str) -> f64 {
+        self.device_op(name, |dev| (*dev).compiled_stop_time())
     }
 
     /// Clears the compilation cache for a specific device.
@@ -800,7 +805,7 @@ pub trait BaseExperiment {
     ///
     /// # Arguments
     ///
-    /// * `dev_name`: The name of the target device.
+    /// * `name`: The name of the target device.
     ///
     /// # Example
     /// ```
@@ -810,8 +815,8 @@ pub trait BaseExperiment {
     /// // ... other operations ...
     /// exp.device_clear_compile_cache("PXI1Slot6");
     /// ```
-    fn device_clear_compile_cache(&mut self, dev_name: &str) {
-        self.device_op(dev_name, |dev| (*dev).clear_compile_cache())
+    fn device_clear_compile_cache(&mut self, name: &str) {
+        self.device_op(name, |dev| (*dev).clear_compile_cache())
     }
 
     /// Clears the edit cache for a specific device.
@@ -824,7 +829,7 @@ pub trait BaseExperiment {
     ///
     /// # Arguments
     ///
-    /// * `dev_name`: The name of the target device.
+    /// * `name`: The name of the target device.
     ///
     /// # Example
     /// ```
@@ -834,8 +839,8 @@ pub trait BaseExperiment {
     /// // ... other operations ...
     /// exp.device_clear_edit_cache("PXI1Slot6");
     /// ```
-    fn device_clear_edit_cache(&mut self, dev_name: &str) {
-        self.device_op(dev_name, |dev| (*dev).clear_edit_cache())
+    fn device_clear_edit_cache(&mut self, name: &str) {
+        self.device_op(name, |dev| (*dev).clear_edit_cache())
     }
 
     /// Retrieves the names of compiled channels from the specified device based on the given requirements.
@@ -851,7 +856,7 @@ pub trait BaseExperiment {
     ///
     /// # Arguments
     ///
-    /// * `dev_name`: The name of the target device.
+    /// * `name`: The name of the target device.
     /// * `require_streamable`: If set to `true`, only channels that are streamable will be considered.
     /// * `require_editable`: If set to `true`, only channels that are editable will be considered.
     ///
@@ -881,15 +886,15 @@ pub trait BaseExperiment {
     /// ```
     fn device_compiled_channel_names(
         &mut self,
-        dev_name: &str,
+        name: &str,
         require_streamable: bool,
         require_editable: bool,
     ) -> Vec<String> {
-        self.device_op(dev_name, |dev| {
+        self.device_op(name, |dev| {
             (*dev)
                 .compiled_channels(require_streamable, require_editable)
                 .iter()
-                .map(|chan| chan.physical_name().to_string())
+                .map(|chan| chan.name().to_string())
                 .collect()
         })
     }
@@ -1231,12 +1236,12 @@ macro_rules! impl_exp_boilerplate {
 
         #[pymethods]
         impl $exp_type {
-            fn add_ao_device(&mut self, physical_name: &str, samp_rate: f64) {
-                BaseExperiment::add_ao_device(self, physical_name, samp_rate);
+            fn add_ao_device(&mut self, name: &str, samp_rate: f64) {
+                BaseExperiment::add_ao_device(self, name, samp_rate);
             }
 
-            fn add_do_device(&mut self, physical_name: &str, samp_rate: f64) {
-                BaseExperiment::add_do_device(self, physical_name, samp_rate);
+            fn add_do_device(&mut self, name: &str, samp_rate: f64) {
+                BaseExperiment::add_do_device(self, name, samp_rate);
             }
 
             pub fn edit_stop_time(&self) -> f64 {
@@ -1276,32 +1281,32 @@ macro_rules! impl_exp_boilerplate {
             }
 
             // DEVICE METHODS
-            pub fn add_ao_channel(&mut self, dev_name: &str, channel_id: usize) {
-                BaseExperiment::add_ao_channel(self, dev_name, channel_id);
+            pub fn add_ao_channel(&mut self, name: &str, channel_id: usize) {
+                BaseExperiment::add_ao_channel(self, name, channel_id);
             }
 
-            pub fn add_do_channel(&mut self, dev_name: &str, port_id: usize, line_id: usize) {
-                BaseExperiment::add_do_channel(self, dev_name, port_id, line_id);
+            pub fn add_do_channel(&mut self, name: &str, port_id: usize, line_id: usize) {
+                BaseExperiment::add_do_channel(self, name, port_id, line_id);
             }
 
-            pub fn device_cfg_samp_clk_src(&mut self, dev_name: &str, src: &str) {
-                BaseExperiment::device_cfg_samp_clk_src(self, dev_name, src);
+            pub fn device_cfg_samp_clk_src(&mut self, name: &str, src: &str) {
+                BaseExperiment::device_cfg_samp_clk_src(self, name, src);
             }
 
-            pub fn device_cfg_trig(&mut self, dev_name: &str, trig_line: &str, export_trig: bool) {
-                BaseExperiment::device_cfg_trig(self, dev_name, trig_line, export_trig);
+            pub fn device_cfg_trig(&mut self, name: &str, trig_line: &str, export_trig: bool) {
+                BaseExperiment::device_cfg_trig(self, name, trig_line, export_trig);
             }
 
             pub fn device_cfg_ref_clk(
                 &mut self,
-                dev_name: &str,
+                name: &str,
                 ref_clk_line: &str,
                 ref_clk_rate: f64,
                 export_ref_clk: bool,
             ) {
                 BaseExperiment::device_cfg_ref_clk(
                     self,
-                    dev_name,
+                    name,
                     ref_clk_line,
                     ref_clk_rate,
                     export_ref_clk,
@@ -1310,13 +1315,13 @@ macro_rules! impl_exp_boilerplate {
 
             pub fn device_compiled_channel_names(
                 &mut self,
-                dev_name: &str,
+                name: &str,
                 require_streamable: bool,
                 require_editable: bool,
             ) -> Vec<String> {
                 BaseExperiment::device_compiled_channel_names(
                     self,
-                    dev_name,
+                    name,
                     require_streamable,
                     require_editable,
                 )
@@ -1324,7 +1329,7 @@ macro_rules! impl_exp_boilerplate {
 
             pub fn calc_signal(
                 &mut self,
-                dev_name: &str,
+                name: &str,
                 t_start: f64,
                 t_end: f64,
                 nsamps: usize,
@@ -1332,11 +1337,11 @@ macro_rules! impl_exp_boilerplate {
                 require_editable: bool,
                 py: Python,
             ) -> PyResult<PyObject> {
-                self.assert_has_device(dev_name);
-                let samp_rate = self.devices().get(dev_name).unwrap().samp_rate();
+                self.assert_has_device(name);
+                let samp_rate = self.devices().get(name).unwrap().samp_rate();
                 let arr = BaseExperiment::device_calc_signal_nsamps(
                     self,
-                    dev_name,
+                    name,
                     (t_start * samp_rate) as usize,
                     (t_end * samp_rate) as usize,
                     nsamps,
@@ -1346,20 +1351,20 @@ macro_rules! impl_exp_boilerplate {
                 Ok(numpy::PyArray::from_array(py, &arr).to_object(py))
             }
 
-            pub fn device_edit_stop_time(&mut self, dev_name: &str) -> f64 {
-                BaseExperiment::device_edit_stop_time(self, dev_name)
+            pub fn device_edit_stop_time(&mut self, name: &str) -> f64 {
+                BaseExperiment::device_edit_stop_time(self, name)
             }
 
-            pub fn device_compiled_stop_time(&mut self, dev_name: &str) -> f64 {
-                BaseExperiment::device_compiled_stop_time(self, dev_name)
+            pub fn device_compiled_stop_time(&mut self, name: &str) -> f64 {
+                BaseExperiment::device_compiled_stop_time(self, name)
             }
 
-            pub fn device_clear_compile_cache(&mut self, dev_name: &str) {
-                BaseExperiment::device_clear_compile_cache(self, dev_name)
+            pub fn device_clear_compile_cache(&mut self, name: &str) {
+                BaseExperiment::device_clear_compile_cache(self, name)
             }
 
-            pub fn device_clear_edit_cache(&mut self, dev_name: &str) {
-                BaseExperiment::device_clear_edit_cache(self, dev_name)
+            pub fn device_clear_edit_cache(&mut self, name: &str) {
+                BaseExperiment::device_clear_edit_cache(self, name)
             }
 
             // INSTRUCTION METHODS

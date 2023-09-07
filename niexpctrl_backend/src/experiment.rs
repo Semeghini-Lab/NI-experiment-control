@@ -47,14 +47,14 @@ impl Experiment {
     /// # Example
     /// ```
     /// ```
-    pub fn reset_device(&mut self, dev_name: &str) {
-        self.device_op(dev_name, |_dev| reset_ni_device(dev_name));
+    pub fn reset_device(&mut self, name: &str) {
+        self.device_op(name, |_dev| reset_ni_device(name));
     }
 
     pub fn reset_devices(&self) {
         self.devices
             .values()
-            .for_each(|dev| reset_ni_device(dev.physical_name()));
+            .for_each(|dev| reset_ni_device(dev.name()));
     }
 }
 

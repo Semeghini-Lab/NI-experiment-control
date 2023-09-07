@@ -22,6 +22,13 @@ While low-level implementations ensure versatility and performance, they complic
 
 Our project aims to bridge these challenges. At its heart, it taps into Rust's performance and safety, coupled with its seamless C and Python interfacing. By integrating with the NI-DAQmx C driver library and offering a Python API through `PyO3`, we aim for a balance between performance and ease of use. The support for analogue and digital output tasks, along with synchronization capabilities, makes this project comprehensive for NI device integration.
 
+### Why Rust?
+The crux of our solution lies in the `nicompiler_backend` and `niexpctrl_backend` crates, designed in Rust. This choice allows us to:
+
+- **Performance**: Rust, being a systems programming language, gives us close-to-metal performance, ensuring our backend's efficiency.
+- **Safety**: Rust's strict compiler ensures memory safety without a garbage collector, preventing many common bugs.
+- **Interoperability**: Rust's seamless interfacing with both C and Python allows for a robust backend with a flexible frontend.
+
 ## Structure of this project
 
 ### Python library wrapper: `niexpctrl`
@@ -30,13 +37,12 @@ Located within the `niexpctrl` directory, this optional Python module provides u
 
 ### Experiment design: `nicompiler_backend`
 
-The `nicompiler_backend` crate, located within `nicompiler_backend` subfolder, utilizes [PyO3](https://github.com/PyO3/pyo3) to offer a Python-accessible Experiment class tailored for multi-device NI experiments. This backend can also operate as a standalone and extensible rust or python library.
+`nicompiler_backend` is the core of our solution. Located within the `nicompiler_backend` subfolder, it serves as the bridge between NI hardware and our Python library. By leveraging [PyO3](https://github.com/PyO3/pyo3), this backend offers a Python-accessible `Experiment` class optimized for multi-device NI experiments.
 
-To delve into the implementation details of the core design of our project, execute `cargo doc --open` within the crate's directory. Alternatively, visit the [published documentation](https://docs.rs/nicompiler_backend/0.2.0/nicompiler_backend/#). 
+For developers and those interested in a deep dive:
 
-### Experiment control: `niexpctrl_backend`
-
-The `niexpctrl_backend` crate builds upon `nicompiler_backend`, offering a Python-accessible `Experiment` class with added capabilities for streaming to NI devices.
+- **Rust API**: For comprehensive details on how the backend functions, you can explore the crate's documentation by executing `cargo doc --open` within its directory. Alternatively, check out the [published documentation](https://docs.rs/nicompiler_backend/0.2.0/nicompiler_backend/#).
+- **Python API**: This backend's methods have been seamlessly integrated into our Python library. Check out the `niexpctrl` directory for a higher-level Python wrapper. 
 
 ## Installation
 

@@ -82,7 +82,7 @@ use crate::utils::*;
 pub trait BaseDevice {
     // Immutable accessors (getters)
     fn channels(&self) -> &HashMap<String, Channel>;
-    fn physical_name(&self) -> &str;
+    fn name(&self) -> &str;
     fn task_type(&self) -> TaskType;
     fn samp_rate(&self) -> f64;
     fn samp_clk_src(&self) -> Option<&str>;
@@ -148,7 +148,7 @@ pub trait BaseDevice {
         if export_ref_clk {
             assert_eq!(ref_clk_rate, 1e7,
                 "Device {} needs to explicitly acknowledge exporting 10Mhz clk by setting ref_clk_rate=1e7",
-                self.physical_name());
+                self.name());
         }
         *(self.ref_clk_line_()) = Some(ref_clk_line.to_string());
         *(self.ref_clk_rate_()) = Some(ref_clk_rate);
@@ -172,7 +172,7 @@ pub trait BaseDevice {
 
     /// Adds a new channel to the device.
     ///
-    /// This base method validates the provided `physical_name` based on the device's `task_type`
+    /// This base method validates the provided `name` based on the device's `task_type`
     /// to ensure it adheres to the expected naming convention for the respective task type.
     ///
     /// # Naming Conventions:
@@ -182,15 +182,15 @@ pub trait BaseDevice {
     ///   (e.g., "port0/line1").
     ///
     /// # Panics
-    /// - If the provided `physical_name` does not adhere to the expected naming convention for the
+    /// - If the provided `name` does not adhere to the expected naming convention for the
     ///   associated task type.
-    /// - If a channel with the same `physical_name` already exists within the device.
+    /// - If a channel with the same `name` already exists within the device.
     ///
     /// # Arguments
-    /// - `physical_name`: Name of the channel as seen by the NI driver, which must adhere to the
+    /// - `name`: Name of the channel as seen by the NI driver, which must adhere to the
     ///   naming conventions detailed above.
-    fn add_channel(&mut self, physical_name: &str) {
-        // Check the physical_name format
+    fn add_channel(&mut self, name: &str) {
+        // Check the name format
         let (name_match_string, name_format_description) = match self.task_type() {
             TaskType::AO => (String::from(r"^ao\d+$"), String::from("ao(number)")),
             TaskType::DO => (
@@ -200,27 +200,26 @@ pub trait BaseDevice {
         };
 
         let re = Regex::new(&name_match_string).unwrap();
-        if !re.is_match(physical_name) {
+        if !re.is_match(name) {
             panic!(
                 "Expecting channels to be of format '{}' yet received channel name {}",
-                name_format_description, physical_name
+                name_format_description, name
             );
         }
         for channel in self.channels().values() {
-            if channel.physical_name() == physical_name {
+            if channel.name() == name {
                 panic!(
                     "Physical name of channel {} already registered. Registered channels are {:?}",
-                    physical_name,
+                    name,
                     self.channels()
                         .values()
-                        .map(|c| c.physical_name())
+                        .map(|c| c.name())
                         .collect::<Vec<_>>()
                 );
             }
         }
-        let new_channel = Channel::new(self.task_type(), physical_name, self.samp_rate());
-        self.channels_()
-            .insert(physical_name.to_string(), new_channel);
+        let new_channel = Channel::new(self.task_type(), name, self.samp_rate());
+        self.channels_().insert(name.to_string(), new_channel);
     }
 
     /// A device is compiled if any of its editable channels are compiled.
@@ -292,14 +291,14 @@ pub trait BaseDevice {
             instr_end_set.extend(
                 self.editable_channels()
                     .iter()
-                    .filter(|chan| extract_port_line_numbers(chan.physical_name()).0 == match_port)
+                    .filter(|chan| extract_port_line_numbers(chan.name()).0 == match_port)
                     .flat_map(|chan| chan.instr_end().iter()),
             );
             let instr_end: Vec<usize> = instr_end_set.into_iter().collect();
 
             let mut instr_val = vec![0.; instr_end.len()];
             for chan in self.editable_channels() {
-                let (port, line) = extract_port_line_numbers(chan.physical_name());
+                let (port, line) = extract_port_line_numbers(chan.name());
                 if port == match_port {
                     let mut chan_instr_idx = 0;
                     for i in 0..instr_val.len() {
@@ -325,7 +324,7 @@ pub trait BaseDevice {
             *port_channel.instr_val_() = port_instr_val;
             *port_channel.instr_end_() = instr_end;
             self.channels_()
-                .insert(port_channel.physical_name().to_string(), port_channel);
+                .insert(port_channel.name().to_string(), port_channel);
         }
     }
 
@@ -418,7 +417,7 @@ pub trait BaseDevice {
                     .compiled_channels(require_streamable, require_editable)
                     .len(),
             "Device {} has {} channels but passed buffer has shape {:?}",
-            self.physical_name(),
+            self.name(),
             self.compiled_channels(require_streamable, require_editable)
                 .len(),
             buffer.dim()
@@ -519,15 +518,15 @@ pub trait BaseDevice {
         assert!(
             self.task_type() == TaskType::DO,
             "unique ports should only be invoked for DOs, but {} is not",
-            self.physical_name()
+            self.name()
         );
 
         let mut port_numbers = BTreeSet::new();
 
         self.compiled_channels(false, true).iter().for_each(|chan| {
             // Capture the port
-            let physical_name = &chan.physical_name();
-            port_numbers.insert(extract_port_line_numbers(physical_name).0);
+            let name = &chan.name();
+            port_numbers.insert(extract_port_line_numbers(name).0);
         });
         port_numbers.into_iter().collect()
     }
@@ -543,7 +542,7 @@ pub trait BaseDevice {
 ///
 /// # Fields
 /// - `channels`: A collection of channels associated with this device.
-/// - `physical_name`: Name of the device as seen by the NI driver.
+/// - `name`: Name of the device as seen by the NI driver.
 /// - `task_type`: Specifies the task type associated with the device.
 /// - `samp_rate`: The sampling rate of the device in Hz.
 /// - `samp_clk_src`: Optional source of the sampling clock; supply `None` for on-board clock source.
@@ -674,7 +673,7 @@ pub trait BaseDevice {
 pub struct Device {
     channels: HashMap<String, Channel>,
 
-    physical_name: String,
+    name: String,
     task_type: TaskType,
     samp_rate: f64,
 
@@ -695,17 +694,17 @@ impl Device {
     /// [`BaseDevice::cfg_trig`], and [`BaseDevice::cfg_ref_clk`].
     ///
     /// # Arguments
-    /// - `physical_name`: Name of the device as seen by the NI driver.
+    /// - `name`: Name of the device as seen by the NI driver.
     /// - `task_type`: The type of task associated with the device.
     /// - `samp_rate`: Desired sampling rate in Hz.
     ///
     /// # Returns
     /// A new instance of `Device` with the specified configurations and all synchronization-related fields set to `None`.
-    pub fn new(physical_name: &str, task_type: TaskType, samp_rate: f64) -> Self {
+    pub fn new(name: &str, task_type: TaskType, samp_rate: f64) -> Self {
         Self {
             channels: HashMap::new(),
 
-            physical_name: physical_name.to_string(),
+            name: name.to_string(),
             task_type,
             samp_rate,
 
@@ -725,8 +724,8 @@ impl BaseDevice for Device {
         &self.channels
     }
 
-    fn physical_name(&self) -> &str {
-        &self.physical_name
+    fn name(&self) -> &str {
+        &self.name
     }
 
     fn task_type(&self) -> TaskType {

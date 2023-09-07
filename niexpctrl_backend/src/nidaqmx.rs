@@ -2,13 +2,16 @@
 //!
 //! ## Overview
 //!
-//! The core of this module is the `NiTask` struct which represents an NI-DAQmx task. It encapsulates
+//! The core of this module is the [`NiTask`] struct which represents an NI-DAQmx task. It encapsulates
 //! a handle to an NI-DAQmx task and provides methods that map to various DAQmx C-functions, enabling
 //! users to perform operations like creating analog or digital channels, configuring sampling rates,
 //! and writing data to channels.
 //!
-//! Additionally, the module provides utility functions like `daqmx_call` and `reset_ni_device` to
+//! Additionally, the module provides utility functions like [`daqmx_call`] and [`reset_ni_device`] to
 //! simplify error handling and device interactions.
+//! 
+//! **Refer to implementations of the [`NiTask`] struct to see the wrapped methods and invoked 
+//! [DAQmx C-functions](https://www.ni.com/docs/en-US/bundle/ni-daqmx-c-api-ref/page/cdaqmx/help_file_title.html)**
 //!
 //! ## Usage
 //!
@@ -47,7 +50,7 @@
 //! ## Example
 //!
 //! ```ignore
-//! #use niexpctrl_backend::*;
+//! # use niexpctrl_backend::*;
 //! let task = NiTask::new();
 //! task.create_ao_chan("Dev1/ao0");
 //! task.cfg_sample_clk("", 1000.0, 1000);
@@ -112,7 +115,7 @@ extern "C" {
 
     fn DAQmxCreateAOVoltageChan(
         handle: TaskHandle,
-        physical_name: CConstStr,
+        name: CConstStr,
         assigned_name: CConstStr,
         minVal: CFloat64,
         maxVal: CFloat64,
@@ -335,14 +338,14 @@ impl NiTask {
         daqmx_call(|| unsafe { DAQmxCfgOutputBuffer(self.handle, buf_sz as CUint32) });
     }
 
-    pub fn create_ao_chan(&self, physical_name: &str) {
-        let physical_name_cstr = std::ffi::CString::new(physical_name)
+    pub fn create_ao_chan(&self, name: &str) {
+        let name_cstr = std::ffi::CString::new(name)
             .expect("Failed to convert physical name to CString");
         let assigned_name_cstr = std::ffi::CString::new("").expect("");
         daqmx_call(|| unsafe {
             DAQmxCreateAOVoltageChan(
                 self.handle,
-                physical_name_cstr.as_ptr(),
+                name_cstr.as_ptr(),
                 assigned_name_cstr.as_ptr(),
                 -10.,
                 10.,
@@ -352,14 +355,14 @@ impl NiTask {
         })
     }
 
-    pub fn create_do_chan(&self, physical_name: &str) {
-        let physical_name_cstr = std::ffi::CString::new(physical_name)
+    pub fn create_do_chan(&self, name: &str) {
+        let name_cstr = std::ffi::CString::new(name)
             .expect("Failed to convert physical name to CString");
         let assigned_name_cstr = std::ffi::CString::new("").expect("");
         daqmx_call(|| unsafe {
             DAQmxCreateDOChan(
                 self.handle,
-                physical_name_cstr.as_ptr(),
+                name_cstr.as_ptr(),
                 assigned_name_cstr.as_ptr(),
                 DAQMX_VAL_CHANFORALLLINES,
             )

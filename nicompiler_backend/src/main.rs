@@ -36,7 +36,7 @@ fn main() {
     exp.add_do_channel("PXI1Slot6", 0, 0);
     exp.add_do_channel("PXI1Slot6", 0, 4);
 
-    // Define synchronization behavior:
+    // Define synchronization behavior (refer to the "Device" struct for more information)
     exp.device_cfg_trig("PXI1Slot3", "PXI1_Trig0", true);
     exp.device_cfg_ref_clk("PXI1Slot3", "PXI1_Trig7", 1e7, true);
 

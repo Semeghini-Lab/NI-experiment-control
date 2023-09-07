@@ -19,7 +19,7 @@
 //!
 //! Properties of a channel include:
 //! - `samp_rate`: The sampling rate at which the parent device operates.
-//! - `physical_name`: Denotes the channel's identifier as seen by the NI driver. For instance,
+//! - `name`: Denotes the channel's identifier as seen by the NI driver. For instance,
 //!    this could be 'ao0' or 'port0/line0'. This name can be viewed using tools like NI-MAX on
 //!    Windows or the NI hardware configuration utilities on Linux.
 //!  - `instr_list`: An edit-cache for the channel. Internally, this uses a `BTreeSet` to guarantee
@@ -96,7 +96,7 @@ pub enum TaskType {
 pub trait BaseChannel {
     // Immutable field methods
     fn samp_rate(&self) -> f64;
-    fn physical_name(&self) -> &str;
+    fn name(&self) -> &str;
     fn task_type(&self) -> TaskType;
     /// The `fresh_compiled` field is set to true by each [`BaseChannel::compile`] call and
     /// `false` by each [`BaseChannel::add_instr`].  
@@ -129,7 +129,7 @@ pub trait BaseChannel {
     fn editable(&self) -> bool {
         match self.task_type() {
             TaskType::AO => true,
-            TaskType::DO => self.physical_name().contains("line"),
+            TaskType::DO => self.name().contains("line"),
         }
     }
     /// Channel is marked as streamable if it is a AO channel or DO port channel (name does not contain "line")
@@ -137,7 +137,7 @@ pub trait BaseChannel {
         match self.task_type() {
             TaskType::AO => true,
             // for DODevice, only port channels are streamable
-            TaskType::DO => !self.physical_name().contains("line"),
+            TaskType::DO => !self.name().contains("line"),
         }
     }
 
@@ -187,7 +187,7 @@ pub trait BaseChannel {
         if self.instr_list().last().unwrap().end_pos > stop_pos {
             panic!(
                 "Attempting to compile channel {} with stop_pos {} while instructions end at {}",
-                self.physical_name(),
+                self.name(),
                 stop_pos,
                 self.instr_list().last().unwrap().end_pos
             );
@@ -389,12 +389,12 @@ pub trait BaseChannel {
         *self.fresh_compiled_() = false;
 
         // Check for overlaps
-        let physical_name = self.physical_name();
+        let name = self.name();
         if let Some(next) = self.instr_list().range(&new_instrbook..).next() {
             if next.start_pos < new_instrbook.end_pos {
                 panic!(
                     "Channel {}\n Instruction {} overlaps with the next instruction {}\n",
-                    physical_name, new_instrbook, next
+                    name, new_instrbook, next
                 );
             }
         }
@@ -402,7 +402,7 @@ pub trait BaseChannel {
             if prev.end_pos > new_instrbook.start_pos {
                 panic!(
                     "Channel {}\n Instruction {} overlaps with the previous instruction {}",
-                    physical_name, new_instrbook, prev
+                    name, new_instrbook, prev
                 );
             }
         }
@@ -472,12 +472,12 @@ pub trait BaseChannel {
         assert!(
             self.is_compiled(),
             "Attempting to calculate signal on not-compiled channel {}",
-            self.physical_name()
+            self.name()
         );
         assert!(
             end_pos > start_pos,
             "Channel {} attempting to calculate signal for invalid interval {}-{}",
-            self.physical_name(),
+            self.name(),
             start_pos,
             end_pos
         );
@@ -486,7 +486,7 @@ pub trait BaseChannel {
             "Attempting to calculate signal interval {}-{} for channel {}, which ends at {}",
             start_pos,
             end_pos,
-            self.physical_name(),
+            self.name(),
             (self.compiled_stop_time() * self.samp_rate()) as usize
         );
 
@@ -524,7 +524,7 @@ pub trait BaseChannel {
 ///
 /// `Channel` provides a concrete implementation of the [`BaseChannel`] trait, offering
 /// straightforward and direct methods to interact with the NI device channels. Each instance of
-/// `Channel` corresponds to a physical channel on an NI device, characterized by its `physical_name`.
+/// `Channel` corresponds to a physical channel on an NI device, characterized by its `name`.
 ///
 /// The `Channel` struct ensures that any interactions with the NI devices are consistent with the
 /// requirements and behaviors defined by the [`BaseChannel`] trait.
@@ -533,7 +533,7 @@ pub trait BaseChannel {
 /// - `samp_rate`: The sampling rate of the channel, determining how often the channel updates.
 /// - `task_type`: Specifies the type of task associated with this channel.
 /// - `fresh_compiled`: A boolean indicating whether the channel's compiled results are up-to-date with the edit cache.
-/// - `physical_name`: A string representation of the channel's identifier as recognized by the NI driver.
+/// - `name`: A string representation of the channel's identifier as recognized by the NI driver.
 /// - `instr_list`: The edit-cache for the channel. Maintains a sorted list of instruction books.
 /// - `instr_end`: Stores the ending points of compiled instructions.
 /// - `instr_val`: Holds the values of the compiled instructions.
@@ -541,7 +541,7 @@ pub struct Channel {
     samp_rate: f64,
     fresh_compiled: bool,
     task_type: TaskType,
-    physical_name: String,
+    name: String,
     instr_list: BTreeSet<InstrBook>,
     instr_end: Vec<usize>,
     instr_val: Vec<Instruction>,
@@ -554,8 +554,8 @@ impl BaseChannel for Channel {
     fn is_fresh_compiled(&self) -> bool {
         self.fresh_compiled
     }
-    fn physical_name(&self) -> &str {
-        &self.physical_name
+    fn name(&self) -> &str {
+        &self.name
     }
     fn instr_list(&self) -> &BTreeSet<InstrBook> {
         &self.instr_list
@@ -591,7 +591,7 @@ impl Channel {
     /// # Arguments
     /// * `task_type`: Specifies the type of task associated with this channel.
     ///    It can be either `AO` (analogue output) or `DO` (digital output).
-    /// * `physical_name`: The string representation of the channel's identifier as recognized by the NI driver.
+    /// * `name`: The string representation of the channel's identifier as recognized by the NI driver.
     /// * `samp_rate`: The sampling rate for the channel, determining how often the channel updates.
     ///
     /// # Returns
@@ -606,12 +606,12 @@ impl Channel {
     /// let ao_channel = Channel::new(TaskType::AO, "ao0", 1e6);
     /// ```
     ///
-    pub fn new(task_type: TaskType, physical_name: &str, samp_rate: f64) -> Self {
+    pub fn new(task_type: TaskType, name: &str, samp_rate: f64) -> Self {
         Self {
             samp_rate,
             task_type,
             fresh_compiled: true,
-            physical_name: physical_name.to_string(),
+            name: name.to_string(),
             instr_list: BTreeSet::new(),
             instr_end: Vec::new(),
             instr_val: Vec::new(),
