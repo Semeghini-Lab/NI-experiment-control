@@ -20,10 +20,19 @@ export_optimized:
 	@echo "Building python and rust library with heavy optimization ..."
 	maturin develop --release
 
+publish_pypi:
+	@echo "Updating tests, docs, exporting to python and publishing to pypi"
+	git add . 
+	cargo fmt && cargo doc
+	git commit -am "pypi publish update" && git push 
+	maturin develop --release
+	maturin build --release --strip --manylinux off
+	twine upload target/wheels/*
+
 publish: 
 	@echo "Updating tests, docs, and exporting to python, and publishing crate"
 	git add .
-	git commit -am "publish update" && git push 
 	cargo fmt && cargo doc && cargo test 
+	git commit -am "publish update" && git push 
 	maturin develop --release
 	cargo publish

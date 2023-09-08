@@ -10,7 +10,7 @@ crate-type = ["cdylib", "lib"]
 
 [dependencies]
 pyo3 = { version = "0.19.2", features = [ "multiple-pymethods" ] }
-nicompiler_backend = ">0.0.1"
+nicompiler_backend = ">0.3.0"
 regex = "1.9.3"
 ndarray = "0.15.6"
 maplit = "1.0.2"
