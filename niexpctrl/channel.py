@@ -129,7 +129,7 @@ class AOChanProxy(BaseChanProxy):
             dc_offset=dc_offs if dc_offs != 0 else None,  # FixMe[Rust]: better to use 0.0 instead of None for default
             keep_val=keep_val,
         )
-        return t + dur
+        return dur
 
 
 class DOChanProxy(BaseChanProxy):
@@ -168,3 +168,21 @@ class DOChanProxy(BaseChanProxy):
             chan_name=self.chan_name,
             t=t
         )
+
+    def high(self, t, dur):
+        self._dll.high(
+            dev_name=self._card_max_name,
+            chan_name=self.chan_name,
+            t=t,
+            duration=dur
+        )
+        return dur
+
+    def low(self, t, dur):
+        self._dll.low(
+            dev_name=self._card_max_name,
+            chan_name=self.chan_name,
+            t=t,
+            duration=dur
+        )
+        return dur
