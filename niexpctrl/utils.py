@@ -30,6 +30,14 @@ class RendOption:
 
 def iplot(chan_list, t_start=None, t_end=None, nsamps=1000, renderer='browser', row_height=200):
 
+    # ToDo:
+    #   `src_pwr` (`slow_ao_card.ao0`) did not receive any instructions, resulting in this error
+    #   PanicException: Attempting to calculate signal on not-compiled channel ao0
+    #   Try checking edit cache with `is_edited`
+
+    # ToDo:
+    #   if there are less than 4 traces, set raw height to Auto. Otherwise, use provided (None for default).
+
     if not PLOTLY_INSTALLED:
         raise ImportError('Plotly package is not installed. Run `pip install plotly` to get it.')
 
