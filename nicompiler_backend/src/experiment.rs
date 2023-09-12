@@ -761,6 +761,16 @@ pub trait BaseExperiment {
         ref_clk_rate: f64,
         export_ref_clk: bool,
     ) {
+        assert!(
+            !export_ref_clk
+                || (export_ref_clk
+                    && self
+                        .devices()
+                        .values()
+                        .all(|dev| dev.export_ref_clk().is_none())),
+            "Device {} cannot export reference clock since another device already exports reference clock.",
+            dev_name
+        );
         self.device_op(dev_name, |dev| {
             (*dev).cfg_ref_clk(ref_clk_line, ref_clk_rate, export_ref_clk)
         })

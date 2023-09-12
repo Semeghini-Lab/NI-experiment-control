@@ -164,6 +164,10 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
                 timer_.tick_print(&format!("{} end", self.physical_name()));
                 task.stop();
             }
+            if self.export_ref_clk().unwrap_or(false) { 
+                (0..num_devices).for_each(|_| sem.acquire());
+            }
+            sem.release();
         }
     }
 
