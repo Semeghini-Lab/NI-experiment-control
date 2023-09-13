@@ -28,15 +28,12 @@ class RendOption:
     notebook = 'notebook'
 
 
-def iplot(chan_list, t_start=None, t_end=None, nsamps=1000, renderer='browser', row_height=200):
+def iplot(chan_list, t_start=None, t_end=None, nsamps=1000, renderer='browser', row_height=None):
 
     # ToDo:
     #   `src_pwr` (`slow_ao_card.ao0`) did not receive any instructions, resulting in this error
     #   PanicException: Attempting to calculate signal on not-compiled channel ao0
     #   Try checking edit cache with `is_edited`
-
-    # ToDo:
-    #   if there are less than 4 traces, set raw height to Auto. Otherwise, use provided (None for default).
 
     if not PLOTLY_INSTALLED:
         raise ImportError('Plotly package is not installed. Run `pip install plotly` to get it.')
@@ -52,8 +49,16 @@ def iplot(chan_list, t_start=None, t_end=None, nsamps=1000, renderer='browser', 
                               # but also hides X-axis ticks for all plots except the bottom one
     )
     fig.update_xaxes(matches='x')  # Using this option locks X-axes and also leaves ticks
+
     if row_height is not None:
         fig.update_layout(height=1.1 * row_height * chan_num)
+    else:
+        # Row height is not provided - use auto-height and fit everything into the standard frame height.
+        #
+        # Exception - the case of many channels:
+        #   - switch off auto and set fixed row height, to make frame extend downwards as much as needed
+        if chan_num > 4:
+            fig.update_layout(height=1.1 * 200 * chan_num)
 
     t_arr = None
     for idx, chan in enumerate(chan_list):
