@@ -1,5 +1,4 @@
-from niexpctrl_backend import Experiment as RawDLL
-# FixMe[Rust]: rename Experiment to NIStreamer
+from niexpctrl_backend import Experiment as RawDLL  # FixMe[Rust]: rename Experiment to NIStreamer
 
 
 class BaseChanProxy:

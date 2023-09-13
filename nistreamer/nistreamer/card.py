@@ -1,5 +1,5 @@
 from niexpctrl_backend import Experiment as RawDLL
-from channel import AOChanProxy, DOChanProxy
+from .channel import AOChanProxy, DOChanProxy
 from typing import Optional, Union, Literal
 
 

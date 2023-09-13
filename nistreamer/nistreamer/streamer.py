@@ -1,6 +1,6 @@
 from niexpctrl_backend import Experiment as RawDLL
-from typing import Optional, Union, Literal
-import card
+from .card import AOCardProxy, DOCardProxy
+from typing import Optional, Literal
 
 
 class NIStreamer:
@@ -38,11 +38,11 @@ class NIStreamer:
     ):
         if card_type == 'AO':
             dll_method = RawDLL.add_ao_device
-            proxy_class = card.AOCardProxy
+            proxy_class = AOCardProxy
             target_dict = self._ao_card_dict
         elif card_type == 'DO':
             dll_method = RawDLL.add_do_device
-            proxy_class = card.DOCardProxy
+            proxy_class = DOCardProxy
             target_dict = self._do_card_dict
         else:
             raise ValueError(f'Invalid card type "{card_type}". Valid type strings are "AO" and "DO"')
