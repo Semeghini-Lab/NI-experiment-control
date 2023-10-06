@@ -727,7 +727,7 @@ pub trait BaseExperiment {
     /// This method will panic if the synchronization condition related to a device exporting triggers is violated.
     ///
     /// See also: [`BaseDevice::cfg_trig`]
-    fn device_cfg_trig(&mut self, name: &str, trig_line: &str, export_trig: bool) {
+    fn device_cfg_trig(&mut self, dev_name: &str, trig_line: &str, export_trig: bool) {
         assert!(
             !export_trig
                 || (export_trig
@@ -736,9 +736,9 @@ pub trait BaseExperiment {
                         .values()
                         .all(|dev| dev.export_trig().is_none())),
             "Device {} cannot export triggers since another device already exports triggers.",
-            name
+            dev_name
         );
-        self.device_op(name, |dev| (*dev).cfg_trig(trig_line, export_trig))
+        self.device_op(dev_name, |dev| (*dev).cfg_trig(trig_line, export_trig))
     }
 
     /// Configures the reference clock settings of a device in the experiment.
@@ -761,7 +761,17 @@ pub trait BaseExperiment {
         ref_clk_rate: f64,
         export_ref_clk: bool,
     ) {
-        self.device_op(name, |dev| {
+        assert!(
+            !export_ref_clk
+                || (export_ref_clk
+                    && self
+                        .devices()
+                        .values()
+                        .all(|dev| dev.export_ref_clk().is_none())),
+            "Device {} cannot export reference clock since another device already exports reference clock.",
+            dev_name
+        );
+        self.device_op(dev_name, |dev| {
             (*dev).cfg_ref_clk(ref_clk_line, ref_clk_rate, export_ref_clk)
         })
     }
