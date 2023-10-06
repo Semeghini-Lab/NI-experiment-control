@@ -43,7 +43,7 @@
 //! We additionally call `exp.stream_exp(50., 2);` after the experiment has been designed and compiled to
 //! stream the experiment with a streaming buffer of 50ms, and two repetitions.
 //! Refer to [`StreamableDevice::stream_task`] for more detailed information on streaming behavior.
-//! ```
+//! ```ignore
 //! use niexpctrl_backend::*;
 //! let mut exp = Experiment::new();
 //! // Define devices and associated channels
@@ -97,7 +97,7 @@
 //! for interfacing with a NI experiment. One may easily customize syntactic sugar and higher-level abstractions
 //! by wrapping `nicompiler_backend` module in another layer of python code,
 //! see our [project page](https://github.com/nlyu1/NI-experiment-control) for one such example.
-//! ```Python
+//! ```ignore
 //! # Instantiate experiment, define devices and channels
 //! from nicompiler_backend import Experiment
 //! import matplotlib.pyplot as plt
