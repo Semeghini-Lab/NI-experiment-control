@@ -104,15 +104,14 @@ class AOChanProxy(BaseChanProxy):
         )
 
         return dur
-
-        # raise NotImplementedError
-        #
-        # return self._dll.constant(
-        #     dev_name=self._card_max_name,  # FixMe[Rust]: change `dev_name` to `max_name`
-        #     chan_name=self.chan_name,
-        #     t=t,
-        #     value=val  # FixMe[Rust]: change `value` to `val`
-        # )
+    
+    def go_constant(self, t, value):
+        self._dll.go_constant(
+            dev_name=self._card_max_name,
+            chan_name=self.chan_name,
+            t=t,
+            value=value,
+        )
 
     def sine(self, t, dur, amp, freq, phase=0, dc_offs=0, keep_val=False):
         # ToDo: try adding dur=None - when you just say "keep playing sine until further instructions"

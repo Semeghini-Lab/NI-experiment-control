@@ -292,13 +292,13 @@ pub trait BaseDevice {
             instr_end_set.extend(
                 self.editable_channels()
                     .iter()
-                    .filter(|chan| extract_port_line_numbers(chan.name()).0 == match_port)
+                    .filter(|chan| chan.is_edited() && extract_port_line_numbers(chan.name()).0 == match_port)
                     .flat_map(|chan| chan.instr_end().iter()),
             );
             let instr_end: Vec<usize> = instr_end_set.into_iter().collect();
 
             let mut instr_val = vec![0.; instr_end.len()];
-            for chan in self.editable_channels() {
+            for chan in self.editable_channels().iter().filter(|chan| chan.is_edited()) {
                 let (port, line) = extract_port_line_numbers(chan.name());
                 if port == match_port {
                     let mut chan_instr_idx = 0;

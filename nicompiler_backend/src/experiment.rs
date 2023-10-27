@@ -1146,6 +1146,29 @@ pub trait BaseExperiment {
         });
     }
 
+    /// Sets the specified analogue output (AO) channel to a specified constant value for a short duration.
+    ///
+    /// It allows the user to set the AO channel to an arbitrary value.
+    ///
+    /// The duration for which the value is held is determined as the inverse of the channel's sampling rate, 
+    /// ensuring that the signal remains constant for one tick.
+    ///
+    /// # Arguments
+    ///
+    /// * `dev_name`: The name of the target device.
+    /// * `chan_name`: The name of the target AO channel within the device.
+    /// * `t`: The start time for the signal to take the specified value.
+    /// * `value`: The desired constant value for the signal. 
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if the channel is not of type AO. 
+    fn go_constant(&mut self, dev_name: &str, chan_name: &str, t: f64, value: f64) {
+        self.typed_channel_op(dev_name, chan_name, TaskType::AO, |chan| {
+            (*chan).constant(value, t, 1. / (*chan).samp_rate(), true);
+        });
+    }
+
     /// Clears the edit cache of the specified channel.
     ///
     /// This method resets the channel to its pre-edit state. Clearing the edit cache can be helpful
@@ -1486,6 +1509,10 @@ macro_rules! impl_exp_boilerplate {
 
             pub fn go_low(&mut self, dev_name: &str, chan_name: &str, t: f64) {
                 BaseExperiment::go_low(self, dev_name, chan_name, t);
+            }
+
+            pub fn go_constant(&mut self, dev_name: &str, chan_name: &str, t: f64, value:f64) {
+                BaseExperiment::go_constant(self, dev_name, chan_name, t, value);
             }
 
             pub fn channel_clear_compile_cache(&mut self, dev_name: &str, chan_name: &str) {
