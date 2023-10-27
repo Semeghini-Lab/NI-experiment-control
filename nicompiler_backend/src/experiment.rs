@@ -37,7 +37,7 @@
 use ndarray::Array2;
 use numpy;
 use pyo3::prelude::*;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 
 use crate::channel::*;
 use crate::device::*;
@@ -105,8 +105,8 @@ use crate::instruction::*;
 
 pub trait BaseExperiment {
     // FIELD methods
-    fn devices(&self) -> &HashMap<String, Device>;
-    fn devices_(&mut self) -> &mut HashMap<String, Device>;
+    fn devices(&self) -> &IndexMap<String, Device>;
+    fn devices_(&mut self) -> &mut IndexMap<String, Device>;
 
     /// Asserts that the specified device exists in the experiment.
     ///
@@ -415,6 +415,66 @@ pub trait BaseExperiment {
         self.devices_()
             .values_mut()
             .for_each(|dev| dev.clear_edit_cache());
+    }
+
+    /// Adds a reset tick with value of 0 across all editable channels of the experiment.
+    ///
+    /// This function computes the last `edit_stop_time` of the experiment and uses it
+    /// to determine the appropriate time to insert the reset tick. A reset tick is a
+    /// point in time where all editable channels are reset to a value of 0.
+    ///
+    /// # Returns
+    ///
+    /// Returns the time at which the reset tick was added. This time corresponds to
+    /// the earliest unspecified interval across all channels after the last `edit_stop_time`.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if any internal operations fail, such as accessing 
+    /// non-existent channels or devices. Ensure that devices and channels are properly 
+    /// set up before calling this function.
+    ///
+    /// # Notes
+    ///
+    /// It's recommended to call `compile` after using this function 
+    /// to ensure that the newly added reset ticks are taken into account in the compiled output.
+    /// 
+    /// # Example
+    /// 
+    /// ```
+    /// # use nicompiler_backend::*;
+    /// let mut exp = Experiment::new();
+    /// // Define devices and associated channels
+    /// exp.add_do_device("PXI1Slot6", 10.);
+    /// exp.add_do_channel("PXI1Slot6", 0, 0);
+    /// exp.add_do_channel("PXI1Slot6", 0, 1);
+    ///
+    /// exp.high("PXI1Slot6", "port0/line0", 0., 1.);
+    /// exp.go_high("PXI1Slot6", "port0/line1", 0.);
+    /// exp.compile_with_stoptime(5.);
+    ///
+    /// // Calculate from t=0 ~ 5
+    /// let sig = exp.device_calc_signal_nsamps("PXI1Slot6", 0, 50, 50, false, true);
+    /// assert!(sig[[0, 9]] == 1. && sig[[0, 10]] == 0.); // go_high takes effect on the tick corresponding to specified time. 
+    /// assert!(sig[[1, 9]] == 1. && sig[[1, 10]] == 1.); 
+    /// 
+    /// let reset_tick_time = exp.add_reset_tick();
+    /// // Reset tick happens at the earliest unspecified interval across all channels
+    /// assert!(reset_tick_time == 1.0); 
+    /// exp.compile_with_stoptime(5.);
+    /// let sig = exp.device_calc_signal_nsamps("PXI1Slot6", 0, 50, 50, false, true);
+    /// assert!(sig[[0, 9]] == 1. && sig[[0, 10]] == 0.); 
+    /// assert!(sig[[1, 9]] == 1. && sig[[1, 10]] == 0.); // Also zeros channel 1 at t=1
+    /// // println!("{:?}, reset_tick_time={}", sig, reset_tick_time);
+    /// ```
+    fn add_reset_tick(&mut self) -> f64 {
+        let edit_stop_time = self.edit_stop_time();
+        self.devices_().values_mut().for_each(|dev| {
+            dev.editable_channels_().iter_mut().for_each(|chan|{
+                chan.constant(0., edit_stop_time, 1./ chan.samp_rate(), true);
+            });
+        });
+        edit_stop_time
     }
 
     /// Clears the compile cache for all registered devices.
@@ -1190,7 +1250,7 @@ pub trait BaseExperiment {
 /// **Refer to the [`BaseExperiment`] trait for method behavior.**
 #[pyclass]
 pub struct Experiment {
-    devices: HashMap<String, Device>,
+    devices: IndexMap<String, Device>,
 }
 
 /// A macro to generate boilerplate implementations for structs representing experiments.
@@ -1208,11 +1268,11 @@ pub struct Experiment {
 /// use nicompiler_backend::channel::*;
 /// use nicompiler_backend::*;
 /// use pyo3::prelude::*;
-/// use std::collections::HashMap;
+/// use indexmap::IndexMap;
 ///
 /// #[pyclass]
 /// struct CustomExperiment {
-///     devices: HashMap<String, Device>,
+///     devices: IndexMap<String, Device>,
 ///     some_property: f64,
 /// }
 /// impl_exp_boilerplate!(CustomExperiment);
@@ -1223,7 +1283,7 @@ pub struct Experiment {
 ///     #[new]
 ///     pub fn new(some_property: f64) -> Self {
 ///         Self {
-///             devices: HashMap::new(),
+///             devices: IndexMap::new(),
 ///             some_property
 ///         }
 ///     }
@@ -1236,10 +1296,10 @@ pub struct Experiment {
 macro_rules! impl_exp_boilerplate {
     ($exp_type: ty) => {
         impl BaseExperiment for $exp_type {
-            fn devices(&self) -> &HashMap<String, Device> {
+            fn devices(&self) -> &IndexMap<String, Device> {
                 &self.devices
             }
-            fn devices_(&mut self) -> &mut HashMap<String, Device> {
+            fn devices_(&mut self) -> &mut IndexMap<String, Device> {
                 &mut self.devices
             }
         }
@@ -1284,6 +1344,10 @@ macro_rules! impl_exp_boilerplate {
 
             pub fn clear_edit_cache(&mut self) {
                 BaseExperiment::clear_edit_cache(self);
+            }
+
+            pub fn add_reset_tick(&mut self) -> f64 {
+                BaseExperiment::add_reset_tick(self)
             }
 
             pub fn clear_compile_cache(&mut self) {
@@ -1453,7 +1517,7 @@ impl Experiment {
     /// Constructor for the `Experiment` class.
     ///
     /// This constructor initializes an instance of the `Experiment` class with an empty collection of devices.
-    /// The underlying representation of this collection is a hashmap where device names (strings) map to their
+    /// The underlying representation of this collection is a IndexMap where device names (strings) map to their
     /// respective `Device` objects.
     ///
     /// # Returns
@@ -1469,7 +1533,7 @@ impl Experiment {
     #[new]
     pub fn new() -> Self {
         Self {
-            devices: HashMap::new(),
+            devices: IndexMap::new(),
         }
     }
 }

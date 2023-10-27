@@ -10,6 +10,10 @@ run:
 	@echo "Running the main function..."
 	cargo run
 
+dev:
+	@echo "Starting real-time build and watch.."
+	cargo watch -x build
+
 # Define the export target
 export:
 	@echo "Building python and rust library ..."

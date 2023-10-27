@@ -48,7 +48,7 @@
 use numpy;
 use pyo3::prelude::*;
 use rayon::prelude::*;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::sync::Arc;
 
 use nicompiler_backend::*;
@@ -65,7 +65,7 @@ use crate::utils::Semaphore;
 /// multi-threading capabilities to handle concurrent device streaming and is equipped with helper
 /// methods for device management.
 ///
-/// The underlying `devices` hashmap contains all the devices registered to this experiment, with
+/// The underlying `devices` IndexMap contains all the devices registered to this experiment, with
 /// device names (strings) as keys mapping to their respective `Device` objects.
 ///
 /// While this struct offers enhanced functionalities specific to NI device management,
@@ -78,7 +78,7 @@ use crate::utils::Semaphore;
 /// experimental control.
 #[pyclass]
 pub struct Experiment {
-    devices: HashMap<String, Device>,
+    devices: IndexMap<String, Device>,
 }
 
 impl_exp_boilerplate!(Experiment);
@@ -163,7 +163,7 @@ impl Experiment {
     /// Constructor for the `Experiment` class.
     ///
     /// This constructor initializes an instance of the `Experiment` class with an empty collection of devices.
-    /// The underlying representation of this collection is a hashmap where device names (strings) map to their
+    /// The underlying representation of this collection is a IndexMap where device names (strings) map to their
     /// respective `Device` objects.
     ///
     /// # Returns
@@ -179,7 +179,7 @@ impl Experiment {
     #[new]
     pub fn new() -> Self {
         Self {
-            devices: HashMap::new(),
+            devices: IndexMap::new(),
         }
     }
 }

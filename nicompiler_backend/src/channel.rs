@@ -146,7 +146,8 @@ pub trait BaseChannel {
     /// The `compile` method processes the instruction list (`instr_list`) to generate a compiled
     /// list of end positions (`instr_end`) and corresponding values (`instr_val`). During compilation,
     /// it ensures that instructions are contiguous, adding padding as necessary. If two consecutive
-    /// instructions have the same value, they are merged into a single instruction.
+    /// instructions have the same value, they are merged into a single instruction. 
+    /// Unspecified intervals default to zero value. 
     ///
     /// # Arguments
     ///

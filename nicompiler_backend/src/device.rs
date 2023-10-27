@@ -34,7 +34,8 @@
 
 use ndarray::{s, Array1, Array2};
 use regex::Regex;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
+use indexmap::IndexMap;
 
 use crate::channel::*;
 use crate::instruction::*;
@@ -81,7 +82,7 @@ use crate::utils::*;
 /// When creating a new type that represents an NI device, implementing this trait ensures that the type has all the necessary methods and behaviors typical of NI devices. Implementers can then extend or override these methods as necessary to provide device-specific behavior or optimizations.
 pub trait BaseDevice {
     // Immutable accessors (getters)
-    fn channels(&self) -> &HashMap<String, Channel>;
+    fn channels(&self) -> &IndexMap<String, Channel>;
     fn name(&self) -> &str;
     fn task_type(&self) -> TaskType;
     fn samp_rate(&self) -> f64;
@@ -93,7 +94,7 @@ pub trait BaseDevice {
     fn ref_clk_rate(&self) -> Option<f64>;
 
     // Mutable accessors
-    fn channels_(&mut self) -> &mut HashMap<String, Channel>;
+    fn channels_(&mut self) -> &mut IndexMap<String, Channel>;
     fn samp_clk_src_(&mut self) -> &mut Option<String>;
     fn trig_line_(&mut self) -> &mut Option<String>;
     fn export_trig_(&mut self) -> &mut Option<bool>;
@@ -671,7 +672,7 @@ pub trait BaseDevice {
 /// exp.device_cfg_trig("PXI1Slot6", "PXI1_Trig0", false);
 /// ```
 pub struct Device {
-    channels: HashMap<String, Channel>,
+    channels: IndexMap<String, Channel>,
 
     name: String,
     task_type: TaskType,
@@ -702,7 +703,7 @@ impl Device {
     /// A new instance of `Device` with the specified configurations and all synchronization-related fields set to `None`.
     pub fn new(name: &str, task_type: TaskType, samp_rate: f64) -> Self {
         Self {
-            channels: HashMap::new(),
+            channels: IndexMap::new(),
 
             name: name.to_string(),
             task_type,
@@ -720,7 +721,7 @@ impl Device {
 
 impl BaseDevice for Device {
     // Immutable accessors (getters)
-    fn channels(&self) -> &HashMap<String, Channel> {
+    fn channels(&self) -> &IndexMap<String, Channel> {
         &self.channels
     }
 
@@ -761,7 +762,7 @@ impl BaseDevice for Device {
     }
 
     // Mutable accessors
-    fn channels_(&mut self) -> &mut HashMap<String, Channel> {
+    fn channels_(&mut self) -> &mut IndexMap<String, Channel> {
         &mut self.channels
     }
 

@@ -12,7 +12,7 @@
 //!
 //! - The `InstrArgs` type alias provides a convenient way to define instruction arguments using a dictionary with string keys and float values.
 //!
-//! - The module makes use of the `maplit` crate to enable easy creation of hashmaps.
+//! - The module makes use of the `maplit` crate to enable easy creation of IndexMaps.
 //!
 //! ## Features:
 //!
@@ -21,15 +21,13 @@
 //! - Support for default values in instructions, allowing for flexibility and ease of use.
 
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::f64::consts::PI;
 use std::fmt;
 
-use maplit::hashmap;
-
 /// Type alias for instruction arguments: a dictionary with key-value pairs of
 /// string (argument name) and float (value)
-pub type InstrArgs = HashMap<String, f64>;
+pub type InstrArgs = IndexMap<String, f64>;
 
 /// Enum type for different instructions. Supported instructions: `CONST`, `SINE`
 #[derive(Clone, PartialEq)]
@@ -92,7 +90,7 @@ impl Instruction {
     ///
     /// ```
     /// use nicompiler_backend::instruction::*;
-    /// use std::collections::HashMap;
+    /// use indexmap::IndexMap;;
     ///
     /// let mut const_args = InstrArgs::new();
     /// const_args.insert("value".to_string(), 1.0);
@@ -103,7 +101,7 @@ impl Instruction {
     ///
     /// ```should_panic
     /// # use nicompiler_backend::instruction::*;
-    /// # use std::collections::HashMap;
+    /// # use indexmap::IndexMap;;
     /// let mut const_args = InstrArgs::new();
     /// let const_instr = Instruction::new(InstrType::CONST, const_args);
     /// ```
@@ -115,7 +113,7 @@ impl Instruction {
     ///
     /// ```
     /// # use nicompiler_backend::instruction::*;
-    /// # use std::collections::HashMap;
+    /// # use indexmap::IndexMap;;
 
     /// let mut sine_args = InstrArgs::new();
     /// sine_args.insert("freq".to_string(), 10.0);
@@ -191,7 +189,9 @@ impl Instruction {
     /// let const_instr = Instruction::new_const(1.0);
     /// ```
     pub fn new_const(value: f64) -> Instruction {
-        Instruction::new(InstrType::CONST, hashmap! {String::from("value") => value})
+        let mut args = IndexMap::new();
+        args.insert(String::from("value"), value);
+        Instruction::new(InstrType::CONST, args)
     }
 
     /// Constructs a new sine instruction with provided parameters.
@@ -221,7 +221,8 @@ impl Instruction {
         phase: Option<f64>,
         dc_offset: Option<f64>,
     ) -> Instruction {
-        let mut instr_args: InstrArgs = hashmap! {"freq".to_string() => freq};
+        let mut instr_args = IndexMap::new();
+        instr_args.insert(String::from("freq"), freq);
         // For each optional argument, if specified, insert into dictionary
         [
             ("amplitude", amplitude),

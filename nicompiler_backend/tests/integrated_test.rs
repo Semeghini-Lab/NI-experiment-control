@@ -1,10 +1,5 @@
-pub mod channel;
-pub mod device;
-pub mod experiment;
-pub mod instruction;
-pub mod utils;
-
-use nicompiler_backend::*;
+use nicompiler_backend::Experiment;
+use nicompiler_backend::BaseExperiment;
 
 // fn main() {
 //     let mut exp = Experiment::new();
@@ -55,18 +50,31 @@ use nicompiler_backend::*;
 //     assert_eq!(exp.compiled_stop_time(), 10.);
 // }
 
-// fn main() {
-//     let mut exp = Experiment::new();
-//     // Define devices and associated channels
-//     exp.add_do_device("PXI1Slot6", 1e7);
-//     exp.add_do_channel("PXI1Slot6", 0, 0);
+#[test]
+fn empty_compile() {
+    let mut exp = Experiment::new();
+    // Define devices and associated channels
+    exp.add_do_device("PXI1Slot6", 1e7);
+    exp.add_do_channel("PXI1Slot6", 0, 0);
 
-//     exp.compile();
-//     println!("Compiled!");
-// }
+    exp.compile();
+    println!("Compiled!");
+}
 
+#[test]
+#[should_panic(expected="There is no channel with streamable=false, editable=false")]
+fn empty_calc_signal() {
+    let mut exp = Experiment::new();
+    // Define devices and associated channels
+    exp.add_do_device("PXI1Slot6", 1e7);
+    exp.add_do_channel("PXI1Slot6", 0, 0);
 
-fn main() {
+    exp.compile();
+    exp.device_calc_signal_nsamps("PXI1Slot6", 0, 10, 100, false, false);
+}
+
+#[test]
+fn test_reset_tick() {
     let mut exp = Experiment::new();
     // Define devices and associated channels
     exp.add_do_device("PXI1Slot6", 10.);
