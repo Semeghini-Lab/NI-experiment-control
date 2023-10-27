@@ -137,7 +137,7 @@ class AOCardProxy(BaseCardProxy):
     def add_chan(self, chan_idx: int, nickname: str = None):
         # Raw rust-maturin wrapper call
         self._dll.add_ao_channel(
-            dev_name=self.max_name,  # FixMe[Rust]: change `dev_name` to `max_name`
+            dev_name=self.max_name, 
             channel_id=chan_idx,  # FixMe[Rust]: maybe change `channel_id` to `chan_idx`
         )
         # Instantiate proxy object
@@ -159,7 +159,7 @@ class DOCardProxy(BaseCardProxy):
     def add_chan(self, port_idx: int, line_idx: int, nickname: str = None):
         # Raw rust-maturin wrapper call
         self._dll.add_do_channel(
-            dev_name=self.max_name,  # FixMe[Rust]: change `dev_name` to `max_name`
+            self.max_name, 
             port_id=port_idx,
             # FixMe[Rust]: maybe change `port_id` to `port_idx`
             #  - idx is associated with "int" - values from 0 to N-1, while "id" is more general

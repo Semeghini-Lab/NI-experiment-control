@@ -50,7 +50,7 @@ class NIStreamer:
         # Raw (maturin wrapped) DLL call
         dll_method(
             self._dll,
-            physical_name=max_name,  # FixMe[Rust]: change `physical_name` to `max_name`
+            max_name,  # FixMe[Rust]: change `physical_name` to `max_name`
             samp_rate=samp_rate
         )
         # Proxy object

@@ -329,11 +329,57 @@ pub trait BaseChannel {
             .map_or(0., |instr| instr.end_pos as f64 / self.samp_rate())
     }
 
+    fn add_instr_(&mut self, instr: Instruction, t: f64, duration: f64, keep_val: bool, had_conflict: bool) {
+        let start_pos = (t * self.samp_rate()) as usize;
+        let end_pos = ((t * self.samp_rate()) as usize) + ((duration * self.samp_rate()) as usize);
+        let new_instrbook = InstrBook::new(start_pos, end_pos, keep_val, instr);
+        // Upon adding an instruction, the channel is not freshly compiled anymore
+        *self.fresh_compiled_() = false;
+
+        // Check for overlaps
+        let name = self.name();
+        let delta = (1e-3 / self.samp_rate()) as usize;
+        if let Some(next) = self.instr_list().range(&new_instrbook..).next() {
+            if next.start_pos < new_instrbook.end_pos {
+                // Accomodate tick conflicts less than delta on the right
+                if !had_conflict && start_pos + delta >= new_instrbook.end_pos {
+                    let conflict_ticks = new_instrbook.end_pos - start_pos;
+                    assert!(conflict_ticks != 0, "unintended behavior");
+                    self.add_instr_(new_instrbook.instr, t - (delta as f64) / self.samp_rate(), duration, keep_val, true);
+                    return;
+                } else {
+                    panic!(
+                    "Channel {}\n Instruction {} overlaps with the next instruction {}\n",
+                    name, new_instrbook, next
+                );
+                }
+            }
+        }
+        if let Some(prev) = self.instr_list().range(..&new_instrbook).next_back() {
+            if prev.end_pos > new_instrbook.start_pos {
+                // Accomodate tick conflicts less than delta on the right
+                if !had_conflict && new_instrbook.start_pos + delta >= prev.end_pos {
+                    let conflict_ticks = prev.end_pos - new_instrbook.start_pos;
+                    assert!(conflict_ticks != 0, "unintended behavior");
+                    self.add_instr_(new_instrbook.instr, t + (delta as f64) / self.samp_rate(), duration, keep_val, true);
+                    return;
+                } else {
+                    panic!(
+                    "Channel {}\n Instruction {} overlaps with the previous instruction {}",
+                    name, new_instrbook, prev);
+                }
+            }
+        } else {
+            self.instr_list_().insert(new_instrbook);
+        }
+    }
+
     /// Adds an instruction to the channel.
     ///
     /// This is the primary method for adding instructions. It computes the discrete position
     /// interval associated with the given instruction, updates the `fresh_compiled` field,
     /// and inserts the instruction if it does not overlap with existing ones.
+    /// See the helper [`BaseChannel::add_instr_`] for implementation details. 
     ///
     /// # Arguments
     ///
@@ -383,32 +429,7 @@ pub trait BaseChannel {
     ///  Instruction InstrBook([CONST, {value: 1}], 5000000-15000000, false) overlaps with the next instruction InstrBook([CONST, {value: 1}], 5000000-5010000, true)"
     /// ```
     fn add_instr(&mut self, instr: Instruction, t: f64, duration: f64, keep_val: bool) {
-        let start_pos = (t * self.samp_rate()) as usize;
-        let end_pos = ((t * self.samp_rate()) as usize) + ((duration * self.samp_rate()) as usize);
-        let new_instrbook = InstrBook::new(start_pos, end_pos, keep_val, instr);
-        // Upon adding an instruction, the channel is not freshly compiled anymore
-        *self.fresh_compiled_() = false;
-
-        // Check for overlaps
-        let name = self.name();
-        if let Some(next) = self.instr_list().range(&new_instrbook..).next() {
-            if next.start_pos < new_instrbook.end_pos {
-                panic!(
-                    "Channel {}\n Instruction {} overlaps with the next instruction {}\n",
-                    name, new_instrbook, next
-                );
-            }
-        }
-        if let Some(prev) = self.instr_list().range(..&new_instrbook).next_back() {
-            if prev.end_pos > new_instrbook.start_pos {
-                panic!(
-                    "Channel {}\n Instruction {} overlaps with the previous instruction {}",
-                    name, new_instrbook, prev
-                );
-            }
-        }
-
-        self.instr_list_().insert(new_instrbook);
+        self.add_instr_(instr, t, duration, keep_val, false);
     }
 
     /// Utility function to add a constant instruction to the channel

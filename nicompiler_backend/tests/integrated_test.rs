@@ -51,12 +51,26 @@ use nicompiler_backend::BaseExperiment;
 // }
 
 #[test]
-fn empty_compile() {
+fn empty_compile_do() {
     let mut exp = Experiment::new();
     // Define devices and associated channels
     exp.add_do_device("PXI1Slot6", 1e7);
     exp.add_do_channel("PXI1Slot6", 0, 0);
 
+    exp.compile();
+    println!("Compiled!");
+}
+
+#[test]
+fn empty_compile_ao_do_mix() {
+    let mut exp = Experiment::new();
+    // Define devices and associated channels
+    exp.add_do_device("PXI1Slot6", 1e7);
+    exp.add_do_channel("PXI1Slot6", 0, 0);
+    exp.add_ao_device("PXI1Slot3", 1e6);
+    exp.add_ao_channel("PXI1Slot3", 0);
+
+    exp.sine("PXI1Slot3", "ao0", 0., 1., false, 10., None, None, None);
     exp.compile();
     println!("Compiled!");
 }
