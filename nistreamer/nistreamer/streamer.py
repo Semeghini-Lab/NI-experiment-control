@@ -107,6 +107,9 @@ class NIStreamer:
             nreps=nreps
         )
 
+    def add_reset_tick(self):
+        self._dll.add_reset_tick()
+
     def clear_edit_cache(self):
         self._dll.clear_edit_cache()
         self._dll.clear_compile_cache()

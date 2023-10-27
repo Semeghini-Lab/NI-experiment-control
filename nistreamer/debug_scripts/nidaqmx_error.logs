@@ -1,0 +1,7 @@
+DAQmx Error: Device identifier is invalid.
+Device Specified: PXI1Slot3
+Suggested Device(s): PXI1Slot2, Dev1, PXI1Slot8, PXI1Slot7
+
+Task Name: _unnamedTask<0>
+
+Status Code: -200220

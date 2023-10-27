@@ -137,7 +137,7 @@ class AOCardProxy(BaseCardProxy):
     def add_chan(self, chan_idx: int, nickname: str = None):
         # Raw rust-maturin wrapper call
         self._dll.add_ao_channel(
-            dev_name=self.max_name, 
+            self.max_name, 
             channel_id=chan_idx,  # FixMe[Rust]: maybe change `channel_id` to `chan_idx`
         )
         # Instantiate proxy object

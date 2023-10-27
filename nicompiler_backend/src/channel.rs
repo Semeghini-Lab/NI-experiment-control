@@ -354,7 +354,7 @@ pub trait BaseChannel {
                 );
                 }
             }
-        }
+        } 
         if let Some(prev) = self.instr_list().range(..&new_instrbook).next_back() {
             if prev.end_pos > new_instrbook.start_pos {
                 // Accomodate tick conflicts less than delta on the right
@@ -368,10 +368,9 @@ pub trait BaseChannel {
                     "Channel {}\n Instruction {} overlaps with the previous instruction {}",
                     name, new_instrbook, prev);
                 }
-            }
-        } else {
-            self.instr_list_().insert(new_instrbook);
+            } 
         }
+        self.instr_list_().insert(new_instrbook);
     }
 
     /// Adds an instruction to the channel.
