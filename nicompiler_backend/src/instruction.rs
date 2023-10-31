@@ -34,6 +34,7 @@ pub type InstrArgs = IndexMap<String, f64>;
 pub enum InstrType {
     CONST,
     SINE,
+    LINRAMP, // Linear ramp
 }
 impl fmt::Display for InstrType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -43,6 +44,7 @@ impl fmt::Display for InstrType {
             match self {
                 InstrType::CONST => "CONST",
                 InstrType::SINE => "SINE",
+                InstrType::LINRAMP => "LINRAMP",
             }
         )
     }
@@ -67,7 +69,9 @@ impl fmt::Display for InstrType {
 ///    - `amplitude`: Default is `1.0`
 ///    - `offset`: Default is `0.0`
 ///    - `phase`: Default is `0.0`
-///
+/// 3. `InstrType::LINRAMP`: 
+///     - `start_val`
+///     - `end_val`
 #[derive(Clone, PartialEq)]
 pub struct Instruction {
     pub instr_type: InstrType,
@@ -121,14 +125,17 @@ impl Instruction {
     /// let sine_instr = Instruction::new(InstrType::SINE, sine_args);
     /// ```
     pub fn new(instr_type: InstrType, args: InstrArgs) -> Self {
-        let panic_no_key = |key| {
-            if !args.contains_key(key) {
-                panic!("Expected instr type {} to contain key {}", instr_type, key)
+        let panic_no_key = |keys: &[&str]| {
+            for &key in keys {
+                if !args.contains_key(key) {
+                    panic!("Expected instr type {} to contain key {}", instr_type, key)
+                }
             }
         };
         match instr_type {
-            InstrType::CONST => panic_no_key("value"),
-            InstrType::SINE => panic_no_key("freq"),
+            InstrType::CONST => panic_no_key(&["value"]),
+            InstrType::SINE => panic_no_key(&["freq"]),
+            InstrType::LINRAMP => panic_no_key(&["start_val", "end_val"]),
         };
         Instruction { instr_type, args }
     }
@@ -179,6 +186,16 @@ impl Instruction {
                     *t = (2.0 * PI * freq * (*t) + phase).sin() * amplitude + offset
                 });
             }
+            InstrType::LINRAMP => {
+                let start_val = *self.args.get("start_val").unwrap();
+                let end_val = *self.args.get("end_val").unwrap();
+                let t_start = t_arr[0].clone();
+                let t_end = t_arr[t_arr.len() - 1].clone();
+
+                t_arr.map_inplace(|t| {
+                    *t = (*t - t_start) * (end_val - start_val) / (t_end - t_start) + start_val;
+                });
+            }
         }
     }
 
@@ -192,6 +209,15 @@ impl Instruction {
         let mut args = IndexMap::new();
         args.insert(String::from("value"), value);
         Instruction::new(InstrType::CONST, args)
+    }
+
+    /// Wrapper for conveniently creating new linear ramp instructions. 
+    /// `start_val` will be the value on the first tick, and `end_val` value on the last tick. 
+    pub fn new_linramp(start_val: f64, end_val:f64) -> Instruction {
+        let mut args = IndexMap::new();
+        args.insert(String::from("start_val"), start_val);
+        args.insert(String::from("end_val"), end_val);
+        Instruction::new(InstrType::LINRAMP, args)
     }
 
     /// Constructs a new sine instruction with provided parameters.

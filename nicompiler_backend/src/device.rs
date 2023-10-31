@@ -366,18 +366,28 @@ pub trait BaseDevice {
             .fold(0.0, f64::max)
     }
 
-    /// Calculates the maximum stop time among all editable channels.
+    /// Calculates the maximum stop time among all editable channels and optionally adds an extra tick duration.
     ///
-    /// Iterates over all the editable channels in the device and determines the maximum stop time.
-    /// See [`BaseChannel::edit_stop_time`] for more information.
+    /// This function determines the maximum stop time by iterating over all editable channels. 
+    /// If `extra_tail_tick` is `true`, an additional duration, equivalent to one tick of the device's 
+    /// sampling rate, is added to the maximum stop time.
+    ///
+    /// See [`BaseChannel::edit_stop_time`] for how individual channel stop times are determined.
     ///
     /// # Returns
-    /// A `f64` representing the maximum stop time (in seconds) across all editable channels.
-    fn edit_stop_time(&self) -> f64 {
-        self.editable_channels()
+    /// A `f64` representing the maximum stop time (in seconds) across all editable channels, 
+    /// optionally increased by the duration of one tick.
+    fn edit_stop_time(&self, extra_tail_tick: bool) -> f64 {
+        let base_edit_stop_time = self.editable_channels()
             .iter()
             .map(|chan| chan.edit_stop_time())
-            .fold(0.0, f64::max)
+            .fold(0.0, f64::max);
+        
+        if extra_tail_tick {
+            base_edit_stop_time + 1. / self.samp_rate()
+        } else {
+            base_edit_stop_time
+        }
     }
 
     /// Generates a signal by sampling float-point values from compiled instructions.

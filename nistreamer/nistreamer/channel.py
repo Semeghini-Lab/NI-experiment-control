@@ -46,7 +46,7 @@ class BaseChanProxy:
         # if not self._dll.is_fresh_compiled():
         #     self._dll.compile()
         # ToDo: until then go inefficient but safe - recompile from scratch every time
-        self._dll.compile()
+        self._dll.compile(extra_tail_tick=True)
 
         t_start = t_start if t_start is not None else 0.0
         t_end = t_end if t_end is not None else self._dll.compiled_stop_time()
@@ -125,6 +125,18 @@ class AOChanProxy(BaseChanProxy):
             phase=phase if phase != 0 else None,
             # FixMe[Rust]: better to use 0.0 instead of None for default. Is it conveninient in Rust?
             dc_offset=dc_offs if dc_offs != 0 else None,  # FixMe[Rust]: better to use 0.0 instead of None for default
+            keep_val=keep_val,
+        )
+        return dur
+    
+    def linramp(self, t, dur, start_val, end_val, keep_val=True):
+        self._dll.linramp(
+            dev_name=self._card_max_name,
+            chan_name=self.chan_name,
+            t=t,
+            duration=dur,
+            start_val=start_val, 
+            end_val=end_val,
             keep_val=keep_val,
         )
         return dur

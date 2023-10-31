@@ -91,7 +91,7 @@ class NIStreamer:
 
     def compile(self, stop_time: Optional[float] = None) -> float:
         if stop_time is None:
-            self._dll.compile()
+            self._dll.compile(extra_tail_tick=True) # Adds tail tick by default
         else:
             self._dll.compile_with_stoptime(stop_time=stop_time)
 

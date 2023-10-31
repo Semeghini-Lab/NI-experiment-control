@@ -57,7 +57,7 @@ fn empty_compile_do() {
     exp.add_do_device("PXI1Slot6", 1e7);
     exp.add_do_channel("PXI1Slot6", 0, 0);
 
-    exp.compile();
+    exp.compile(false);
     println!("Compiled!");
 }
 
@@ -71,7 +71,7 @@ fn empty_compile_ao_do_mix() {
     exp.add_ao_channel("PXI1Slot3", 0);
 
     exp.sine("PXI1Slot3", "ao0", 0., 1., false, 10., None, None, None);
-    exp.compile();
+    exp.compile(false);
     println!("Compiled!");
 }
 
@@ -83,7 +83,7 @@ fn empty_calc_signal() {
     exp.add_do_device("PXI1Slot6", 1e7);
     exp.add_do_channel("PXI1Slot6", 0, 0);
 
-    exp.compile();
+    exp.compile(false);
     exp.device_calc_signal_nsamps("PXI1Slot6", 0, 10, 100, false, false);
 }
 

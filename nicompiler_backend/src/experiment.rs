@@ -268,14 +268,14 @@ pub trait BaseExperiment {
     /// exp.add_do_channel("PXI1Slot6", 0, 0);
     /// exp.add_do_channel("PXI1Slot6", 0, 4);
     /// exp.high("PXI1Slot6", "port0/line0", 1., 4.); // stop time at 5
-    /// assert_eq!(exp.edit_stop_time(), 5.);
+    /// assert_eq!(exp.edit_stop_time(false), 5.);
     /// exp.high("PXI1Slot6", "port0/line4", 0., 6.); // stop time at 6
-    /// assert_eq!(exp.edit_stop_time(), 6.);
+    /// assert_eq!(exp.edit_stop_time(false), 6.);
     /// ```
-    fn edit_stop_time(&self) -> f64 {
+    fn edit_stop_time(&self, extra_tail_tick: bool) -> f64 {
         self.devices()
             .values()
-            .map(|dev| dev.edit_stop_time())
+            .map(|dev| dev.edit_stop_time(extra_tail_tick))
             .fold(0.0, f64::max)
     }
 
@@ -292,7 +292,9 @@ pub trait BaseExperiment {
 
     /// Broadcasts the compile command to all devices, relying on the `edit_stop_time`
     /// as the compilation stop-target.
-    /// See [`BaseDevice::compile`] and [`BaseExperiment::compiled_stop_time`] for more information.
+    /// If `extra_tail_tick`, then the actual stop time is one tick past the specified 
+    /// edit_stop_time for every device, allowing trailing commands with `keep_val` to take effect. 
+    /// See [`BaseDevice::compile`], [`BaseExperiment::edit_stop_time`], and [`BaseExperiment::compiled_stop_time`] for more information.
     ///
     /// # Example
     /// ```
@@ -302,12 +304,12 @@ pub trait BaseExperiment {
     /// exp.add_do_channel("PXI1Slot6", 0, 0);
     /// exp.high("PXI1Slot6", "port0/line0", 1., 4.);
     ///
-    /// exp.compile();
-    /// assert_eq!(exp.compiled_stop_time(), exp.edit_stop_time());
+    /// exp.compile(false);
+    /// assert_eq!(exp.compiled_stop_time(), exp.edit_stop_time(false));
     /// ```
-    fn compile(&mut self) -> f64 {
+    fn compile(&mut self, extra_tail_tick: bool) -> f64 {
         // Called without arguments, compiles based on stop_time of instructions
-        let stop_time = self.edit_stop_time();
+        let stop_time = self.edit_stop_time(extra_tail_tick);
         self.compile_with_stoptime(stop_time);
         assert!(stop_time == self.compiled_stop_time());
         stop_time
@@ -344,7 +346,7 @@ pub trait BaseExperiment {
     /// exp.add_do_channel("PXI1Slot6", 0, 0);
     /// exp.high("PXI1Slot6", "port0/line0", 1., 3.);
     ///
-    /// exp.compile();
+    /// exp.compile(false);
     /// assert_eq!(exp.compiled_stop_time(), 4.);
     /// exp.compile_with_stoptime(5.); // Experiment signal will stop at t=5 now
     /// assert_eq!(exp.compiled_stop_time(), 5.);
@@ -468,7 +470,7 @@ pub trait BaseExperiment {
     /// // println!("{:?}, reset_tick_time={}", sig, reset_tick_time);
     /// ```
     fn add_reset_tick(&mut self) -> f64 {
-        let edit_stop_time = self.edit_stop_time();
+        let edit_stop_time = self.edit_stop_time(false);
         self.devices_().values_mut().for_each(|dev| {
             dev.editable_channels_().iter_mut().for_each(|chan|{
                 chan.constant(0., edit_stop_time, 1./ chan.samp_rate(), true);
@@ -851,7 +853,7 @@ pub trait BaseExperiment {
     ///
     /// Returns the edit stop time for the specified device.
     fn device_edit_stop_time(&mut self, name: &str) -> f64 {
-        self.device_op(name, |dev| (*dev).edit_stop_time())
+        self.device_op(name, |dev| (*dev).edit_stop_time(false))
     }
 
     /// Retrieves the maximum `compiled_stop_time` from all registered devices.
@@ -1169,6 +1171,41 @@ pub trait BaseExperiment {
         });
     }
 
+    /// Ramps the specified analogue output (AO) channel linearly between two values over a specified duration.
+    ///
+    /// This method generates a linear ramping signal, starting from `start_val` and ending at `end_val`, 
+    /// over the duration of `duration`. It is useful for gradually changing the signal level on the AO channel.
+    ///
+    /// # Arguments
+    ///
+    /// * `dev_name`: The name of the target device.
+    /// * `chan_name`: The name of the target AO channel within the device.
+    /// * `t`: The start time for the signal to begin ramping.
+    /// * `duration`: The duration over which the signal should ramp from `start_val` to `end_val`.
+    /// * `start_val`: The initial value of the signal at the start of the ramping period.
+    /// * `end_val`: The final value of the signal at the end of the ramping period.
+    /// * `keep_val`: A boolean indicating whether the signal should maintain the `end_val` after the ramping 
+    ///   duration has completed.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if the channel is not of type AO.
+    fn linramp(
+        &mut self,
+        dev_name: &str,
+        chan_name: &str,
+        t: f64,
+        duration: f64,
+        start_val: f64,
+        end_val: f64,
+        keep_val: bool,
+    ) {
+        self.typed_channel_op(dev_name, chan_name, TaskType::AO, |chan| {
+            let instr = Instruction::new_linramp(start_val, end_val);
+            (*chan).add_instr(instr, t, duration, keep_val)
+        });
+    }
+
     /// Clears the edit cache of the specified channel.
     ///
     /// This method resets the channel to its pre-edit state. Clearing the edit cache can be helpful
@@ -1258,7 +1295,7 @@ pub trait BaseExperiment {
     /// exp.add_do_device("PXI1Slot7", 1e6);
     /// exp.add_do_channel("PXI1Slot7", 0, 7);
     /// exp.go_high("PXI1Slot7", "port0/line7", 0.);
-    /// exp.compile();
+    /// exp.compile(false);
     /// assert_eq!(exp.is_compiled(), true);
     /// exp.channel_clear_compile_cache("PXI1Slot7", "port0/line7");
     /// assert_eq!(exp.is_compiled(), false);
@@ -1338,15 +1375,15 @@ macro_rules! impl_exp_boilerplate {
             }
 
             pub fn edit_stop_time(&self) -> f64 {
-                BaseExperiment::edit_stop_time(self)
+                BaseExperiment::edit_stop_time(self, false)
             }
 
             pub fn compiled_stop_time(&self) -> f64 {
                 BaseExperiment::compiled_stop_time(self)
             }
 
-            pub fn compile(&mut self) -> f64 {
-                BaseExperiment::compile(self)
+            pub fn compile(&mut self, extra_tail_tick: bool) -> f64 {
+                BaseExperiment::compile(self, extra_tail_tick)
             }
 
             pub fn compile_with_stoptime(&mut self, stop_time: f64) {
@@ -1513,6 +1550,19 @@ macro_rules! impl_exp_boilerplate {
 
             pub fn go_constant(&mut self, dev_name: &str, chan_name: &str, t: f64, value:f64) {
                 BaseExperiment::go_constant(self, dev_name, chan_name, t, value);
+            }
+
+            pub fn linramp(
+                &mut self,
+                dev_name: &str,
+                chan_name: &str,
+                t: f64,
+                duration: f64,
+                start_val: f64,
+                end_val: f64,
+                keep_val: bool,
+            ) {
+                BaseExperiment::linramp(self, dev_name, chan_name, t, duration, start_val, end_val, keep_val);
             }
 
             pub fn channel_clear_compile_cache(&mut self, dev_name: &str, chan_name: &str) {
