@@ -338,20 +338,20 @@ pub trait BaseChannel {
 
         // Check for overlaps
         let name = self.name();
-        let delta = (1e-3 / self.samp_rate()) as usize;
+        let delta = (1e-3 * self.samp_rate()) as usize; // Accomodate shift up to 1ms
         if let Some(next) = self.instr_list().range(&new_instrbook..).next() {
             if next.start_pos < new_instrbook.end_pos {
                 // Accomodate tick conflicts less than delta on the right
-                if !had_conflict && start_pos + delta >= new_instrbook.end_pos {
+                if !had_conflict && next.start_pos + delta >= new_instrbook.end_pos {
                     let conflict_ticks = new_instrbook.end_pos - start_pos;
+                    println!("Conflict ticks {}", conflict_ticks);
                     assert!(conflict_ticks != 0, "unintended behavior");
-                    self.add_instr_(new_instrbook.instr, t - (delta as f64) / self.samp_rate(), duration, keep_val, true);
+                    self.add_instr_(new_instrbook.instr, t - ((conflict_ticks + 1) as f64) / self.samp_rate(), duration, keep_val, true);
                     return;
                 } else {
                     panic!(
-                    "Channel {}\n Instruction {} overlaps with the next instruction {}\n",
-                    name, new_instrbook, next
-                );
+                    "Channel {}\n Instruction {} overlaps with the next instruction {}. Had conflict: {}; next_start: {}; new_end {}; attempted new_end: {}\n",
+                    name, new_instrbook, next, had_conflict, next.start_pos, new_instrbook.end_pos, new_instrbook.end_pos - delta);
                 }
             }
         } 
@@ -360,13 +360,14 @@ pub trait BaseChannel {
                 // Accomodate tick conflicts less than delta on the right
                 if !had_conflict && new_instrbook.start_pos + delta >= prev.end_pos {
                     let conflict_ticks = prev.end_pos - new_instrbook.start_pos;
+                    println!("Conflict ticks {}", conflict_ticks);
                     assert!(conflict_ticks != 0, "unintended behavior");
-                    self.add_instr_(new_instrbook.instr, t + (delta as f64) / self.samp_rate(), duration, keep_val, true);
+                    self.add_instr_(new_instrbook.instr, t + ((conflict_ticks + 1) as f64) / self.samp_rate(), duration, keep_val, true);
                     return;
                 } else {
                     panic!(
-                    "Channel {}\n Instruction {} overlaps with the previous instruction {}",
-                    name, new_instrbook, prev);
+                    "Channel {}\n Instruction {} overlaps with the previous instruction {}. Had conflict: {}; prev_end {}; new_start {}; attempted new_start: {}\n",
+                    name, new_instrbook, prev, had_conflict, prev.end_pos, new_instrbook.start_pos, new_instrbook.start_pos + delta);
                 }
             } 
         }
