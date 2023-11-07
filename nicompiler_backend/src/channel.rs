@@ -101,7 +101,9 @@ pub trait BaseChannel {
     /// The `fresh_compiled` field is set to true by each [`BaseChannel::compile`] call and
     /// `false` by each [`BaseChannel::add_instr`].  
     fn is_fresh_compiled(&self) -> bool;
-    /// Provies a reference to the edit cache of instrbook list.
+    /// The `default_value` trait specifies the signal value for not explicitly defined intervals.
+    fn default_value(&self) -> f64;
+    /// Provides a reference to the edit cache of instrbook list.
     fn instr_list(&self) -> &BTreeSet<InstrBook>;
     /// Returns the ending points of compiled instructions.
     fn instr_end(&self) -> &Vec<usize>;
@@ -165,7 +167,7 @@ pub trait BaseChannel {
     /// ```
     /// # use nicompiler_backend::channel::*;
     /// # use nicompiler_backend::instruction::*;
-    /// let mut channel = Channel::new(TaskType::DO, "port0/line0", 1e7);
+    /// let mut channel = Channel::new(TaskType::DO, "port0/line0", 1e7, 0.);
     ///
     /// // Add some instructions to the channel.
     /// channel.add_instr(Instruction::new_const(1.), 0., 1., false);
@@ -194,7 +196,7 @@ pub trait BaseChannel {
             );
         }
 
-        let mut last_val = 0.;
+        let mut last_val = self.default_value();
         let mut last_end = 0;
         let mut instr_val: Vec<Instruction> = Vec::new();
         let mut instr_end: Vec<usize> = Vec::new();
@@ -224,7 +226,7 @@ pub trait BaseChannel {
                     }
                 };
             } else {
-                last_val = 0.;
+                last_val = self.default_value();
             }
             last_end = instr_book.end_pos;
         }
@@ -268,7 +270,7 @@ pub trait BaseChannel {
     ///
     /// ```
     /// # use nicompiler_backend::channel::*;
-    /// let mut channel = Channel::new(TaskType::DO, "port0/line0", 1e7);
+    /// let mut channel = Channel::new(TaskType::DO, "port0/line0", 1e7, 0.);
     /// channel.instr_end_().extend([10, 20, 30, 40, 50].iter());
     ///
     /// assert_eq!(channel.binfind_first_intersect_instr(15), 1);
@@ -397,7 +399,7 @@ pub trait BaseChannel {
     /// ```
     /// # use nicompiler_backend::channel::*;
     /// # use nicompiler_backend::instruction::*;
-    /// let mut channel = Channel::new(TaskType::DO, "port0/line0", 1e7);
+    /// let mut channel = Channel::new(TaskType::DO, "port0/line0", 1e7, 0.);
     ///
     /// // Ask the DO channel to go high at t=1 for 0.5 seconds, then return to default value (0)
     /// channel.add_instr(Instruction::new_const(1.), 1., 0.5, false);
@@ -417,7 +419,7 @@ pub trait BaseChannel {
     /// ```should_panic
     /// # use nicompiler_backend::channel::*;
     /// # use nicompiler_backend::instruction::*;
-    /// let mut channel = Channel::new(TaskType::DO, "port0/line0", 1e7);
+    /// let mut channel = Channel::new(TaskType::DO, "port0/line0", 1e7, 0.);
     /// channel.add_instr(Instruction::new_const(1.), 1., 0.5, false);
     /// channel.add_instr(Instruction::new_const(1.), 0.5, 0.001, true);
     /// channel.add_instr(Instruction::new_const(1.), 0.5, 1., false); // This will panic
@@ -462,7 +464,7 @@ pub trait BaseChannel {
     /// ```
     /// # use nicompiler_backend::channel::*;
     /// # use nicompiler_backend::instruction::*;
-    /// let mut channel = Channel::new(TaskType::AO, "ao0", 1e6);
+    /// let mut channel = Channel::new(TaskType::AO, "ao0", 1e6, 0.);
     /// // Sample 100 samples from t=0 to t=10s
     /// let (start_pos, end_pos, num_samps) = (0, 1e7 as usize, 100);
     ///
@@ -564,6 +566,7 @@ pub struct Channel {
     fresh_compiled: bool,
     task_type: TaskType,
     name: String,
+    default_value: f64,
     instr_list: BTreeSet<InstrBook>,
     instr_end: Vec<usize>,
     instr_val: Vec<Instruction>,
@@ -578,6 +581,9 @@ impl BaseChannel for Channel {
     }
     fn name(&self) -> &str {
         &self.name
+    }
+    fn default_value(&self) -> f64 {
+        self.default_value
     }
     fn instr_list(&self) -> &BTreeSet<InstrBook> {
         &self.instr_list
@@ -624,16 +630,17 @@ impl Channel {
     ///
     /// ```
     /// # use nicompiler_backend::channel::*;
-    /// let do_channel = Channel::new(TaskType::DO, "port0/line0", 1e7);
-    /// let ao_channel = Channel::new(TaskType::AO, "ao0", 1e6);
+    /// let do_channel = Channel::new(TaskType::DO, "port0/line0", 1e7, 0.);
+    /// let ao_channel = Channel::new(TaskType::AO, "ao0", 1e6, 0.);
     /// ```
     ///
-    pub fn new(task_type: TaskType, name: &str, samp_rate: f64) -> Self {
+    pub fn new(task_type: TaskType, name: &str, samp_rate: f64, default_value: f64) -> Self {
         Self {
             samp_rate,
             task_type,
             fresh_compiled: true,
             name: name.to_string(),
+            default_value: default_value,
             instr_list: BTreeSet::new(),
             instr_end: Vec::new(),
             instr_val: Vec::new(),

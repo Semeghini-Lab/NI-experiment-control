@@ -9,14 +9,14 @@ fn main() {
     let mut exp = Experiment::new();
     // Define devices and associated channels
     exp.add_ao_device("PXI1Slot3", 1e6);
-    exp.add_ao_channel("PXI1Slot3", 0);
+    exp.add_ao_channel("PXI1Slot3", 0, 0.);
 
     exp.add_ao_device("PXI1Slot4", 1e6);
-    exp.add_ao_channel("PXI1Slot4", 0);
+    exp.add_ao_channel("PXI1Slot4", 0, 0.);
 
     exp.add_do_device("PXI1Slot6", 1e7);
-    exp.add_do_channel("PXI1Slot6", 0, 0);
-    exp.add_do_channel("PXI1Slot6", 0, 4);
+    exp.add_do_channel("PXI1Slot6", 0, 0, 0.);
+    exp.add_do_channel("PXI1Slot6", 0, 4, 0.);
 
     // Define synchronization behavior:
     exp.device_cfg_trig("PXI1Slot3", "PXI_Trig0", true);

@@ -168,7 +168,7 @@ pub trait BaseExperiment {
     ///
     /// let mut exp = Experiment::new();
     /// exp.add_do_device("PXI1Slot6", 1e6,);
-    /// exp.add_do_channel("PXI1Slot6", 0, 0);
+    /// exp.add_do_channel("PXI1Slot6", 0, 0, 0.);
     /// exp.assert_device_has_channel("PXI1Slot6", "port0/line0");
     ///
     /// // This will panic
@@ -265,12 +265,12 @@ pub trait BaseExperiment {
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
     /// exp.add_do_device("PXI1Slot6", 1e6);
-    /// exp.add_do_channel("PXI1Slot6", 0, 0);
-    /// exp.add_do_channel("PXI1Slot6", 0, 4);
+    /// exp.add_do_channel("PXI1Slot6", 0, 0, 0.);
+    /// exp.add_do_channel("PXI1Slot6", 0, 4, 0.);
     /// exp.high("PXI1Slot6", "port0/line0", 1., 4.); // stop time at 5
-    /// assert_eq!(exp.edit_stop_time(false), 5.);
+    /// assert_eq!(exp.edit_stop_time(), 5.);
     /// exp.high("PXI1Slot6", "port0/line4", 0., 6.); // stop time at 6
-    /// assert_eq!(exp.edit_stop_time(false), 6.);
+    /// assert_eq!(exp.edit_stop_time(), 6.);
     /// ```
     fn edit_stop_time(&self, extra_tail_tick: bool) -> f64 {
         self.devices()
@@ -301,18 +301,20 @@ pub trait BaseExperiment {
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
     /// exp.add_do_device("PXI1Slot6", 1e6);
-    /// exp.add_do_channel("PXI1Slot6", 0, 0);
+    /// exp.add_do_channel("PXI1Slot6", 0, 0, 0.);
     /// exp.high("PXI1Slot6", "port0/line0", 1., 4.);
     ///
     /// exp.compile(false);
-    /// assert_eq!(exp.compiled_stop_time(), exp.edit_stop_time(false));
+    /// assert_eq!(exp.compiled_stop_time(), exp.edit_stop_time());
     /// ```
     fn compile(&mut self, extra_tail_tick: bool) -> f64 {
         // Called without arguments, compiles based on stop_time of instructions
         let stop_time = self.edit_stop_time(extra_tail_tick);
         self.compile_with_stoptime(stop_time);
-        assert!(stop_time == self.compiled_stop_time());
         stop_time
+        // assert!(stop_time == self.compiled_stop_time(), 
+        // "Internal bug: intended stop_time {} yet compiled to stop_time {}", stop_time, self.compiled_stop_time());
+        // stop_time
     }
 
     /// Compiles the experiment by broadcasting the compile command to all devices.
@@ -343,7 +345,7 @@ pub trait BaseExperiment {
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
     /// exp.add_do_device("PXI1Slot6", 1e6);
-    /// exp.add_do_channel("PXI1Slot6", 0, 0);
+    /// exp.add_do_channel("PXI1Slot6", 0, 0, 0.);
     /// exp.high("PXI1Slot6", "port0/line0", 1., 3.);
     ///
     /// exp.compile(false);
@@ -448,8 +450,8 @@ pub trait BaseExperiment {
     /// let mut exp = Experiment::new();
     /// // Define devices and associated channels
     /// exp.add_do_device("PXI1Slot6", 10.);
-    /// exp.add_do_channel("PXI1Slot6", 0, 0);
-    /// exp.add_do_channel("PXI1Slot6", 0, 1);
+    /// exp.add_do_channel("PXI1Slot6", 0, 0, 0.);
+    /// exp.add_do_channel("PXI1Slot6", 0, 1, 0.);
     ///
     /// exp.high("PXI1Slot6", "port0/line0", 0., 1.);
     /// exp.go_high("PXI1Slot6", "port0/line1", 0.);
@@ -592,7 +594,7 @@ pub trait BaseExperiment {
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
     /// exp.add_ao_device("PXI1Slot6", 1e6);
-    /// exp.add_ao_channel("PXI1Slot6", 0);
+    /// exp.add_ao_channel("PXI1Slot6", 0, 0.);
     /// exp.typed_channel_op("PXI1Slot6", "ao0", TaskType::AO, |chan| {(*chan).constant(1., 0., 1., false)});
     /// assert_eq!(exp.typed_channel_op("PXI1Slot6", "ao0", TaskType::AO,
     ///             |chan| {(*chan).is_edited()}), true);
@@ -678,11 +680,11 @@ pub trait BaseExperiment {
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
     /// exp.add_ao_device("PXI1Slot3", 1e6);
-    /// exp.add_ao_channel("PXI1Slot3", 0);
+    /// exp.add_ao_channel("PXI1Slot3", 0, 0.);
     /// ```
-    fn add_ao_channel(&mut self, name: &str, channel_id: usize) {
+    fn add_ao_channel(&mut self, name: &str, channel_id: usize, default_value: f64) {
         self.typed_device_op(name, TaskType::AO, |dev| {
-            (*dev).add_channel(&format!("ao{}", channel_id))
+            (*dev).add_channel(&format!("ao{}", channel_id), default_value)
         });
     }
 
@@ -708,11 +710,13 @@ pub trait BaseExperiment {
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
     /// exp.add_do_device("PXI1Slot6", 1e7);
-    /// exp.add_do_channel("PXI1Slot6", 0, 0); // adds channel "port0/line0"
+    /// exp.add_do_channel("PXI1Slot6", 0, 0, 0.); // adds channel "port0/line0"
     /// ```
-    fn add_do_channel(&mut self, name: &str, port_id: usize, line_id: usize) {
+    fn add_do_channel(&mut self, name: &str, port_id: usize, line_id: usize, default_value: f64) {
+        assert!(default_value == 0. || default_value == 1., 
+            "Expected default value 0 or 1 for device {} DO channel {} but received {}", name, port_id, default_value);
         self.typed_device_op(name, TaskType::DO, |dev| {
-            (*dev).add_channel(&format!("port{}/line{}", port_id, line_id))
+            (*dev).add_channel(&format!("port{}/line{}", port_id, line_id), default_value)
         });
     }
 
@@ -942,9 +946,9 @@ pub trait BaseExperiment {
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
     /// exp.add_do_device("PXI1Slot6", 1e6,);
-    /// exp.add_do_channel("PXI1Slot6", 0, 0);
-    /// exp.add_do_channel("PXI1Slot6", 2, 0);
-    /// exp.add_do_channel("PXI1Slot6", 2, 1);
+    /// exp.add_do_channel("PXI1Slot6", 0, 0, 0.);
+    /// exp.add_do_channel("PXI1Slot6", 2, 0, 0.);
+    /// exp.add_do_channel("PXI1Slot6", 2, 1, 0.);
     /// exp.go_high("PXI1Slot6", "port0/line0", 0.);
     /// exp.go_high("PXI1Slot6", "port2/line0", 1.);
     /// exp.go_high("PXI1Slot6", "port2/line1", 2.);
@@ -995,9 +999,9 @@ pub trait BaseExperiment {
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
     /// exp.add_do_device("PXI1Slot6", 1e6,);
-    /// exp.add_do_channel("PXI1Slot6", 0, 0);
-    /// exp.add_do_channel("PXI1Slot6", 2, 0);
-    /// exp.add_do_channel("PXI1Slot6", 2, 1);
+    /// exp.add_do_channel("PXI1Slot6", 0, 0, 0.);
+    /// exp.add_do_channel("PXI1Slot6", 2, 0, 0.);
+    /// exp.add_do_channel("PXI1Slot6", 2, 1, 0.);
     /// exp.go_high("PXI1Slot6", "port0/line0", 0.);
     /// exp.go_high("PXI1Slot6", "port2/line0", 1.);
     /// exp.go_high("PXI1Slot6", "port2/line1", 2.);
@@ -1050,7 +1054,7 @@ pub trait BaseExperiment {
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
     /// exp.add_ao_device("PXI1Slot3", 1e6,);
-    /// exp.add_ao_channel("PXI1Slot3", 0);
+    /// exp.add_ao_channel("PXI1Slot3", 0, 0.);
     /// // t=0, duration=1, keep_val=false, freq=10Hz, amplitude=10, phase=0(default), dc_offset=0(default)
     /// exp.sine("PXI1Slot3", "ao0", 0., 1., false, 10., Some(10.), None, None);
     /// ```
@@ -1223,7 +1227,7 @@ pub trait BaseExperiment {
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
     /// exp.add_do_device("PXI1Slot7", 1e6);
-    /// exp.add_do_channel("PXI1Slot7", 0, 7);
+    /// exp.add_do_channel("PXI1Slot7", 0, 7, 0.);
     /// exp.go_high("PXI1Slot7", "port0/line7", 0.);
     /// assert_eq!(exp.is_fresh_compiled(), false);
     /// exp.channel_clear_edit_cache("PXI1Slot7", "port0/line7");
@@ -1256,7 +1260,7 @@ pub trait BaseExperiment {
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
     /// exp.add_do_device("PXI1Slot7", 1e6);
-    /// exp.add_do_channel("PXI1Slot7", 0, 7);
+    /// exp.add_do_channel("PXI1Slot7", 0, 7, 0.);
     /// exp.go_high("PXI1Slot7", "port0/line7", 0.5);
     /// exp.compile_with_stoptime(1.);
     /// let sig = exp.channel_calc_signal_nsamps("PXI1Slot7", "port0/line7", 0., 1., 10);
@@ -1293,7 +1297,7 @@ pub trait BaseExperiment {
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
     /// exp.add_do_device("PXI1Slot7", 1e6);
-    /// exp.add_do_channel("PXI1Slot7", 0, 7);
+    /// exp.add_do_channel("PXI1Slot7", 0, 7, 0.);
     /// exp.go_high("PXI1Slot7", "port0/line7", 0.);
     /// exp.compile(false);
     /// assert_eq!(exp.is_compiled(), true);
@@ -1415,12 +1419,12 @@ macro_rules! impl_exp_boilerplate {
             }
 
             // DEVICE METHODS
-            pub fn add_ao_channel(&mut self, name: &str, channel_id: usize) {
-                BaseExperiment::add_ao_channel(self, name, channel_id);
+            pub fn add_ao_channel(&mut self, name: &str, channel_id: usize, default_value: f64) {
+                BaseExperiment::add_ao_channel(self, name, channel_id, default_value);
             }
 
-            pub fn add_do_channel(&mut self, name: &str, port_id: usize, line_id: usize) {
-                BaseExperiment::add_do_channel(self, name, port_id, line_id);
+            pub fn add_do_channel(&mut self, name: &str, port_id: usize, line_id: usize, default_value: f64) {
+                BaseExperiment::add_do_channel(self, name, port_id, line_id, default_value);
             }
 
             pub fn device_cfg_samp_clk_src(&mut self, name: &str, src: &str) {

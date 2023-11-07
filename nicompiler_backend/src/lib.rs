@@ -48,14 +48,14 @@
 //! let mut exp = Experiment::new();
 //! // Define devices and associated channels
 //! exp.add_ao_device("PXI1Slot3", 1e6);
-//! exp.add_ao_channel("PXI1Slot3", 0);
+//! exp.add_ao_channel("PXI1Slot3", 0, 0.);
 //!
 //! exp.add_ao_device("PXI1Slot4", 1e6);
-//! exp.add_ao_channel("PXI1Slot4", 0);
+//! exp.add_ao_channel("PXI1Slot4", 0, 0.);
 //!
 //! exp.add_do_device("PXI1Slot6", 1e7);
-//! exp.add_do_channel("PXI1Slot6", 0, 0);
-//! exp.add_do_channel("PXI1Slot6", 0, 4);
+//! exp.add_do_channel("PXI1Slot6", 0, 0, 0.);
+//! exp.add_do_channel("PXI1Slot6", 0, 4, 0.);
 //!
 //! // Define synchronization behavior:
 //! exp.device_cfg_trig("PXI1Slot3", "PXI1_Trig0", true);
@@ -86,7 +86,7 @@
 //! exp.go_low("PXI1Slot6", "port0/line4", 9.5);
 //!
 //! // Compile the experiment: this will stop the experiment at the last edit-time plus one tick
-//! exp.compile();
+//! exp.compile(true);
 //!
 //! // We can compile again with a specific stop_time (and add instructions in between)
 //! exp.compile_with_stoptime(10.); // Experiment signal will stop at t=10 now

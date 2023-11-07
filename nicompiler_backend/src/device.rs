@@ -190,7 +190,8 @@ pub trait BaseDevice {
     /// # Arguments
     /// - `name`: Name of the channel as seen by the NI driver, which must adhere to the
     ///   naming conventions detailed above.
-    fn add_channel(&mut self, name: &str) {
+    /// - `default_value`: a f64 value which specifies signal value for not explicitly defined intervals. 
+    fn add_channel(&mut self, name: &str, default_value: f64) {
         // Check the name format
         let (name_match_string, name_format_description) = match self.task_type() {
             TaskType::AO => (String::from(r"^ao\d+$"), String::from("ao(number)")),
@@ -219,7 +220,7 @@ pub trait BaseDevice {
                 );
             }
         }
-        let new_channel = Channel::new(self.task_type(), name, self.samp_rate());
+        let new_channel = Channel::new(self.task_type(), name, self.samp_rate(), default_value);
         self.channels_().insert(name.to_string(), new_channel);
     }
 
@@ -321,6 +322,8 @@ pub trait BaseDevice {
                 TaskType::DO,
                 &format!("port{}", match_port),
                 self.samp_rate(),
+                // The default value for merged port channel does not matter since we never explicitly compile them
+                0. 
             );
             *port_channel.instr_val_() = port_instr_val;
             *port_channel.instr_end_() = instr_end;
@@ -622,7 +625,7 @@ pub trait BaseDevice {
 /// # use nicompiler_backend::*;
 /// let mut exp = Experiment::new();
 /// exp.add_do_device("PXI1Slot6", 1e6);
-/// exp.add_do_channel("PXI1Slot6", 0, 4);
+/// exp.add_do_channel("PXI1Slot6", 0, 4, 0.);
 /// exp.device_cfg_trig("PXI1Slot6", "PXI1_Trig0", false);
 /// exp.go_high("PXI1Slot6", "port0/line4", 0.5);
 /// exp.compile_with_stoptime(1.); // Panics here

@@ -134,11 +134,12 @@ class AOCardProxy(BaseCardProxy):
     def __repr__(self):
         return 'AO card ' + super().__repr__()
 
-    def add_chan(self, chan_idx: int, nickname: str = None):
+    def add_chan(self, chan_idx: int, default_value: float=0., nickname: str = None):
         # Raw rust-maturin wrapper call
         self._dll.add_ao_channel(
             self.max_name, 
-            channel_id=chan_idx,  # FixMe[Rust]: maybe change `channel_id` to `chan_idx`
+            channel_id=chan_idx,  # FixMe[Rust]: maybe change `channel_id` to `chan_idx`,
+            default_value=default_value
         )
         # Instantiate proxy object
         chan_proxy = AOChanProxy(
@@ -156,14 +157,15 @@ class DOCardProxy(BaseCardProxy):
     def __repr__(self):
         return 'DO card ' + super().__repr__()
 
-    def add_chan(self, port_idx: int, line_idx: int, nickname: str = None):
+    def add_chan(self, port_idx: int, line_idx: int, default_value: bool=False, nickname: str = None):
         # Raw rust-maturin wrapper call
         self._dll.add_do_channel(
             self.max_name, 
             port_id=port_idx,
             # FixMe[Rust]: maybe change `port_id` to `port_idx`
             #  - idx is associated with "int" - values from 0 to N-1, while "id" is more general
-            line_id=line_idx  # FixMe[Rust]: maybe change `channel_id` to `chan_idx`
+            line_id=line_idx,  # FixMe[Rust]: maybe change `channel_id` to `chan_idx`,
+            default_value=1. if default_value else 0.
         )
         # Instantiate proxy object
         chan_proxy = DOChanProxy(
