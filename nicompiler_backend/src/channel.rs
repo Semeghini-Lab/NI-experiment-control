@@ -177,6 +177,7 @@ pub trait BaseChannel {
     /// channel.compile(3e7 as usize); // Compile up to 3 seconds (given a sampling rate of 10^7)
     /// ```
     fn compile(&mut self, stop_pos: usize) {
+        // (1) Sanity checks
         if self.instr_list().len() == 0 {
             return;
         }
@@ -184,10 +185,7 @@ pub trait BaseChannel {
         if self.is_fresh_compiled() && *self.instr_end().last().unwrap() == stop_pos {
             return;
         }
-        self.clear_compile_cache();
-        *self.fresh_compiled_() = true;
-
-        if self.instr_list().last().unwrap().end_pos > stop_pos {
+        if stop_pos < self.instr_list().last().unwrap().end_pos {
             panic!(
                 "Attempting to compile channel {} with stop_pos {} while instructions end at {}",
                 self.name(),
@@ -196,25 +194,28 @@ pub trait BaseChannel {
             );
         }
 
-        let mut last_val = self.default_value();
-        let mut last_end = 0;
+        // (2) Calculate exhaustive instruction coverage (instructions + padding)
         let mut instr_val: Vec<Instruction> = Vec::new();
         let mut instr_end: Vec<usize> = Vec::new();
 
-        // Padding, instructions are already sorted
+        // Padding (instructions are already sorted)
+        let mut pad_val = self.default_value();
+        let mut last_end = 0;
         let samp_rate = self.samp_rate();
+
         for instr_book in self.instr_list().iter() {
+            // Add padding before this instruction
             if last_end != instr_book.start_pos {
-                // Add padding instruction
-                instr_val.push(Instruction::new_const(last_val));
+                instr_val.push(Instruction::new_const(pad_val));
                 instr_end.push(instr_book.start_pos);
             }
             // Add original instruction
             instr_val.push(instr_book.instr.clone());
             instr_end.push(instr_book.end_pos);
 
-            if instr_book.keep_val {
-                last_val = match instr_book.instr.instr_type {
+            // Calculate the padding value for the next iteration
+            pad_val = if instr_book.keep_val {
+                match instr_book.instr.instr_type {
                     // Constant instruction: just retrieve its value for future padding
                     InstrType::CONST => *instr_book.instr.args.get("value").unwrap(),
                     // Other instructions: simulate end_pos
@@ -224,19 +225,21 @@ pub trait BaseChannel {
                         instr_book.instr.eval_inplace(&mut t_arr.view_mut());
                         t_arr[0]
                     }
-                };
+                }
             } else {
-                last_val = self.default_value();
-            }
+                self.default_value()
+            };
             last_end = instr_book.end_pos;
         }
         // Pad the last instruction
         if self.instr_list().last().unwrap().end_pos != stop_pos {
-            instr_val.push(Instruction::new_const(last_val));
+            instr_val.push(Instruction::new_const(pad_val));
             instr_end.push(stop_pos);
         }
 
-        // Merge instructions, if possible
+        // (3) Transfer prepared instr_val and instr_end into compile cache vectors
+        //     (merge adjacent instructions, if possible)
+        self.clear_compile_cache();
         for i in 0..instr_end.len() {
             if self.instr_val().is_empty() || instr_val[i] != *self.instr_val().last().unwrap() {
                 self.instr_val_().push(instr_val[i].clone());
@@ -245,6 +248,7 @@ pub trait BaseChannel {
                 *self.instr_end_().last_mut().unwrap() = instr_end[i];
             }
         }
+        *self.fresh_compiled_() = true;
     }
 
     /// Utility function for signal sampling.
