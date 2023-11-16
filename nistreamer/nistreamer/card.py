@@ -158,7 +158,7 @@ class DOCardProxy(BaseCardProxy):
         return 'DO card ' + super().__repr__()
 
     def add_chan(self, chan_idx: int, default_value: bool=False, nickname: str = None):
-        self.add_chan_(chan_idx // 8, chan_idx % 8, default_value, nickname)
+        return self.add_chan_(chan_idx // 8, chan_idx % 8, default_value, nickname)
 
     def add_chan_(self, port_idx: int, line_idx: int, default_value: bool=False, nickname: str = None):
         # Raw rust-maturin wrapper call
