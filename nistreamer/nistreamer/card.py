@@ -84,14 +84,14 @@ class BaseCardProxy:
 
     def cfg_samp_clk_src(self, src: str):
         self._dll.device_cfg_samp_clk_src(
-            dev_name=self.max_name,
+            name=self.max_name,
             src=src
         )
         self.samp_clk_src = src
 
     def cfg_start_trig(self, line: str, export: bool = False):
         self._dll.device_cfg_trig(
-            dev_name=self.max_name,
+            name=self.max_name,
             trig_line=line,
             export_trig=export
         )
@@ -100,7 +100,7 @@ class BaseCardProxy:
 
     def cfg_ref_clk(self, line: str, rate=10e6, export: bool = False):
         self._dll.device_cfg_ref_clk(
-            dev_name=self.max_name,
+            name=self.max_name,
             ref_clk_line=line,
             ref_clk_rate=rate,
             export_ref_clk=export,
@@ -110,11 +110,11 @@ class BaseCardProxy:
         self._ref_clk_rate = rate
 
     def clear_edit_cache(self):
-        self._dll.device_clear_edit_cache(dev_name=self.max_name)  # FixMe[Rust]: change `dev_name` to `max_name`
-        self._dll.device_clear_compile_cache(dev_name=self.max_name)  # FixMe[Rust]: change `dev_name` to `max_name`
+        self._dll.device_clear_edit_cache(name=self.max_name)  # FixMe[Rust]: change `dev_name` to `max_name`
+        self._dll.device_clear_compile_cache(name=self.max_name)  # FixMe[Rust]: change `dev_name` to `max_name`
 
     def reset(self):
-        self._dll.reset_device(dev_name=self.max_name)  # FixMe[Rust]: change `dev_name` to `max_name`
+        self._dll.reset_device(name=self.max_name)  # FixMe[Rust]: change `dev_name` to `max_name`
 
         # Update proxy values
         # self.samp_rate = samp_rate  # FixMe - should self.samp_rate be changed?
