@@ -337,10 +337,8 @@ pub trait BaseChannel {
 
     fn add_instr_(&mut self, instr: Instruction, t: f64, duration: f64, keep_val: bool, had_conflict: bool) {
         let start_pos = (t * self.samp_rate()) as usize;
-        let end_pos = ((t * self.samp_rate()) as usize) + ((duration * self.samp_rate()) as usize);
+        let end_pos = start_pos + ((duration * self.samp_rate()) as usize);
         let new_instrbook = InstrBook::new(start_pos, end_pos, keep_val, instr);
-        // Upon adding an instruction, the channel is not freshly compiled anymore
-        *self.fresh_compiled_() = false;
 
         // Check for overlaps
         let name = self.name();
@@ -378,6 +376,92 @@ pub trait BaseChannel {
             } 
         }
         self.instr_list_().insert(new_instrbook);
+        // Upon adding an instruction, the channel is not freshly compiled anymore
+        *self.fresh_compiled_() = false;
+    }
+
+    fn add_instr(&mut self, func: Instruction, t: f64, dur_spec: Option<(f64, bool)>) {
+        // Convert floating-point start and end times to sample clock ticks
+        // - start
+        let start_pos = (t * self.samp_rate()).round() as usize;
+        assert!(start_pos >= 0, "Start time t must be non-negative! {} was provided instead", t);
+        // - end
+        let end_spec = match dur_spec {
+            Some((dur_f64, keep_val)) => {
+                let dur_usize = (dur_f64 * self.samp_rate()).round() as usize;
+                assert!(dur_usize >= 1, "Too short pulse!");
+                Some((start_pos + dur_usize, keep_val))
+            },
+            None => None,
+        };
+        let mut new_instr_book = InstrBook::new(start_pos, end_spec, func);
+
+        // Check for any collisions with already existing instructions
+        // - collision on the left
+        if let Some(prev) = self.instr_list().range(..&new_instr_book).next_back() {
+            // Determine the effective end point of the previous instruction
+            //     "go_something"-type instruction must have space for at least one tick,
+            //     so the closest permissible end_pos is (start_pos + 1)
+            let prev_end: usize = match prev.end_spec {
+                Some((end_pos, _keep_val)) => end_pos,
+                None => prev.start_pos + 1
+            };
+
+            if prev_end <= new_instr_book.start_pos {
+                // All good - no collision here!
+            } else if prev_end == new_instr_book.start_pos + 1 {
+                // Collision of precisely 1 tick
+                //  This might be due to a rounding error for back-to-back pulses. Try to auto-fix it, if possible.
+                //  Action depends on the new instruction duration type:
+                //      - spec dur => trim the new instruction from the left by one tick (provided it is long enough to have at least 1 tick left after trimming)
+                //      - no spec dur => just shift start_pos by 1 tick (if this leads to a collision with an existing neighbor to the right, next check will catch it)
+                match new_instr_book.dur() {
+                    Some(dur) => {
+                        assert!(dur - 1 >= 1, "There is a 1-tick collision on the left. But the new instruction is only 1 tick long and cannot be trimmed!");
+                        new_instr_book.start_pos += 1;
+                    },
+                    None => {
+                        new_instr_book.start_pos += 1;
+                    },
+                };
+            } else {
+                // Serious collision of 2 or more ticks due to a user mistake
+                panic!("Collision on the left!")
+            }
+        }
+        // - collision on the right
+        if let Some(next) = self.instr_list().range(&new_instr_book..).next() {
+            // Determine effective end position of the new instruction
+            //     "go_something"-type instruction must have space for at least one tick,
+            //     so the closest permissible end_pos is (start_pos + 1)
+            let end_pos = match new_instr_book.end_pos() {
+                Some(end_pos) => end_pos,
+                None => new_instr_book.start_pos + 1,
+            };
+
+            if end_pos <= next.start_pos {
+                // All good - no collision here!
+            } else if end_pos == next.start_pos + 1 {
+                // Collision of precisely 1 tick
+                //  This might be due to a rounding error for back-to-back pulses. Try to auto-fix it, if possible.
+                //  Action depends on the new instruction duration type:
+                //      - spec dur => trim the new instruction from the right by one tick (provided it is long enough to have at least 1 tick left after trimming)
+                //      - no spec dur => panic since go_something it meant to be inserted right in front of some other instruction
+                match new_instr_book.dur() {
+                    Some(dur) => {
+                        assert!(dur - 1 >= 1, "1-tick collision on the right cannot be resolved by trimming since this instruction is only 1 tick long");
+                        new_instr_book.end_spec.as_mut().unwrap().0 -= 1;
+                    },
+                    None => panic!("Attempt to insert go_something-type instruction {} right at the start of another instruction {}", new_instr_book, next),
+                }
+            } else {
+                // Serious collision of 2 or more ticks due to a user mistake
+                panic!("Collision on the right")
+            };
+        };
+
+        self.instr_list_.insert(new_instr_book);
+        *self.fresh_compiled_() = false;
     }
 
     /// Adds an instruction to the channel.
@@ -434,9 +518,9 @@ pub trait BaseChannel {
     /// "Channel port0/line0
     ///  Instruction InstrBook([CONST, {value: 1}], 5000000-15000000, false) overlaps with the next instruction InstrBook([CONST, {value: 1}], 5000000-5010000, true)"
     /// ```
-    fn add_instr(&mut self, instr: Instruction, t: f64, duration: f64, keep_val: bool) {
-        self.add_instr_(instr, t, duration, keep_val, false);
-    }
+    // fn add_instr(&mut self, instr: Instruction, t: f64, duration: f64, keep_val: bool) {
+    //     self.add_instr_(instr, t, duration, keep_val, false);
+    // }
 
     /// Utility function to add a constant instruction to the channel
     fn constant(&mut self, value: f64, t: f64, duration: f64, keep_val: bool) {

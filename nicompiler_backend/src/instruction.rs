@@ -293,8 +293,7 @@ impl fmt::Display for Instruction {
 ///
 pub struct InstrBook {
     pub start_pos: usize,
-    pub end_pos: usize,
-    pub keep_val: bool,
+    pub end_spec: Option<(usize, bool)>,
     pub instr: Instruction,
 }
 impl InstrBook {
@@ -329,19 +328,32 @@ impl InstrBook {
     ///
     /// The panic message will be:
     /// `Instruction { /* ... */ } end_pos 5 should be strictly greater than start_pos 5`.
-    pub fn new(start_pos: usize, end_pos: usize, keep_val: bool, instr: Instruction) -> Self {
-        assert!(
-            end_pos > start_pos,
-            "Instruction {} end_pos {} should be strictly greater than start_pos {}",
-            instr,
-            end_pos,
-            start_pos
-        );
+    pub fn new(start_pos: usize, end_spec: Option<(usize, bool)>, func: Instruction) -> Self {
+        if let Some((end_pos, _keep_val)) = &end_spec {
+            // Sanity check - the smallest permissible instruction length is 1 tick
+            assert!(
+                start_pos + 1 <= end_pos,
+                "Instruction must satisfy `start_pos + 1 <= end_pos` \n\
+                 However, provided instruction has start_pos = {} and end_pos = {}",
+                start_pos, end_pos
+            )
+        }
         InstrBook {
             start_pos,
-            end_pos,
-            keep_val,
-            instr,
+            end_spec,
+            instr: func,
+        }
+    }
+    pub fn end_pos(&self) -> Option<usize> {
+        match self.end_spec {
+            Some((end_pos, _keep_val)) => Some(end_pos),
+            None => None,
+        }
+    }
+    pub fn dur(&self) -> Option<usize> {
+        match self.end_spec {
+            Some((end_pos, _keep_val)) => Some(end_pos - self.start_pos),
+            None => None,
         }
     }
 }
