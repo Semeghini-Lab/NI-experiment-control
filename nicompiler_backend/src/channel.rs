@@ -177,6 +177,7 @@ pub trait BaseChannel {
     /// channel.compile(3e7 as usize); // Compile up to 3 seconds (given a sampling rate of 10^7)
     /// ```
     fn compile(&mut self, stop_pos: usize) {
+        todo!();
         // (1) Sanity checks
         if self.instr_list().len() == 0 {
             return;
@@ -335,50 +336,50 @@ pub trait BaseChannel {
             .map_or(0., |instr| instr.end_pos as f64 / self.samp_rate())
     }
 
-    fn add_instr_(&mut self, instr: Instruction, t: f64, duration: f64, keep_val: bool, had_conflict: bool) {
-        let start_pos = (t * self.samp_rate()) as usize;
-        let end_pos = start_pos + ((duration * self.samp_rate()) as usize);
-        let new_instrbook = InstrBook::new(start_pos, end_pos, keep_val, instr);
-
-        // Check for overlaps
-        let name = self.name();
-        let delta = (1e-3 * self.samp_rate()) as usize; // Accomodate shift up to 1ms
-        if let Some(next) = self.instr_list().range(&new_instrbook..).next() {
-            if next.start_pos < new_instrbook.end_pos {
-                // Accomodate tick conflicts less than delta on the right
-                if !had_conflict && next.start_pos + delta >= new_instrbook.end_pos {
-                    let conflict_ticks = new_instrbook.end_pos - start_pos;
-                    println!("Conflict ticks {}", conflict_ticks);
-                    assert!(conflict_ticks != 0, "unintended behavior");
-                    self.add_instr_(new_instrbook.instr, t - ((conflict_ticks + 1) as f64) / self.samp_rate(), duration, keep_val, true);
-                    return;
-                } else {
-                    panic!(
-                    "Channel {}\n Instruction {} overlaps with the next instruction {}. Had conflict: {}; next_start: {}; new_end {}; attempted new_end: {}\n",
-                    name, new_instrbook, next, had_conflict, next.start_pos, new_instrbook.end_pos, new_instrbook.end_pos - delta);
-                }
-            }
-        } 
-        if let Some(prev) = self.instr_list().range(..&new_instrbook).next_back() {
-            if prev.end_pos > new_instrbook.start_pos {
-                // Accomodate tick conflicts less than delta on the right
-                if !had_conflict && new_instrbook.start_pos + delta >= prev.end_pos {
-                    let conflict_ticks = prev.end_pos - new_instrbook.start_pos;
-                    println!("Conflict ticks {}", conflict_ticks);
-                    assert!(conflict_ticks != 0, "unintended behavior");
-                    self.add_instr_(new_instrbook.instr, t + ((conflict_ticks + 1) as f64) / self.samp_rate(), duration, keep_val, true);
-                    return;
-                } else {
-                    panic!(
-                    "Channel {}\n Instruction {} overlaps with the previous instruction {}. Had conflict: {}; prev_end {}; new_start {}; attempted new_start: {}\n",
-                    name, new_instrbook, prev, had_conflict, prev.end_pos, new_instrbook.start_pos, new_instrbook.start_pos + delta);
-                }
-            } 
-        }
-        self.instr_list_().insert(new_instrbook);
-        // Upon adding an instruction, the channel is not freshly compiled anymore
-        *self.fresh_compiled_() = false;
-    }
+    // fn add_instr_(&mut self, instr: Instruction, t: f64, duration: f64, keep_val: bool, had_conflict: bool) {
+    //     let start_pos = (t * self.samp_rate()) as usize;
+    //     let end_pos = start_pos + ((duration * self.samp_rate()) as usize);
+    //     let new_instrbook = InstrBook::new(start_pos, end_pos, keep_val, instr);
+    //
+    //     // Check for overlaps
+    //     let name = self.name();
+    //     let delta = (1e-3 * self.samp_rate()) as usize; // Accomodate shift up to 1ms
+    //     if let Some(next) = self.instr_list().range(&new_instrbook..).next() {
+    //         if next.start_pos < new_instrbook.end_pos {
+    //             // Accomodate tick conflicts less than delta on the right
+    //             if !had_conflict && next.start_pos + delta >= new_instrbook.end_pos {
+    //                 let conflict_ticks = new_instrbook.end_pos - start_pos;
+    //                 println!("Conflict ticks {}", conflict_ticks);
+    //                 assert!(conflict_ticks != 0, "unintended behavior");
+    //                 self.add_instr_(new_instrbook.instr, t - ((conflict_ticks + 1) as f64) / self.samp_rate(), duration, keep_val, true);
+    //                 return;
+    //             } else {
+    //                 panic!(
+    //                 "Channel {}\n Instruction {} overlaps with the next instruction {}. Had conflict: {}; next_start: {}; new_end {}; attempted new_end: {}\n",
+    //                 name, new_instrbook, next, had_conflict, next.start_pos, new_instrbook.end_pos, new_instrbook.end_pos - delta);
+    //             }
+    //         }
+    //     }
+    //     if let Some(prev) = self.instr_list().range(..&new_instrbook).next_back() {
+    //         if prev.end_pos > new_instrbook.start_pos {
+    //             // Accomodate tick conflicts less than delta on the right
+    //             if !had_conflict && new_instrbook.start_pos + delta >= prev.end_pos {
+    //                 let conflict_ticks = prev.end_pos - new_instrbook.start_pos;
+    //                 println!("Conflict ticks {}", conflict_ticks);
+    //                 assert!(conflict_ticks != 0, "unintended behavior");
+    //                 self.add_instr_(new_instrbook.instr, t + ((conflict_ticks + 1) as f64) / self.samp_rate(), duration, keep_val, true);
+    //                 return;
+    //             } else {
+    //                 panic!(
+    //                 "Channel {}\n Instruction {} overlaps with the previous instruction {}. Had conflict: {}; prev_end {}; new_start {}; attempted new_start: {}\n",
+    //                 name, new_instrbook, prev, had_conflict, prev.end_pos, new_instrbook.start_pos, new_instrbook.start_pos + delta);
+    //             }
+    //         }
+    //     }
+    //     self.instr_list_().insert(new_instrbook);
+    //     // Upon adding an instruction, the channel is not freshly compiled anymore
+    //     *self.fresh_compiled_() = false;
+    // }
 
     fn add_instr(&mut self, func: Instruction, t: f64, dur_spec: Option<(f64, bool)>) {
         // Convert floating-point start and end times to sample clock ticks
@@ -523,8 +524,8 @@ pub trait BaseChannel {
     // }
 
     /// Utility function to add a constant instruction to the channel
-    fn constant(&mut self, value: f64, t: f64, duration: f64, keep_val: bool) {
-        self.add_instr(Instruction::new_const(value), t, duration, keep_val);
+    fn constant(&mut self, value: f64, t: f64, dur_spec: Option<(f64, bool)>) {
+        self.add_instr(Instruction::new_const(value), t, dur_spec);
     }
 
     /// Fills a buffer (1D view of array) with the signal samples derived from a channel's instructions.
