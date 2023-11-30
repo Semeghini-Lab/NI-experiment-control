@@ -332,7 +332,7 @@ impl InstrBook {
         if let Some((end_pos, _keep_val)) = &end_spec {
             // Sanity check - the smallest permissible instruction length is 1 tick
             assert!(
-                start_pos + 1 <= end_pos,
+                start_pos + 1 <= *end_pos,
                 "Instruction must satisfy `start_pos + 1 <= end_pos` \n\
                  However, provided instruction has start_pos = {} and end_pos = {}",
                 start_pos, end_pos
@@ -376,10 +376,14 @@ impl PartialEq for InstrBook {
 }
 impl fmt::Display for InstrBook {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let end_spec = match self.end_spec {
+            Some((end_pos, keep_val)) => format!("end_pos={end_pos}, keep_val={keep_val}"),
+            None => "no specified end".to_string(),
+        };
         write!(
             f,
-            "InstrBook({}, {}-{}, {})",
-            self.instr, self.start_pos, self.end_pos, self.keep_val
+            "InstrBook({}, start_pos={}, {})",
+            self.instr, self.start_pos, end_spec
         )
     }
 }
