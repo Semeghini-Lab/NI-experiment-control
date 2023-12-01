@@ -383,15 +383,27 @@ pub trait BaseChannel {
 
     fn add_instr(&mut self, func: Instruction, t: f64, dur_spec: Option<(f64, bool)>) {
         // Convert floating-point start and end times to sample clock ticks
-        // - start
         let start_pos = (t * self.samp_rate()).round() as usize;
-        // - end
         let end_spec = match dur_spec {
             Some((dur, keep_val)) => {
                 let end_pos = ((t + dur) * self.samp_rate()).round() as usize;
-                assert!(end_pos - start_pos >= 1, "Too short pulse!");  // ToDo: more descriptive message
+                // Sanity check - pulse length is at leas 1 clock period or longer
+                if end_pos - start_pos < 1 {
+                    let t_start_clock = t * self.samp_rate();
+                    let t_stop = t + dur;
+                    let t_stop_clock = t_stop * self.samp_rate();
+                    panic!("\n\
+                        Requested pulse is too short and collapsed due to rounding to the sample clock grid:\n\
+                        \n\
+                        \t       requested start t = {t}s = {t_start_clock} clock periods was rounded to {start_pos}\n\
+                        \t   requested end (t+dur) = {t_stop}s = {t_stop_clock} clock periods was rounded to {end_pos}\n\
+                        \n\
+                        Note: the shortest pulse length the streamer can produce is 1 sample clock period.\n\
+                        For such short pulses it is very important to align pulse edges with the clock grid\n\
+                        otherwise rounding may lead to significant deviations.");
+                }
                 Some((end_pos, keep_val))
-            }
+            },
             None => None,
         };
         let mut new_instr_book = InstrBook::new(start_pos, end_spec, func);
@@ -427,7 +439,11 @@ pub trait BaseChannel {
                 };
             } else {
                 // Serious collision of 2 or more ticks due to a user mistake
-                panic!("Collision on the left!")  // ToDo: more descriptive message
+                panic!("\n\
+                    Collision on the left with the following existing instruction:\n\
+                    \t{prev}\n\
+                    The new instruction is:\n\
+                    \t{new_instr_book}")
             }
         }
         // - collision on the right
@@ -454,11 +470,15 @@ pub trait BaseChannel {
                         assert!(dur - 1 >= 1, "1-tick collision on the right cannot be resolved by trimming since the new instruction is only 1 tick long");
                         new_instr_book.end_spec.as_mut().unwrap().0 -= 1;
                     },
-                    None => panic!("Attempt to insert go_something-type instruction {} right at the start of another instruction {}", new_instr_book, next),
+                    None => panic!("Attempt to insert go_something-type instruction {new_instr_book} right at the start of another instruction {next}"),
                 }
             } else {
                 // Serious collision of 2 or more ticks due to a user mistake
-                panic!("Collision on the right")  // ToDo: more descriptive message
+                panic!("\n\
+                    The new instruction:\n\
+                    \t{new_instr_book}\n\
+                    collides on the right with the following existing instruction:\n\
+                    \t{next}")
             };
         };
 
