@@ -135,7 +135,7 @@ impl Instruction {
         match instr_type {
             InstrType::CONST => panic_no_key(&["value"]),
             InstrType::SINE => panic_no_key(&["freq"]),
-            InstrType::LINRAMP => panic_no_key(&["start_val", "end_val"]),
+            InstrType::LINRAMP => panic_no_key(&["start_val", "end_val", "start_time", "end_time"]),
         };
         Instruction { instr_type, args }
     }
@@ -170,6 +170,7 @@ impl Instruction {
     /// assert!(t_values[[0, 0]] == 1. && t_values[[0, 1]] == 1.);
     /// ```
     pub fn eval_inplace(&self, t_arr: &mut ndarray::ArrayViewMut1<f64>) {
+        // Tocheck: t_arr may not be 1-dimensional. 
         match self.instr_type {
             InstrType::CONST => {
                 let value = *self.args.get("value").unwrap();
@@ -189,8 +190,9 @@ impl Instruction {
             InstrType::LINRAMP => {
                 let start_val = *self.args.get("start_val").unwrap();
                 let end_val = *self.args.get("end_val").unwrap();
-                let t_start = t_arr[0].clone();
-                let t_end = t_arr[t_arr.len() - 1].clone();
+                let t_start = *self.args.get("start_time").unwrap();
+                let t_end = *self.args.get("end_time").unwrap();
+                // println!("{:?} \n {:?}", t_arr.shape(), t_arr);
 
                 t_arr.map_inplace(|t| {
                     *t = (*t - t_start) * (end_val - start_val) / (t_end - t_start) + start_val;
@@ -213,10 +215,12 @@ impl Instruction {
 
     /// Wrapper for conveniently creating new linear ramp instructions. 
     /// `start_val` will be the value on the first tick, and `end_val` value on the last tick. 
-    pub fn new_linramp(start_val: f64, end_val:f64) -> Instruction {
+    pub fn new_linramp(start_val: f64, end_val:f64, start_time: f64, end_time: f64) -> Instruction {
         let mut args = IndexMap::new();
         args.insert(String::from("start_val"), start_val);
         args.insert(String::from("end_val"), end_val);
+        args.insert(String::from("start_time"), start_time);
+        args.insert(String::from("end_time"),end_time);
         Instruction::new(InstrType::LINRAMP, args)
     }
 

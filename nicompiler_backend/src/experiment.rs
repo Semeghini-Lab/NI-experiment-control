@@ -1205,7 +1205,7 @@ pub trait BaseExperiment {
         keep_val: bool,
     ) {
         self.typed_channel_op(dev_name, chan_name, TaskType::AO, |chan| {
-            let instr = Instruction::new_linramp(start_val, end_val);
+            let instr = Instruction::new_linramp(start_val, end_val, t, t+duration);
             (*chan).add_instr(instr, t, duration, keep_val)
         });
     }
