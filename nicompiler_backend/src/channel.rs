@@ -143,6 +143,13 @@ pub trait BaseChannel {
         }
     }
 
+    fn last_instr_end(&self) -> usize {
+        match self.instr_list().last() {
+            Some(last_instr) => last_instr.eff_end_pos(),
+            None => 0
+        }
+    }
+
     /// Compiles the instructions in the channel up to the specified `stop_pos`.
     ///
     /// The `compile` method processes the instruction list (`instr_list`) to generate a compiled
@@ -412,13 +419,7 @@ pub trait BaseChannel {
         // - collision on the left
         if let Some(prev) = self.instr_list().range(..&new_instr_book).next_back() {
             // Determine the effective end point of the previous instruction
-            //     "go_something"-type instruction don't have a specific end_pos
-            //     but must have space for at least one tick to have any effect,
-            //     so the closest permissible end_pos is (start_pos + 1)
-            let prev_end = match prev.end_pos() {
-                Some(end_pos) => end_pos,
-                None => prev.start_pos + 1
-            };
+            let prev_end = prev.eff_end_pos();
 
             if prev_end <= new_instr_book.start_pos {
                 // All good - no collision here!
@@ -448,14 +449,8 @@ pub trait BaseChannel {
         }
         // - collision on the right
         if let Some(next) = self.instr_list().range(&new_instr_book..).next() {
-            // Determine effective end position of the new instruction
-            //     "go_something"-type instruction don't have a specific end_pos
-            //     but must have space for at least one tick to have any effect,
-            //     so the closest permissible end_pos is (start_pos + 1)
-            let end_pos = match new_instr_book.end_pos() {
-                Some(end_pos) => end_pos,
-                None => new_instr_book.start_pos + 1,
-            };
+            // Determine the effective end position of the new instruction
+            let end_pos = new_instr_book.eff_end_pos();
 
             if end_pos <= next.start_pos {
                 // All good - no collision here!

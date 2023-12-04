@@ -350,6 +350,15 @@ impl InstrBook {
             None => None,
         }
     }
+    pub fn eff_end_pos(&self) -> usize {
+        // "go_something"-type instruction don't have a specific end_pos
+        // but must have space for at least one tick to have any effect,
+        // so the closest permissible end_pos is (start_pos + 1)
+        match self.end_pos() {
+            Some(end_pos) => end_pos,
+            None => self.start_pos + 1,
+        }
+    }
     pub fn dur(&self) -> Option<usize> {
         match self.end_spec {
             Some((end_pos, _keep_val)) => Some(end_pos - self.start_pos),
