@@ -383,7 +383,7 @@ pub trait BaseDevice {
     fn edit_stop_time(&self, extra_tail_tick: bool) -> f64 {
         let base_edit_stop_time = self.editable_channels()
             .iter()
-            .map(|chan| chan.edit_stop_time())
+            .map(|chan| chan.last_instr_end_time())
             .fold(0.0, f64::max);
         
         if extra_tail_tick {

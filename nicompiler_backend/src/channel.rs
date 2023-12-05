@@ -119,6 +119,9 @@ pub trait BaseChannel {
     /// Mutable access to the values of compiled instructions.
     fn instr_val_(&mut self) -> &mut Vec<Instruction>;
 
+    fn clock_period(&self) -> f64 {
+        1.0 / self.samp_rate()
+    }
     /// Channel is marked as compiled if its compilation-data field `instr_end` is nonempty
     fn is_compiled(&self) -> bool {
         !self.instr_end().is_empty()
@@ -140,13 +143,6 @@ pub trait BaseChannel {
             TaskType::AO => true,
             // for DODevice, only port channels are streamable
             TaskType::DO => !self.name().contains("line"),
-        }
-    }
-
-    fn last_instr_end(&self) -> usize {
-        match self.instr_list().last() {
-            Some(last_instr) => last_instr.eff_end_pos(),
-            None => 0
         }
     }
 
@@ -184,69 +180,68 @@ pub trait BaseChannel {
     /// channel.compile(3e7 as usize); // Compile up to 3 seconds (given a sampling rate of 10^7)
     /// ```
     fn compile(&mut self, stop_pos: usize) {
-        todo!();
-        // (1) Sanity checks
-        if self.instr_list().len() == 0 {
+        // (1) Exclude trivial cases; Sanity checks
+        let total_instr_num = self.instr_list().len();
+        if total_instr_num == 0 {
             return;
         }
-        // Ignore double compiles
-        if self.is_fresh_compiled() && *self.instr_end().last().unwrap() == stop_pos {
+        // (ignore double compiles)
+        if self.is_fresh_compiled() && stop_pos == self.compiled_stop_pos() {
             return;
         }
-        if stop_pos < self.instr_list().last().unwrap().end_pos {
-            panic!(
-                "Attempting to compile channel {} with stop_pos {} while instructions end at {}",
-                self.name(),
-                stop_pos,
-                self.instr_list().last().unwrap().end_pos
-            );
+        if stop_pos < self.last_instr_end_pos() {
+            panic!("Attempting to compile channel {} with stop_pos {} while instructions end at {}",
+                   self.name(),
+                   stop_pos,
+                   self.last_instr_end_pos());
         }
 
-        // (2) Calculate exhaustive instruction coverage (instructions + padding)
+        // (2) Calculate exhaustive instruction coverage from 0 to stop_pos (instructions + padding)
         let mut instr_val: Vec<Instruction> = Vec::new();
         let mut instr_end: Vec<usize> = Vec::new();
 
-        // Padding (instructions are already sorted)
-        let mut pad_val = self.default_value();
-        let mut last_end = 0;
-        let samp_rate = self.samp_rate();
+        // Padding before the first instruction
+        let first_start_pos = self.instr_list().first().unwrap().start_pos;
+        if first_start_pos > 0 {
+            instr_val.push(Instruction::new_const(self.default_val()));
+            instr_end.push(first_start_pos);
+        }
+        // All instructions and paddings after them
+        for idx in 0..total_instr_num {
+            let instr_book = self.instr_list()[idx];
+            let next_edge = if idx == (total_instr_num - 1) {stop_pos} else {self.instr_list()[idx + 1].start_pos};
 
-        for instr_book in self.instr_list().iter() {
-            // Add padding before this instruction
-            if last_end != instr_book.start_pos {
-                instr_val.push(Instruction::new_const(pad_val));
-                instr_end.push(instr_book.start_pos);
-            }
-            // Add original instruction
-            instr_val.push(instr_book.instr.clone());
-            instr_end.push(instr_book.end_pos);
-
-            // Calculate the padding value for the next iteration
-            pad_val = if instr_book.keep_val {
-                match instr_book.instr.instr_type {
-                    // Constant instruction: just retrieve its value for future padding
-                    InstrType::CONST => *instr_book.instr.args.get("value").unwrap(),
-                    // Other instructions: simulate end_pos
-                    _ => {
-                        let t_end = (instr_book.end_pos as f64) / samp_rate;
-                        let mut t_arr = array![t_end];
-                        instr_book.instr.eval_inplace(&mut t_arr.view_mut());
-                        t_arr[0]
+            // Action depends on instruction end_pos type:
+            //  - Some: insert the original instruction as-is + add a separate instruction for padding until the next_edge if there is a gap
+            //  - None ("run until next"): insert instruction taking the next_edge as end_pos
+            match instr_book.end_spec {
+                Some((end_pos, keep_val)) => {
+                    // The original instruction:
+                    instr_val.push(instr_book.instr.clone());
+                    instr_end.push(end_pos);
+                    // Padding:
+                    if end_pos < next_edge {
+                        // padding value
+                        let pad_val = if keep_val {
+                            instr_book.instr.eval_point(end_pos as f64 * self.clock_period())
+                        } else {
+                            self.default_value()
+                        };
+                        // padding instruction
+                        instr_val.push(Instruction::new_const(pad_val));
+                        instr_end.push(next_edge);
                     }
-                }
-            } else {
-                self.default_value()
-            };
-            last_end = instr_book.end_pos;
-        }
-        // Pad the last instruction
-        if self.instr_list().last().unwrap().end_pos != stop_pos {
-            instr_val.push(Instruction::new_const(pad_val));
-            instr_end.push(stop_pos);
-        }
+                },
+                None => {
+                    instr_val.push(instr_book.instr.clone());
+                    instr_end.push(next_edge);
+                },
+            }
+        };
 
         // (3) Transfer prepared instr_val and instr_end into compile cache vectors
         //     (merge adjacent instructions, if possible)
+        assert_eq!(instr_val.len(), instr_end.len());
         self.clear_compile_cache();
         for i in 0..instr_end.len() {
             if self.instr_val().is_empty() || instr_val[i] != *self.instr_val().last().unwrap() {
@@ -256,6 +251,7 @@ pub trait BaseChannel {
                 *self.instr_end_().last_mut().unwrap() = instr_end[i];
             }
         }
+        assert_eq!(self.instr_val().len(), self.instr_end().len());
         *self.fresh_compiled_() = true;
     }
 
@@ -325,69 +321,88 @@ pub trait BaseChannel {
         self.instr_val_().clear();
     }
 
+    fn compiled_stop_pos(&self) -> usize {
+        match self.instr_end().last() {
+            Some(&end_pos) => end_pos,
+            None => 0
+        }
+    }
     /// Returns the stop time of the compiled instructions.
     ///
     /// If the channel is not compiled, it returns `0`. Otherwise, it retrieves the last end position
     /// from the compiled cache and converts it to a time value using the sampling rate.
     fn compiled_stop_time(&self) -> f64 {
-        *self.instr_end().last().unwrap_or(&0) as f64 / self.samp_rate()
+        self.compiled_stop_pos() as f64 * self.clock_period()
     }
 
+    fn last_instr_end_pos(&self) -> usize {
+        match self.instr_list().last() {
+            Some(last_instr) => last_instr.eff_end_pos(),
+            None => 0
+        }
+    }
     /// Returns the stop time of the edited instructions.
     ///
     /// Retrieves the last instruction from the edit cache and converts its end position
     /// to a time value using the sampling rate. If the edit cache is empty, it returns `0`.
-    fn edit_stop_time(&self) -> f64 {
-        self.instr_list()
-            .last()
-            .map_or(0., |instr| instr.end_pos as f64 / self.samp_rate())
+    fn last_instr_end_time(&self) -> f64 {
+        self.last_instr_end_pos() as f64 * self.clock_period()
     }
 
-    // fn add_instr_(&mut self, instr: Instruction, t: f64, duration: f64, keep_val: bool, had_conflict: bool) {
-    //     let start_pos = (t * self.samp_rate()) as usize;
-    //     let end_pos = start_pos + ((duration * self.samp_rate()) as usize);
-    //     let new_instrbook = InstrBook::new(start_pos, end_pos, keep_val, instr);
-    //
-    //     // Check for overlaps
-    //     let name = self.name();
-    //     let delta = (1e-3 * self.samp_rate()) as usize; // Accomodate shift up to 1ms
-    //     if let Some(next) = self.instr_list().range(&new_instrbook..).next() {
-    //         if next.start_pos < new_instrbook.end_pos {
-    //             // Accomodate tick conflicts less than delta on the right
-    //             if !had_conflict && next.start_pos + delta >= new_instrbook.end_pos {
-    //                 let conflict_ticks = new_instrbook.end_pos - start_pos;
-    //                 println!("Conflict ticks {}", conflict_ticks);
-    //                 assert!(conflict_ticks != 0, "unintended behavior");
-    //                 self.add_instr_(new_instrbook.instr, t - ((conflict_ticks + 1) as f64) / self.samp_rate(), duration, keep_val, true);
-    //                 return;
-    //             } else {
-    //                 panic!(
-    //                 "Channel {}\n Instruction {} overlaps with the next instruction {}. Had conflict: {}; next_start: {}; new_end {}; attempted new_end: {}\n",
-    //                 name, new_instrbook, next, had_conflict, next.start_pos, new_instrbook.end_pos, new_instrbook.end_pos - delta);
-    //             }
-    //         }
-    //     }
-    //     if let Some(prev) = self.instr_list().range(..&new_instrbook).next_back() {
-    //         if prev.end_pos > new_instrbook.start_pos {
-    //             // Accomodate tick conflicts less than delta on the right
-    //             if !had_conflict && new_instrbook.start_pos + delta >= prev.end_pos {
-    //                 let conflict_ticks = prev.end_pos - new_instrbook.start_pos;
-    //                 println!("Conflict ticks {}", conflict_ticks);
-    //                 assert!(conflict_ticks != 0, "unintended behavior");
-    //                 self.add_instr_(new_instrbook.instr, t + ((conflict_ticks + 1) as f64) / self.samp_rate(), duration, keep_val, true);
-    //                 return;
-    //             } else {
-    //                 panic!(
-    //                 "Channel {}\n Instruction {} overlaps with the previous instruction {}. Had conflict: {}; prev_end {}; new_start {}; attempted new_start: {}\n",
-    //                 name, new_instrbook, prev, had_conflict, prev.end_pos, new_instrbook.start_pos, new_instrbook.start_pos + delta);
-    //             }
-    //         }
-    //     }
-    //     self.instr_list_().insert(new_instrbook);
-    //     // Upon adding an instruction, the channel is not freshly compiled anymore
-    //     *self.fresh_compiled_() = false;
-    // }
-
+    /// Adds an instruction to the channel.
+    ///
+    /// This is the primary method for adding instructions. It computes the discrete position
+    /// interval associated with the given instruction, updates the `fresh_compiled` field,
+    /// and inserts the instruction if it does not overlap with existing ones.
+    /// See the helper [`BaseChannel::add_instr_`] for implementation details.
+    ///
+    /// # Arguments
+    ///
+    /// * `instr`: The instruction to be added.
+    /// * `t`: The start time for the instruction.
+    /// * `duration`: The duration of the instruction.
+    /// * `keep_val`: Boolean value indicating whether to keep the instruction value after its end time.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if the new instruction overlaps with any existing instruction.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use nicompiler_backend::channel::*;
+    /// # use nicompiler_backend::instruction::*;
+    /// let mut channel = Channel::new(TaskType::DO, "port0/line0", 1e7, 0.);
+    ///
+    /// // Ask the DO channel to go high at t=1 for 0.5 seconds, then return to default value (0)
+    /// channel.add_instr(Instruction::new_const(1.), 1., 0.5, false);
+    ///
+    /// // Asks the DO channel to go high at t=0.5 for 0.001 seconds and keep its value.
+    /// // This will be merged with the instruction above during compilation.
+    /// channel.add_instr(Instruction::new_const(1.), 0.5, 0.001, true);
+    ///
+    /// // The following line is effectively the same as the two lines above after compilation.
+    /// // However, adding it immediately after the previous instructions will cause an overlap panic.
+    /// // Uncommenting the line below will trigger the panic.
+    /// // channel.add_instr(Instruction::new_const(1.), 0.5, 1., false);
+    /// ```
+    ///
+    /// Expected failure:
+    ///
+    /// ```should_panic
+    /// # use nicompiler_backend::channel::*;
+    /// # use nicompiler_backend::instruction::*;
+    /// let mut channel = Channel::new(TaskType::DO, "port0/line0", 1e7, 0.);
+    /// channel.add_instr(Instruction::new_const(1.), 1., 0.5, false);
+    /// channel.add_instr(Instruction::new_const(1.), 0.5, 0.001, true);
+    /// channel.add_instr(Instruction::new_const(1.), 0.5, 1., false); // This will panic
+    /// ```
+    ///
+    /// The panic message will be:
+    /// ```text
+    /// "Channel port0/line0
+    ///  Instruction InstrBook([CONST, {value: 1}], 5000000-15000000, false) overlaps with the next instruction InstrBook([CONST, {value: 1}], 5000000-5010000, true)"
+    /// ```
     fn add_instr(&mut self, func: Instruction, t: f64, dur_spec: Option<(f64, bool)>) {
         // Convert floating-point start and end times to sample clock ticks
         let start_pos = (t * self.samp_rate()).round() as usize;
@@ -480,64 +495,6 @@ pub trait BaseChannel {
         self.instr_list_().insert(new_instr_book);
         *self.fresh_compiled_() = false;
     }
-
-    /// Adds an instruction to the channel.
-    ///
-    /// This is the primary method for adding instructions. It computes the discrete position
-    /// interval associated with the given instruction, updates the `fresh_compiled` field,
-    /// and inserts the instruction if it does not overlap with existing ones.
-    /// See the helper [`BaseChannel::add_instr_`] for implementation details. 
-    ///
-    /// # Arguments
-    ///
-    /// * `instr`: The instruction to be added.
-    /// * `t`: The start time for the instruction.
-    /// * `duration`: The duration of the instruction.
-    /// * `keep_val`: Boolean value indicating whether to keep the instruction value after its end time.
-    ///
-    /// # Panics
-    ///
-    /// This method will panic if the new instruction overlaps with any existing instruction.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use nicompiler_backend::channel::*;
-    /// # use nicompiler_backend::instruction::*;
-    /// let mut channel = Channel::new(TaskType::DO, "port0/line0", 1e7, 0.);
-    ///
-    /// // Ask the DO channel to go high at t=1 for 0.5 seconds, then return to default value (0)
-    /// channel.add_instr(Instruction::new_const(1.), 1., 0.5, false);
-    ///
-    /// // Asks the DO channel to go high at t=0.5 for 0.001 seconds and keep its value.
-    /// // This will be merged with the instruction above during compilation.
-    /// channel.add_instr(Instruction::new_const(1.), 0.5, 0.001, true);
-    ///
-    /// // The following line is effectively the same as the two lines above after compilation.
-    /// // However, adding it immediately after the previous instructions will cause an overlap panic.
-    /// // Uncommenting the line below will trigger the panic.
-    /// // channel.add_instr(Instruction::new_const(1.), 0.5, 1., false);
-    /// ```
-    ///
-    /// Expected failure:
-    ///
-    /// ```should_panic
-    /// # use nicompiler_backend::channel::*;
-    /// # use nicompiler_backend::instruction::*;
-    /// let mut channel = Channel::new(TaskType::DO, "port0/line0", 1e7, 0.);
-    /// channel.add_instr(Instruction::new_const(1.), 1., 0.5, false);
-    /// channel.add_instr(Instruction::new_const(1.), 0.5, 0.001, true);
-    /// channel.add_instr(Instruction::new_const(1.), 0.5, 1., false); // This will panic
-    /// ```
-    ///
-    /// The panic message will be:
-    /// ```text
-    /// "Channel port0/line0
-    ///  Instruction InstrBook([CONST, {value: 1}], 5000000-15000000, false) overlaps with the next instruction InstrBook([CONST, {value: 1}], 5000000-5010000, true)"
-    /// ```
-    // fn add_instr(&mut self, instr: Instruction, t: f64, duration: f64, keep_val: bool) {
-    //     self.add_instr_(instr, t, duration, keep_val, false);
-    // }
 
     /// Utility function to add a constant instruction to the channel
     fn constant(&mut self, value: f64, t: f64, dur_spec: Option<(f64, bool)>) {

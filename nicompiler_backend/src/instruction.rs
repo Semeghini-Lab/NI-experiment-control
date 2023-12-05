@@ -24,6 +24,7 @@ use std::cmp::Ordering;
 use indexmap::IndexMap;
 use std::f64::consts::PI;
 use std::fmt;
+use ndarray::array;
 
 /// Type alias for instruction arguments: a dictionary with key-value pairs of
 /// string (argument name) and float (value)
@@ -197,6 +198,12 @@ impl Instruction {
                 });
             }
         }
+    }
+
+    pub fn eval_point(&self, t: f64) -> f64 {
+        let mut t_arr = array![t];
+        self.eval_inplace(&mut t_arr.view_mut());
+        t_arr[0]
     }
 
     /// Wrapper for conveniently creating new constant instructions.
