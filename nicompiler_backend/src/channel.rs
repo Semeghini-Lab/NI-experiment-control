@@ -255,54 +255,6 @@ pub trait BaseChannel {
         *self.fresh_compiled_() = true;
     }
 
-    /// Utility function for signal sampling.
-    ///
-    /// Assuming a compiled channel (does not check), this utility function uses a binary search
-    /// to efficiently determine the index of the first instruction whose end position is no less than
-    /// the given `start_pos`.
-    ///
-    /// Note: This function assumes that `instr_end` is sorted in ascending order. It does not perform
-    /// any checks for this condition.
-    ///
-    /// # Arguments
-    ///
-    /// * `start_pos` - The starting position for which to find the intersecting instruction.
-    ///
-    /// # Returns
-    ///
-    /// Returns the index `i` of the first instruction such that `self.instr_end[i] >= pos`
-    /// If no such instruction is found, the function returns an index pointing to where
-    /// the `pos` would be inserted to maintain the sorted order.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use nicompiler_backend::channel::*;
-    /// let mut channel = Channel::new(TaskType::DO, "port0/line0", 1e7, 0.);
-    /// channel.instr_end_().extend([10, 20, 30, 40, 50].iter());
-    ///
-    /// assert_eq!(channel.binfind_first_intersect_instr(15), 1);
-    /// assert_eq!(channel.binfind_first_intersect_instr(20), 1);
-    /// assert_eq!(channel.binfind_first_intersect_instr(25), 2);
-    /// assert_eq!(channel.binfind_first_intersect_instr(55), 5);
-    /// assert_eq!(channel.binfind_first_intersect_instr(5), 0);
-    /// ```
-    fn binfind_first_intersect_instr(&self, start_pos: usize) -> usize {
-        let mut low: i32 = 0;
-        let mut high: i32 = self.instr_end().len() as i32 - 1;
-        while low <= high {
-            let mid = ((low + high) / 2) as usize;
-            if self.instr_end()[mid] < start_pos {
-                low = mid as i32 + 1;
-            } else if self.instr_end()[mid] > start_pos {
-                high = mid as i32 - 1;
-            } else {
-                return mid as usize;
-            }
-        }
-        low as usize
-    }
-
     /// Clears the `instr_list` field of the channel.
     ///
     /// If the compiled cache is empty, it also sets the `fresh_compiled` field to `true`.
@@ -310,7 +262,6 @@ pub trait BaseChannel {
         *self.fresh_compiled_() = self.instr_end().len() == 0;
         self.instr_list_().clear();
     }
-
     /// Clears the compiled cache of the channel.
     ///
     /// Specifically, the method clears the `instr_end` and `instr_val` fields.
@@ -501,6 +452,53 @@ pub trait BaseChannel {
         self.add_instr(Instruction::new_const(value), t, dur_spec);
     }
 
+    /// Utility function for signal sampling.
+    ///
+    /// Assuming a compiled channel (does not check), this utility function uses a binary search
+    /// to efficiently determine the index of the first instruction whose end position is no less than
+    /// the given `start_pos`.
+    ///
+    /// Note: This function assumes that `instr_end` is sorted in ascending order. It does not perform
+    /// any checks for this condition.
+    ///
+    /// # Arguments
+    ///
+    /// * `start_pos` - The starting position for which to find the intersecting instruction.
+    ///
+    /// # Returns
+    ///
+    /// Returns the index `i` of the first instruction such that `self.instr_end[i] >= pos`
+    /// If no such instruction is found, the function returns an index pointing to where
+    /// the `pos` would be inserted to maintain the sorted order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use nicompiler_backend::channel::*;
+    /// let mut channel = Channel::new(TaskType::DO, "port0/line0", 1e7, 0.);
+    /// channel.instr_end_().extend([10, 20, 30, 40, 50].iter());
+    ///
+    /// assert_eq!(channel.binfind_first_intersect_instr(15), 1);
+    /// assert_eq!(channel.binfind_first_intersect_instr(20), 1);
+    /// assert_eq!(channel.binfind_first_intersect_instr(25), 2);
+    /// assert_eq!(channel.binfind_first_intersect_instr(55), 5);
+    /// assert_eq!(channel.binfind_first_intersect_instr(5), 0);
+    /// ```
+    fn binfind_first_intersect_instr(&self, start_pos: usize) -> usize {
+        let mut low: i32 = 0;
+        let mut high: i32 = self.instr_end().len() as i32 - 1;
+        while low <= high {
+            let mid = ((low + high) / 2) as usize;
+            if self.instr_end()[mid] < start_pos {
+                low = mid as i32 + 1;
+            } else if self.instr_end()[mid] > start_pos {
+                high = mid as i32 - 1;
+            } else {
+                return mid as usize;
+            }
+        }
+        low as usize
+    }
     /// Fills a buffer (1D view of array) with the signal samples derived from a channel's instructions.
     ///
     /// This method samples the float-point signal from channel's compile cache
@@ -593,7 +591,6 @@ pub trait BaseChannel {
             cur_pos += instr_signal_length;
         }
     }
-
     /// Calls `fill_signal_nsamps` with the appropriate buffer and returns signal vector.
     /// The in-place version `fill_signal_nsamps` is preferred to this method for efficiency.
     /// This is mainly a wrapper to expose channel-signal sampling to Python
