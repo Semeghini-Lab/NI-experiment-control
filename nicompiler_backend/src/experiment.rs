@@ -273,6 +273,7 @@ pub trait BaseExperiment {
     /// assert_eq!(exp.edit_stop_time(), 6.);
     /// ```
     fn edit_stop_time(&self, extra_tail_tick: bool) -> f64 {
+        // ToDo: remove extra_tail_tick, rename to last_instr_end_time()
         self.devices()
             .values()
             .map(|dev| dev.edit_stop_time(extra_tail_tick))
@@ -427,6 +428,11 @@ pub trait BaseExperiment {
     /// to determine the appropriate time to insert the reset tick. A reset tick is a
     /// point in time where all editable channels are reset to a value of 0.
     ///
+    /// # Arguments
+    ///
+    /// * `t`: if `Some(t)`, time point at which to insert the all-channel reset instruction.
+    /// If `None`, reset is inserted at the latest end of all existing instructions.
+    ///
     /// # Returns
     ///
     /// Returns the time at which the reset tick was added. This time corresponds to
@@ -471,14 +477,23 @@ pub trait BaseExperiment {
     /// assert!(sig[[1, 9]] == 1. && sig[[1, 10]] == 0.); // Also zeros channel 1 at t=1
     /// // println!("{:?}, reset_tick_time={}", sig, reset_tick_time);
     /// ```
-    fn add_reset_tick(&mut self) -> f64 {
-        let edit_stop_time = self.edit_stop_time(false);
+    fn add_reset_tick(&mut self, t: Option<f64>) -> f64 {
+        let last_instr_end_time = self.edit_stop_time(false);
+        let t_reset = match t {
+            Some(t_reset) => {
+                assert!(last_instr_end_time <= t_reset,
+                        "Requested to insert the all-channel reset at t = {t_reset} s \
+                         but some channels have instructions spanning until {last_instr_end_time} s");
+                t_reset
+            },
+            None => last_instr_end_time
+        };
         self.devices_().values_mut().for_each(|dev| {
             dev.editable_channels_().iter_mut().for_each(|chan|{
-                chan.constant(0., edit_stop_time, 1./ chan.samp_rate(), true);
+                chan.constant(0., t_reset, None);
             });
         });
-        edit_stop_time
+        self.edit_stop_time(false)
     }
 
     /// Clears the compile cache for all registered devices.
@@ -987,7 +1002,6 @@ pub trait BaseExperiment {
     /// * `t`: The start time of the constant instruction.
     /// * `duration`: Duration for which the constant value is applied.
     /// * `value`: The constant value to apply.
-    /// * `keep_val`: Flag indicating whether to maintain the value beyond the specified duration.
     ///
     /// # Panics
     ///
@@ -1020,10 +1034,31 @@ pub trait BaseExperiment {
         t: f64,
         duration: f64,
         value: f64,
-        keep_val: bool,
     ) {
         self.typed_channel_op(dev_name, chan_name, TaskType::AO, |chan| {
-            (*chan).constant(value, t, duration, keep_val);
+            (*chan).constant(value, t, Some((duration, false)));
+        });
+    }
+    /// Sets the specified analogue output (AO) channel to a specified constant value for a short duration.
+    ///
+    /// It allows the user to set the AO channel to an arbitrary value.
+    ///
+    /// The duration for which the value is held is determined as the inverse of the channel's sampling rate,
+    /// ensuring that the signal remains constant for one tick.
+    ///
+    /// # Arguments
+    ///
+    /// * `dev_name`: The name of the target device.
+    /// * `chan_name`: The name of the target AO channel within the device.
+    /// * `t`: The start time for the signal to take the specified value.
+    /// * `value`: The desired constant value for the signal.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if the channel is not of type AO.
+    fn go_constant(&mut self, dev_name: &str, chan_name: &str, t: f64, value: f64) {
+        self.typed_channel_op(dev_name, chan_name, TaskType::AO, |chan| {
+            (*chan).constant(value, t, None);
         });
     }
 
@@ -1072,7 +1107,22 @@ pub trait BaseExperiment {
     ) {
         self.typed_channel_op(dev_name, chan_name, TaskType::AO, |chan| {
             let instr = Instruction::new_sine(freq, amplitude, phase, dc_offset);
-            (*chan).add_instr(instr, t, duration, keep_val)
+            (*chan).add_instr(instr, t, Some((duration, keep_val)))
+        });
+    }
+    fn go_sine(
+        &mut self,
+        dev_name: &str,
+        chan_name: &str,
+        t: f64,
+        freq: f64,
+        amplitude: Option<f64>,
+        phase: Option<f64>,
+        dc_offset: Option<f64>,
+    ) {
+        self.typed_channel_op(dev_name, chan_name, TaskType::AO, |chan| {
+            let instr = Instruction::new_sine(freq, amplitude, phase, dc_offset);
+            (*chan).add_instr(instr, t, None)
         });
     }
 
@@ -1090,10 +1140,9 @@ pub trait BaseExperiment {
     /// This method will panic if the channel is not of type DO.
     fn high(&mut self, dev_name: &str, chan_name: &str, t: f64, duration: f64) {
         self.typed_channel_op(dev_name, chan_name, TaskType::DO, |chan| {
-            (*chan).constant(1., t, duration, false);
+            (*chan).constant(1., t, Some((duration, false)));
         });
     }
-
     /// Sets the specified digital output (DO) channel to a low state for the given duration.
     ///
     /// # Arguments
@@ -1108,10 +1157,9 @@ pub trait BaseExperiment {
     /// This method will panic if the channel is not of type DO.
     fn low(&mut self, dev_name: &str, chan_name: &str, t: f64, duration: f64) {
         self.typed_channel_op(dev_name, chan_name, TaskType::DO, |chan| {
-            (*chan).constant(0., t, duration, false);
+            (*chan).constant(0., t, Some((duration, false)));
         });
     }
-
     /// Sets the specified digital output (DO) channel to a high state, until the next instruction.
     ///
     /// The duration is determined as the inverse of the channel's sampling rate. A `go_high` instruction
@@ -1128,10 +1176,9 @@ pub trait BaseExperiment {
     /// This method will panic if the channel is not of type DO.
     fn go_high(&mut self, dev_name: &str, chan_name: &str, t: f64) {
         self.typed_channel_op(dev_name, chan_name, TaskType::DO, |chan| {
-            (*chan).constant(1., t, 1. / (*chan).samp_rate(), true);
+            (*chan).constant(1., t, None);
         });
     }
-
     /// Sets the specified digital output (DO) channel to a low state for a short duration.
     ///
     /// The duration is determined as the inverse of the channel's sampling rate. A `go_low` instruction
@@ -1148,30 +1195,7 @@ pub trait BaseExperiment {
     /// This method will panic if the channel is not of type DO.
     fn go_low(&mut self, dev_name: &str, chan_name: &str, t: f64) {
         self.typed_channel_op(dev_name, chan_name, TaskType::DO, |chan| {
-            (*chan).constant(0., t, 1. / (*chan).samp_rate(), true);
-        });
-    }
-
-    /// Sets the specified analogue output (AO) channel to a specified constant value for a short duration.
-    ///
-    /// It allows the user to set the AO channel to an arbitrary value.
-    ///
-    /// The duration for which the value is held is determined as the inverse of the channel's sampling rate, 
-    /// ensuring that the signal remains constant for one tick.
-    ///
-    /// # Arguments
-    ///
-    /// * `dev_name`: The name of the target device.
-    /// * `chan_name`: The name of the target AO channel within the device.
-    /// * `t`: The start time for the signal to take the specified value.
-    /// * `value`: The desired constant value for the signal. 
-    ///
-    /// # Panics
-    ///
-    /// This method will panic if the channel is not of type AO. 
-    fn go_constant(&mut self, dev_name: &str, chan_name: &str, t: f64, value: f64) {
-        self.typed_channel_op(dev_name, chan_name, TaskType::AO, |chan| {
-            (*chan).constant(value, t, 1. / (*chan).samp_rate(), true);
+            (*chan).constant(0., t, None);
         });
     }
 
@@ -1206,7 +1230,7 @@ pub trait BaseExperiment {
     ) {
         self.typed_channel_op(dev_name, chan_name, TaskType::AO, |chan| {
             let instr = Instruction::new_linramp(start_val, end_val);
-            (*chan).add_instr(instr, t, duration, keep_val)
+            (*chan).add_instr(instr, t, Some((duration, keep_val)))
         });
     }
 
@@ -1410,8 +1434,8 @@ macro_rules! impl_exp_boilerplate {
                 BaseExperiment::clear_edit_cache(self);
             }
 
-            pub fn add_reset_tick(&mut self) -> f64 {
-                BaseExperiment::add_reset_tick(self)
+            pub fn add_reset_tick(&mut self, t: Option<f64>) -> f64 {
+                BaseExperiment::add_reset_tick(self, t)
             }
 
             pub fn clear_compile_cache(&mut self) {
@@ -1513,9 +1537,11 @@ macro_rules! impl_exp_boilerplate {
                 t: f64,
                 duration: f64,
                 value: f64,
-                keep_val: bool,
             ) {
-                BaseExperiment::constant(self, dev_name, chan_name, t, duration, value, keep_val);
+                BaseExperiment::constant(self, dev_name, chan_name, t, duration, value);
+            }
+            pub fn go_constant(&mut self, dev_name: &str, chan_name: &str, t: f64, value:f64) {
+                BaseExperiment::go_constant(self, dev_name, chan_name, t, value);
             }
 
             pub fn sine(
@@ -1535,6 +1561,20 @@ macro_rules! impl_exp_boilerplate {
                     dc_offset,
                 );
             }
+            pub fn go_sine(
+                &mut self,
+                dev_name: &str,
+                chan_name: &str,
+                t: f64,
+                freq: f64,
+                amplitude: Option<f64>,
+                phase: Option<f64>,
+                dc_offset: Option<f64>,
+            ) {
+                BaseExperiment::go_sine(
+                    self, dev_name, chan_name, t, freq, amplitude, phase, dc_offset,
+                );
+            }
 
             pub fn high(&mut self, dev_name: &str, chan_name: &str, t: f64, duration: f64) {
                 BaseExperiment::high(self, dev_name, chan_name, t, duration);
@@ -1550,10 +1590,6 @@ macro_rules! impl_exp_boilerplate {
 
             pub fn go_low(&mut self, dev_name: &str, chan_name: &str, t: f64) {
                 BaseExperiment::go_low(self, dev_name, chan_name, t);
-            }
-
-            pub fn go_constant(&mut self, dev_name: &str, chan_name: &str, t: f64, value:f64) {
-                BaseExperiment::go_constant(self, dev_name, chan_name, t, value);
             }
 
             pub fn linramp(

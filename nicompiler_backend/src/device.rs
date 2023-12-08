@@ -381,6 +381,7 @@ pub trait BaseDevice {
     /// A `f64` representing the maximum stop time (in seconds) across all editable channels, 
     /// optionally increased by the duration of one tick.
     fn edit_stop_time(&self, extra_tail_tick: bool) -> f64 {
+        // ToDo: remove extra_tail_tick, rename to last_instr_end_time()
         let base_edit_stop_time = self.editable_channels()
             .iter()
             .map(|chan| chan.last_instr_end_time())
