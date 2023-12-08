@@ -181,8 +181,7 @@ pub trait BaseChannel {
     /// ```
     fn compile(&mut self, stop_pos: usize) {
         // (1) Exclude trivial cases; Sanity checks
-        let total_instr_num = self.instr_list().len();
-        if total_instr_num == 0 {
+        if self.instr_list().len() == 0 {
             return;
         }
         // (ignore double compiles)
@@ -203,14 +202,16 @@ pub trait BaseChannel {
         // Padding before the first instruction
         let first_start_pos = self.instr_list().first().unwrap().start_pos;
         if first_start_pos > 0 {
-            instr_val.push(Instruction::new_const(self.default_val()));
+            instr_val.push(Instruction::new_const(self.default_value()));
             instr_end.push(first_start_pos);
         }
         // All instructions and paddings after them
-        for idx in 0..total_instr_num {
-            let instr_book = self.instr_list()[idx];
-            let next_edge = if idx == (total_instr_num - 1) {stop_pos} else {self.instr_list()[idx + 1].start_pos};
-
+        let mut instr_list = self.instr_list().iter().peekable();
+        while let Some(instr_book) = instr_list.next() {
+            let next_edge = match instr_list.peek() {
+                Some(next_instr_book) => next_instr_book.start_pos,
+                None => stop_pos
+            };
             // Action depends on instruction end_pos type:
             //  - Some: insert the original instruction as-is + add a separate instruction for padding until the next_edge if there is a gap
             //  - None ("run until next"): insert instruction taking the next_edge as end_pos
