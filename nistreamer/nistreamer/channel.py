@@ -85,24 +85,14 @@ class AOChanProxy(BaseChanProxy):
     def chan_name(self):
         return f'ao{self.chan_idx}'
 
-    def constant(self, t, dur, val, keep_val=False):
-        # FixMe[Rust]: remove `duration` and `keep_val` arguments.
-        #  @Nich: Is it possible to do in Rust? Or is it better to wrap it here? How?
-        #  Details:
-        #  having `keep_val` for const is redundand - it equivalent to setting `duration` to None.
-        #  Using `duration` is also non-intuitive. What value should be kept after `duration`?
-        #  Instead of using `duration` + `keep_val`,
-        #  user would better just call `constant(t+duration, new_val)`
-
+    def constant(self, t, dur, val):
         self._dll.constant(
             dev_name=self._card_max_name,
             chan_name=self.chan_name,
             t=t,
             duration=dur,
             value=val,
-            keep_val=keep_val
         )
-
         return dur
     
     def go_constant(self, t, value):
@@ -129,6 +119,18 @@ class AOChanProxy(BaseChanProxy):
         )
         return dur
     
+    def go_sine(self, t, amp, freq, phase=0, dc_offs=0):
+        self._dll.go_sine(
+            dev_name=self._card_max_name,
+            chan_name=self.chan_name,
+            t=t,
+            amplitude=amp,
+            freq=freq,
+            phase=phase if phase != 0 else None,
+            # FixMe[Rust]: better to use 0.0 instead of None for default. Is it conveninient in Rust?
+            dc_offset=dc_offs if dc_offs != 0 else None,  # FixMe[Rust]: better to use 0.0 instead of None for default
+        )
+
     def linramp(self, t, dur, start_val, end_val, keep_val=True):
         self._dll.linramp(
             dev_name=self._card_max_name,

@@ -107,8 +107,8 @@ class NIStreamer:
             nreps=nreps
         )
 
-    def add_reset_tick(self):
-        self._dll.add_reset_tick()
+    def add_reset_tick(self, t: Optional[float] = None) -> float:
+        return self._dll.add_reset_tick(t=t)
 
     def clear_edit_cache(self):
         self._dll.clear_edit_cache()
