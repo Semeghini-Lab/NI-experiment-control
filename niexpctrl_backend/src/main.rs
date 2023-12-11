@@ -59,7 +59,7 @@ fn main() {
     exp.add_ao_device("PXI1Slot3", 1e6);
     exp.add_ao_channel("PXI1Slot3", 10, 0.);
 
-    exp.linramp("PXI1Slot3", "ao10", 0., 1., 0., Some((1., true)));
+    exp.linramp("PXI1Slot3", "ao10", 0., 1., 0., 1., true);
 
     exp.compile(true);
     exp.stream_exp(50., 1);
