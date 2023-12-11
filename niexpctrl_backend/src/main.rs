@@ -32,7 +32,7 @@ fn main() {
     // and unit amplitude, zero phase. Does not keep its value.
     exp.sine("PXI1Slot3", "ao0", 0., 1., false, 7., None, None, Some(1.));
     // Ends with a half-second long 1V constant signal which returns to zero
-    exp.constant("PXI1Slot3", "ao0", 9., 0.5, 1., false);
+    exp.constant("PXI1Slot3", "ao0", 9., 0.5, 1.);
 
     // We can also leave a defined channel empty: the device / channel will simply not be compiled
 
