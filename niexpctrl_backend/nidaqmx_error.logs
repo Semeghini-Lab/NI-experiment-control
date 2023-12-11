@@ -87,3 +87,8 @@ Destination Terminal: PXI1_Trig7
 Task Name: _unnamedTask<1>
 
 Status Code: -89121
+DAQmx Error: Wait Until Done did not indicate that the task was done within the specified timeout.
+Increase the timeout, check the program, and make sure connections for external timing and triggering are in place.
+Task Name: _unnamedTask<0>
+
+Status Code: -200560

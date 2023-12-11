@@ -139,7 +139,7 @@ def checkpoint_notebook(save_dir, name):
     os.makedirs(target_dir, exist_ok=True)
     # Format the filename with the current time
     time_str = now.strftime("%H-%M-%S")
-    filename = f"{name}-{time_str}.ipynb"
+    filename = f"{name}-{time_str}"
     # Call save_notebook to save the file in the structured directory
     save_notebook_(target_dir, filename)
     # Echo back the absolute path of the file saved
