@@ -95,12 +95,12 @@ class AOChanProxy(BaseChanProxy):
         )
         return dur
     
-    def go_constant(self, t, value):
+    def go_constant(self, t, val):
         self._dll.go_constant(
             dev_name=self._card_max_name,
             chan_name=self.chan_name,
             t=t,
-            value=value,
+            value=val,
         )
 
     def sine(self, t, dur, amp, freq, phase=0, dc_offs=0, keep_val=False):
