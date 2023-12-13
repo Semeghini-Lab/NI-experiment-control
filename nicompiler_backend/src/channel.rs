@@ -356,6 +356,9 @@ pub trait BaseChannel {
     ///  Instruction InstrBook([CONST, {value: 1}], 5000000-15000000, false) overlaps with the next instruction InstrBook([CONST, {value: 1}], 5000000-5010000, true)"
     /// ```
     fn add_instr(&mut self, func: Instruction, t: f64, dur_spec: Option<(f64, bool)>) {
+        // Sanity check - non-negative start time (compare with negative clock half-period to avoid virtual panics for nominal t=0.0)
+        assert!(t > -0.5*self.clock_period(), "Attempted to insert an instruction at negative start time {t}");
+
         // Convert floating-point start and end times to sample clock ticks
         let start_pos = (t * self.samp_rate()).round() as usize;
         let end_spec = match dur_spec {
