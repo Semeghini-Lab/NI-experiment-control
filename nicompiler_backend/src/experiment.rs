@@ -431,7 +431,7 @@ pub trait BaseExperiment {
     /// # Arguments
     ///
     /// * `t`: if `Some(t)`, time point at which to insert the all-channel reset instruction.
-    /// If `None`, reset is inserted at the latest end of all existing instructions.
+    /// If `None`, reset is inserted at the latest end of all existing instructions across all channels.
     ///
     /// # Returns
     ///
@@ -1003,6 +1003,9 @@ pub trait BaseExperiment {
     /// * `duration`: Duration for which the constant value is applied.
     /// * `value`: The constant value to apply.
     ///
+    /// Note: after `duration` elapses, output value is automatically set to channel default and kept there
+    /// until the next instruction or global end. Use [`go_constant`] if you want to keep the same value instead.
+    ///
     /// # Panics
     ///
     /// This method will panic if the provided channel is not of type AO.
@@ -1110,6 +1113,7 @@ pub trait BaseExperiment {
             (*chan).add_instr(instr, t, Some((duration, keep_val)))
         });
     }
+    /// Same as [`sine`] but without specific end time ("keep running until the next instruction or global end")
     fn go_sine(
         &mut self,
         dev_name: &str,

@@ -202,6 +202,7 @@ impl Instruction {
         }
     }
 
+    /// Evaluate function at a single time point
     pub fn eval_point(&self, t: f64) -> f64 {
         let mut t_arr = array![t];
         self.eval_inplace(&mut t_arr.view_mut());
@@ -287,20 +288,30 @@ impl fmt::Display for Instruction {
     }
 }
 
-/// Manages an instruction along with its associated metadata during experiment editing.
+/// Struct containing function and start/end edge data of the instruction.
 ///
-/// The `InstrBook` struct captures the following metadata:
-/// - Defined interval using `start_pos` and `end_pos`.
-/// - A flag, `keep_val`, to determine whether to retain the value after the defined interval.
+/// # Fields:
+/// - `instr` - the function struct
 ///
-/// For the instruction interval:
-/// - `start_pos` is inclusive.
-/// - `end_pos` is exclusive.
+/// - `start_pos` - beginning of the instruction interval
 ///
+/// - `end_spec` specifies instruction interval end. Can be `Some` or `None`:
+///     - `Some((end_pos, keep_val))` - instruction has specific `end_pos`.
+///       If there is a gap until the next edge (the next instruction or global end), compiler will keep a constant value starting at `end_pos`.
+///       If `keep_val` is `true`, it will be the last instruction value, otherwise it will be the channel default.
+///
+///     - `None` - no specified end, instruction will span until the next edge (start of the next instruction or global end).
+///
+/// # Edge inclusion:
+/// - `start_pos` is *inclusive*, sample for `start_pos` clock tick is covered;
+/// - `end_pos` is *exclusive*, sample for `end_pos` clock tick is not covered, the next instruction can start here otherwise it will be covered by padding;
+///
+/// # Minimal instruction length is 1 clock tick:
+/// - If `end_spec` is `Some`, minimal `end_pos` is `start_pos + 1`
+/// - If `end_spec` is `None`, the next instruction must start no earlier than `start_pos + 1`
+///
+/// # Ordering
 /// `InstrBook` implements ordering based on `start_pos` to facilitate sorting.
-/// editing phase: defined interval, and whether to keep value after defined interval.
-/// For instruction interval, `start_pos` is inclusive while `end_pos` is exclusive.
-/// We implemented ordering for `InstrBook` to allow sorting based on `start_pos`.
 ///
 pub struct InstrBook {
     pub start_pos: usize,
@@ -313,11 +324,13 @@ impl InstrBook {
     /// Checks that `end_pos` is strictly greater than `start_pos`.
     ///
     /// # Arguments
-    ///
     /// - `start_pos`: Starting position (inclusive).
-    /// - `end_pos`: Ending position (exclusive).
-    /// - `keep_val`: Flag to determine if value should be retained after the interval.
-    /// - `instr`: The associated instruction.
+    /// - `end_spec`: specifies instruction interval end. Can be `Some` or `None`:
+    ///     - `Some((end_pos, keep_val))` - instruction has specific `end_pos`.
+    ///       If there is a gap until the next edge (the next instruction or global end), compiler will keep a constant value starting at `end_pos`.
+    ///       If `keep_val` is `true`, it will be the last instruction value, otherwise it will be the channel default.
+    ///     - `None` - no specified end, instruction will span until the next edge (start of the next instruction or global end).
+    /// - `func`: The associated function.
     ///
     /// # Examples
     ///
@@ -326,7 +339,7 @@ impl InstrBook {
     /// ```
     /// # use nicompiler_backend::instruction::*;
     /// let instruction = Instruction::new(InstrType::CONST, [("value".to_string(), 1.0)].iter().cloned().collect());
-    /// let book = InstrBook::new(0, 5, true, instruction);
+    /// let book = InstrBook::new(0, Some((5, true)), instruction);
     /// ```
     ///
     /// Attempting to construct an `InstrBook` with `end_pos` not greater than `start_pos` will panic:
@@ -334,7 +347,7 @@ impl InstrBook {
     /// ```should_panic
     /// # use nicompiler_backend::instruction::*;
     /// let instruction = Instruction::new(InstrType::CONST, [("value".to_string(), 1.0)].iter().cloned().collect());
-    /// let book = InstrBook::new(5, 5, true, instruction);
+    /// let book = InstrBook::new(5, Some((5, true)), instruction);
     /// ```
     ///
     /// The panic message will be:
@@ -355,12 +368,20 @@ impl InstrBook {
             instr: func,
         }
     }
+    /// Returns the value of the `end_pos` field
     pub fn end_pos(&self) -> Option<usize> {
         match self.end_spec {
             Some((end_pos, _keep_val)) => Some(end_pos),
             None => None,
         }
     }
+    /// "Effective" end position
+    ///
+    /// If `Self.end_spec` is `Some`, simply returns `end_pos`.
+    ///
+    /// If `Self.end_spec` is `None`, returns `(start_pos + 1)`.
+    /// This is because "go-something" instruction must have at least one tick - `start_pos` - to have any effect.
+    /// So the "effective end", the earliest time any subsequent instruction can be starting at is `(start_pos + 1)`.
     pub fn eff_end_pos(&self) -> usize {
         // "go_something"-type instruction don't have a specific end_pos
         // but must have space for at least one tick to have any effect,
@@ -370,6 +391,7 @@ impl InstrBook {
             None => self.start_pos + 1,
         }
     }
+    /// Returns `Some(end_pos - start_pos)` or `None` if not specified
     pub fn dur(&self) -> Option<usize> {
         match self.end_spec {
             Some((end_pos, _keep_val)) => Some(end_pos - self.start_pos),

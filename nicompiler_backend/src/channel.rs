@@ -119,6 +119,7 @@ pub trait BaseChannel {
     /// Mutable access to the values of compiled instructions.
     fn instr_val_(&mut self) -> &mut Vec<Instruction>;
 
+    /// Returns sample clock period calculated as `1.0 / self.samp_rate()`
     fn clock_period(&self) -> f64 {
         1.0 / self.samp_rate()
     }
@@ -152,7 +153,7 @@ pub trait BaseChannel {
     /// list of end positions (`instr_end`) and corresponding values (`instr_val`). During compilation,
     /// it ensures that instructions are contiguous, adding padding as necessary. If two consecutive
     /// instructions have the same value, they are merged into a single instruction. 
-    /// Unspecified intervals default to zero value. 
+    /// The unspecified interval from 0 to the first instruction is kept at the channel default.
     ///
     /// # Arguments
     ///
@@ -161,9 +162,7 @@ pub trait BaseChannel {
     ///
     /// # Panics
     ///
-    /// This method will panic in the following scenarios:
-    /// * If the last instruction's end position in the `instr_list` exceeds the specified `stop_pos`.
-    /// * If the channel is being recompiled but the previously compiled end position matches `stop_pos`.
+    /// This method will panic if the last instruction's end position in the `instr_list` exceeds the specified `stop_pos`.
     ///
     /// # Examples
     ///
@@ -173,8 +172,8 @@ pub trait BaseChannel {
     /// let mut channel = Channel::new(TaskType::DO, "port0/line0", 1e7, 0.);
     ///
     /// // Add some instructions to the channel.
-    /// channel.add_instr(Instruction::new_const(1.), 0., 1., false);
-    /// channel.add_instr(Instruction::new_const(0.), 1., 1., false);
+    /// channel.add_instr(Instruction::new_const(1.), 0., Some((1., false)));
+    /// channel.add_instr(Instruction::new_const(0.), 1., Some((1., false)));
     ///
     /// // Compile the instructions up to a specified stop position.
     /// channel.compile(3e7 as usize); // Compile up to 3 seconds (given a sampling rate of 10^7)
@@ -273,30 +272,30 @@ pub trait BaseChannel {
         self.instr_val_().clear();
     }
 
+    /// Returns the stop position of the compiled instructions.
+    ///
+    /// If the channel is not compiled, it returns `0`. Otherwise, it retrieves the last end position
+    /// from the compiled cache.
     fn compiled_stop_pos(&self) -> usize {
         match self.instr_end().last() {
             Some(&end_pos) => end_pos,
             None => 0
         }
     }
-    /// Returns the stop time of the compiled instructions.
-    ///
-    /// If the channel is not compiled, it returns `0`. Otherwise, it retrieves the last end position
-    /// from the compiled cache and converts it to a time value using the sampling rate.
+    /// Same as [`compiled_stop_pos`] but the result is multiplied by sample clock period.
     fn compiled_stop_time(&self) -> f64 {
         self.compiled_stop_pos() as f64 * self.clock_period()
     }
 
+    /// Returns the effective `end_pos` of the last instruction.
+    /// If the edit cache is empty, it returns `0`.
     fn last_instr_end_pos(&self) -> usize {
         match self.instr_list().last() {
             Some(last_instr) => last_instr.eff_end_pos(),
             None => 0
         }
     }
-    /// Returns the stop time of the edited instructions.
-    ///
-    /// Retrieves the last instruction from the edit cache and converts its end position
-    /// to a time value using the sampling rate. If the edit cache is empty, it returns `0`.
+    /// Same as [`last_instr_end_pos`] but the result is multiplied by sample clock period.
     fn last_instr_end_time(&self) -> f64 {
         self.last_instr_end_pos() as f64 * self.clock_period()
     }
@@ -306,14 +305,16 @@ pub trait BaseChannel {
     /// This is the primary method for adding instructions. It computes the discrete position
     /// interval associated with the given instruction, updates the `fresh_compiled` field,
     /// and inserts the instruction if it does not overlap with existing ones.
-    /// See the helper [`BaseChannel::add_instr_`] for implementation details.
     ///
     /// # Arguments
     ///
-    /// * `instr`: The instruction to be added.
+    /// * `instr`: The function to be added.
     /// * `t`: The start time for the instruction.
-    /// * `duration`: The duration of the instruction.
-    /// * `keep_val`: Boolean value indicating whether to keep the instruction value after its end time.
+    /// * `dur_spec` specifies instruction duration. Can be `Some` or `None`:
+    ///     * `Some((dur, keep_val))` - instruction with a specific duration.
+    ///       If there is a gap until the next instruction or global end, compiler will fill it with a constant value.
+    ///       If `keep_val` is `true`, it will be the last instruction value, otherwise it will be the channel default.
+    ///     * `None` - no specified duration, instruction will span until the start of the next instruction or global end.
     ///
     /// # Panics
     ///
@@ -327,11 +328,11 @@ pub trait BaseChannel {
     /// let mut channel = Channel::new(TaskType::DO, "port0/line0", 1e7, 0.);
     ///
     /// // Ask the DO channel to go high at t=1 for 0.5 seconds, then return to default value (0)
-    /// channel.add_instr(Instruction::new_const(1.), 1., 0.5, false);
+    /// channel.add_instr(Instruction::new_const(1.), 1., Some((0.5, false)));
     ///
     /// // Asks the DO channel to go high at t=0.5 for 0.001 seconds and keep its value.
     /// // This will be merged with the instruction above during compilation.
-    /// channel.add_instr(Instruction::new_const(1.), 0.5, 0.001, true);
+    /// channel.add_instr(Instruction::new_const(1.), 0.5, Some((0.001, true)));
     ///
     /// // The following line is effectively the same as the two lines above after compilation.
     /// // However, adding it immediately after the previous instructions will cause an overlap panic.
@@ -345,9 +346,9 @@ pub trait BaseChannel {
     /// # use nicompiler_backend::channel::*;
     /// # use nicompiler_backend::instruction::*;
     /// let mut channel = Channel::new(TaskType::DO, "port0/line0", 1e7, 0.);
-    /// channel.add_instr(Instruction::new_const(1.), 1., 0.5, false);
-    /// channel.add_instr(Instruction::new_const(1.), 0.5, 0.001, true);
-    /// channel.add_instr(Instruction::new_const(1.), 0.5, 1., false); // This will panic
+    /// channel.add_instr(Instruction::new_const(1.), 1., Some((0.5, false)));
+    /// channel.add_instr(Instruction::new_const(1.), 0.5, Some((0.001, true)));
+    /// channel.add_instr(Instruction::new_const(1.), 0.5, Some((1., false))); // This will panic
     /// ```
     ///
     /// The panic message will be:
