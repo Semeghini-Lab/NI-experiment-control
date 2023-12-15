@@ -134,7 +134,7 @@ class AOCardProxy(BaseCardProxy):
     def __repr__(self):
         return 'AO card ' + super().__repr__()
 
-    def add_chan(self, chan_idx: int, default_value: float=0., nickname: str = None):
+    def add_chan(self, chan_idx: int, default_value: float = 0., nickname: str = None):
         # Raw rust-maturin wrapper call
         self._dll.add_ao_channel(
             self.max_name, 
@@ -157,10 +157,7 @@ class DOCardProxy(BaseCardProxy):
     def __repr__(self):
         return 'DO card ' + super().__repr__()
 
-    def add_chan(self, chan_idx: int, default_value: bool=False, nickname: str = None):
-        return self.add_chan_(chan_idx // 8, chan_idx % 8, default_value, nickname)
-
-    def add_chan_(self, port_idx: int, line_idx: int, default_value: bool=False, nickname: str = None):
+    def add_chan(self, port_idx: int, line_idx: int, default_value: bool = False, nickname: str = None):
         # Raw rust-maturin wrapper call
         self._dll.add_do_channel(
             self.max_name, 

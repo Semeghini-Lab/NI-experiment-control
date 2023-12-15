@@ -34,15 +34,14 @@ class NIStreamer:
             card_type: Literal['AO', 'DO'],
             max_name: str,
             samp_rate: float,
+            model_class=None,
             nickname: Optional[str] = None
     ):
         if card_type == 'AO':
             dll_method = RawDLL.add_ao_device
-            proxy_class = AOCardProxy
             target_dict = self._ao_card_dict
         elif card_type == 'DO':
             dll_method = RawDLL.add_do_device
-            proxy_class = DOCardProxy
             target_dict = self._do_card_dict
         else:
             raise ValueError(f'Invalid card type "{card_type}". Valid type strings are "AO" and "DO"')
@@ -50,10 +49,11 @@ class NIStreamer:
         # Raw (maturin wrapped) DLL call
         dll_method(
             self._dll,
-            max_name,  # FixMe[Rust]: change `physical_name` to `max_name`
+            max_name,
             samp_rate=samp_rate
         )
         # Proxy object
+        proxy_class = model_class if model_class is not None else (AOCardProxy if card_type == 'AO' else DOCardProxy)
         proxy = proxy_class(
             _dll=self._dll,
             max_name=max_name,
@@ -67,12 +67,14 @@ class NIStreamer:
             self,
             max_name: str,
             samp_rate: float,
+            model_class=None,
             nickname: Optional[str] = None
     ):
         return self._add_card(
             card_type='AO',
             max_name=max_name,
             samp_rate=samp_rate,
+            model_class=model_class,
             nickname=nickname
         )
 
@@ -80,12 +82,14 @@ class NIStreamer:
             self,
             max_name: str,
             samp_rate: float,
+            model_class=None,
             nickname: Optional[str] = None
     ):
         return self._add_card(
             card_type='DO',
             max_name=max_name,
             samp_rate=samp_rate,
+            model_class=model_class,
             nickname=nickname
         )
 
