@@ -183,15 +183,15 @@ pub trait BaseChannel {
         if self.instr_list().len() == 0 {
             return;
         }
-        // (ignore double compiles)
-        if self.is_fresh_compiled() && stop_pos == self.compiled_stop_pos() {
-            return;
-        }
         if stop_pos < self.last_instr_end_pos() {
             panic!("Attempting to compile channel {} with stop_pos {} while instructions end at {}",
                    self.name(),
                    stop_pos,
                    self.last_instr_end_pos());
+        }
+        // (ignore double compiles)
+        if self.is_fresh_compiled() && stop_pos == self.total_samps() {
+            return;
         }
 
         // (2) Calculate exhaustive instruction coverage from 0 to stop_pos (instructions + padding)
@@ -251,7 +251,10 @@ pub trait BaseChannel {
                 *self.instr_end_().last_mut().unwrap() = instr_end[i];
             }
         }
+        // Verify transfer correctness
         assert_eq!(self.instr_val().len(), self.instr_end().len());
+        assert_eq!(self.total_samps(), stop_pos);
+
         *self.fresh_compiled_() = true;
     }
 
@@ -259,7 +262,7 @@ pub trait BaseChannel {
     ///
     /// If the compiled cache is empty, it also sets the `fresh_compiled` field to `true`.
     fn clear_edit_cache(&mut self) {
-        *self.fresh_compiled_() = self.instr_end().len() == 0;
+        self.clear_compile_cache();
         self.instr_list_().clear();
     }
     /// Clears the compiled cache of the channel.
@@ -276,15 +279,15 @@ pub trait BaseChannel {
     ///
     /// If the channel is not compiled, it returns `0`. Otherwise, it retrieves the last end position
     /// from the compiled cache.
-    fn compiled_stop_pos(&self) -> usize {
+    fn total_samps(&self) -> usize {  // ToDo: TestMe
         match self.instr_end().last() {
             Some(&end_pos) => end_pos,
             None => 0
         }
     }
-    /// Same as [`compiled_stop_pos`] but the result is multiplied by sample clock period.
-    fn compiled_stop_time(&self) -> f64 {
-        self.compiled_stop_pos() as f64 * self.clock_period()
+    /// Same as [`total_samps`] but the result is multiplied by sample clock period.
+    fn total_run_time(&self) -> f64 {
+        self.total_samps() as f64 * self.clock_period()
     }
 
     /// Returns the effective `end_pos` of the last instruction.
@@ -571,12 +574,12 @@ pub trait BaseChannel {
             end_pos
         );
         assert!(
-            end_pos <= (self.compiled_stop_time() * self.samp_rate()) as usize,
+            end_pos <= self.total_samps(),
             "Attempting to calculate signal interval {}-{} for channel {}, which ends at {}",
             start_pos,
             end_pos,
             self.name(),
-            (self.compiled_stop_time() * self.samp_rate()) as usize
+            self.total_samps()
         );
 
         let start_instr_idx: usize = self.binfind_first_intersect_instr(start_pos);
@@ -600,6 +603,14 @@ pub trait BaseChannel {
     /// The in-place version `fill_signal_nsamps` is preferred to this method for efficiency.
     /// This is mainly a wrapper to expose channel-signal sampling to Python
     fn calc_signal_nsamps(&self, start_time: f64, end_time: f64, num_samps: usize) -> Vec<f64> {
+        // ToDo: a similar function `BaseDevice::calc_signal_nsamps()` takes `start_pos: usize` and `end_pos: usize`
+        //  consider matching this signature.
+        //  However, there is difference in usage:
+        //  - `BaseChannel::calc_signal_nsamps()` is used in `iplot()` only
+        //  - `BaseDevice::calc_signal_nsamps()` is used for streaming only
+
+        // ToDo: can this function take `usize` values for `start/end_time` instead of `f64`.
+        //  If not, maybe better to use `.round()`?
         let mut buffer = Array1::linspace(start_time, end_time, num_samps);
         let start_pos = (start_time * self.samp_rate()) as usize;
         let end_pos = (end_time * self.samp_rate()) as usize;

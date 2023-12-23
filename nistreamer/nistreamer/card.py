@@ -128,6 +128,11 @@ class BaseCardProxy:
         self._ref_clk_rate = None
         self._ref_clk_line = None
 
+    def last_instr_end_time(self):
+        return self._dll.device_last_instr_end_time(
+            self.max_name
+        )
+
 
 class AOCardProxy(BaseCardProxy):
 

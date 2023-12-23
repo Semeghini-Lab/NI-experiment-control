@@ -46,10 +46,15 @@ class BaseChanProxy:
         # if not self._dll.is_fresh_compiled():
         #     self._dll.compile()
         # ToDo: until then go inefficient but safe - recompile from scratch every time
-        self._dll.compile(extra_tail_tick=True)
+        # self._dll.compile()
 
         t_start = t_start if t_start is not None else 0.0
-        t_end = t_end if t_end is not None else self._dll.compiled_stop_time()
+        # FixMe: if channel was compiled with some `stop_time`,
+        #  using `last_instr_end_time()` will "truncate" the padding tail.
+        #  Ideally, one would rather use `BaseChannel::total_run_time()` but it is not exposed now.
+        #  Either expose it or consider changing the signature of the underlying `BaseChannel::calc_signal_nsamps()`
+        #  to accept `Option<start_time>` and `Option<end_time>`
+        t_end = t_end if t_end is not None else self.last_instr_end_time()
 
         signal_arr = self._dll.channel_calc_signal_nsamps(
             dev_name=self._card_max_name,
@@ -60,6 +65,12 @@ class BaseChanProxy:
         )
 
         return t_start, t_end, signal_arr
+
+    def last_instr_end_time(self):
+        return self._dll.channel_last_instr_end_time(
+            dev_name=self._card_max_name,
+            chan_name=self.chan_name
+        )
 
 
 class AOChanProxy(BaseChanProxy):
@@ -104,7 +115,6 @@ class AOChanProxy(BaseChanProxy):
         )
 
     def sine(self, t, dur, amp, freq, phase=0, dc_offs=0, keep_val=False):
-        # ToDo: try adding dur=None - when you just say "keep playing sine until further instructions"
         self._dll.sine(
             dev_name=self._card_max_name,
             chan_name=self.chan_name,

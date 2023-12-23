@@ -55,7 +55,7 @@ use crate::instruction::*;
 /// 2. Device-targeted methods which alter or query the behavior of a specific device:
 ///     - [`add_ao_channel`], [`add_do_channel`]
 ///     - [`device_calc_signal_nsamps`], [`device_compiled_channel_names`]
-///     - [`device_edit_stop_time`], [`device_compiled_stop_time`]
+///     - [`device_last_instr_end_time`], [`device_compiled_stop_time`]
 ///     - [`device_clear_compile_cache`], [`device_clear_edit_cache`]
 /// 3. Channel-targeted methods which alter or query the behavior of a particular channel
 ///     - [`constant`], [`sine`], [`high`], [`low`], [`go_high`], [`go_low`]
@@ -80,7 +80,7 @@ use crate::instruction::*;
 /// [`add_ao_channel`]: BaseExperiment::add_ao_channel
 /// [`add_do_channel`]: BaseExperiment::add_do_channel
 /// [`device_calc_signal_nsamps`]: BaseExperiment::device_calc_signal_nsamps
-/// [`device_edit_stop_time`]: BaseExperiment::device_edit_stop_time
+/// [`device_last_instr_end_time`]: BaseExperiment::device_last_instr_end_time
 /// [`device_compiled_stop_time`]: BaseExperiment::device_compiled_stop_time
 /// [`device_clear_compile_cache`]: BaseExperiment::device_clear_compile_cache
 /// [`device_clear_edit_cache`]: BaseExperiment::device_clear_edit_cache
@@ -272,50 +272,22 @@ pub trait BaseExperiment {
     /// exp.high("PXI1Slot6", "port0/line4", 0., 6.); // stop time at 6
     /// assert_eq!(exp.edit_stop_time(), 6.);
     /// ```
-    fn edit_stop_time(&self, extra_tail_tick: bool) -> f64 {
-        // ToDo: remove extra_tail_tick, rename to last_instr_end_time()
+    fn last_instr_end_time(&self) -> f64 {  // ToDo: TestMe
         self.devices()
             .values()
-            .map(|dev| dev.edit_stop_time(extra_tail_tick))
+            .map(|dev| dev.last_instr_end_time())
             .fold(0.0, f64::max)
     }
 
-    /// Retrieves the `compiled_stop_time` from all registered devices.
-    /// See [`BaseDevice::compiled_stop_time`] for more information.
+    /// Retrieves the `total_run_time` from all registered devices.
+    /// See [`BaseDevice::total_run_time`] for more information.
     ///
-    /// The maximum `compiled_stop_time` across all devices.
-    fn compiled_stop_time(&self) -> f64 {
+    /// The maximum `total_run_time` across all devices.
+    fn total_run_time(&self) -> f64 {  // ToDo: TestMe
         self.devices()
             .values()
-            .map(|dev| dev.compiled_stop_time())
+            .map(|dev| dev.total_run_time())
             .fold(0.0, f64::max)
-    }
-
-    /// Broadcasts the compile command to all devices, relying on the `edit_stop_time`
-    /// as the compilation stop-target.
-    /// If `extra_tail_tick`, then the actual stop time is one tick past the specified 
-    /// edit_stop_time for every device, allowing trailing commands with `keep_val` to take effect. 
-    /// See [`BaseDevice::compile`], [`BaseExperiment::edit_stop_time`], and [`BaseExperiment::compiled_stop_time`] for more information.
-    ///
-    /// # Example
-    /// ```
-    /// # use nicompiler_backend::*;
-    /// let mut exp = Experiment::new();
-    /// exp.add_do_device("PXI1Slot6", 1e6);
-    /// exp.add_do_channel("PXI1Slot6", 0, 0, 0.);
-    /// exp.high("PXI1Slot6", "port0/line0", 1., 4.);
-    ///
-    /// exp.compile(false);
-    /// assert_eq!(exp.compiled_stop_time(), exp.edit_stop_time());
-    /// ```
-    fn compile(&mut self, extra_tail_tick: bool) -> f64 {
-        // Called without arguments, compiles based on stop_time of instructions
-        let stop_time = self.edit_stop_time(extra_tail_tick);
-        self.compile_with_stoptime(stop_time);
-        stop_time
-        // assert!(stop_time == self.compiled_stop_time(), 
-        // "Internal bug: intended stop_time {} yet compiled to stop_time {}", stop_time, self.compiled_stop_time());
-        // stop_time
     }
 
     /// Compiles the experiment by broadcasting the compile command to all devices.
@@ -354,20 +326,37 @@ pub trait BaseExperiment {
     /// exp.compile_with_stoptime(5.); // Experiment signal will stop at t=5 now
     /// assert_eq!(exp.compiled_stop_time(), 5.);
     /// ```
-    fn compile_with_stoptime(&mut self, stop_time: f64) {
+    fn compile(&mut self, stop_time: Option<f64>) -> f64 {  // ToDo: TestMe
+        // Sanity check: inter-device trigger configuration is valid
+        self.check_trig_config();
+
+        let stop_time = match stop_time {
+            Some(stop_time) => {
+                if stop_time < self.last_instr_end_time() {
+                    panic!("Attempted to compile with stop_time = {stop_time} [s] while the last instruction end time is {} [s]", self.last_instr_end_time())
+                };
+                stop_time
+            },
+            None => self.last_instr_end_time()
+        };
+        for dev in self.devices_().values_mut() {
+            dev.compile(stop_time);
+        }
+        return self.total_run_time()
+    }
+
+    /// This is a sanity check to ensure inter-device trigger configuration is valid
+    fn check_trig_config(&self) {
         assert!(
             self.devices().values().all(|d| d.export_trig().is_none())
                 || self
-                    .devices()
-                    .values()
-                    .filter(|d| d.export_trig() == Some(true))
-                    .count()
-                    == 1,
+                .devices()
+                .values()
+                .filter(|d| d.export_trig() == Some(true))
+                .count()
+                == 1,
             "Cannot compile an experiment with devices expecting yet no device exporting trigger"
         );
-        self.devices_()
-            .values_mut()
-            .for_each(|dev| dev.compile(((stop_time) * dev.samp_rate()) as usize));
     }
 
     /// Retrieves a list of devices that have been successfully compiled.
@@ -417,6 +406,7 @@ pub trait BaseExperiment {
     ///
     /// This method is useful to reset or clear any temporary data or states stored during the editing phase for each device.
     fn clear_edit_cache(&mut self) {
+        self.clear_compile_cache();
         self.devices_()
             .values_mut()
             .for_each(|dev| dev.clear_edit_cache());
@@ -477,23 +467,22 @@ pub trait BaseExperiment {
     /// assert!(sig[[1, 9]] == 1. && sig[[1, 10]] == 0.); // Also zeros channel 1 at t=1
     /// // println!("{:?}, reset_tick_time={}", sig, reset_tick_time);
     /// ```
-    fn add_reset_tick(&mut self, t: Option<f64>) -> f64 {
-        let last_instr_end_time = self.edit_stop_time(false);
-        let t_reset = match t {
-            Some(t_reset) => {
-                assert!(last_instr_end_time <= t_reset,
-                        "Requested to insert the all-channel reset at t = {t_reset} s \
-                         but some channels have instructions spanning until {last_instr_end_time} s");
-                t_reset
+    fn add_reset_tick(&mut self, reset_time: Option<f64>) {  // ToDo: TestMe
+        let last_instr_end_time = self.last_instr_end_time();
+        let reset_time = match reset_time {
+            Some(reset_time) => {
+                assert!(last_instr_end_time <= reset_time,
+                        "Requested to insert the all-channel reset at t = {reset_time} [s] \
+                         but some channels have instructions spanning until {last_instr_end_time} [s]");
+                reset_time
             },
             None => last_instr_end_time
         };
-        self.devices_().values_mut().for_each(|dev| {
-            dev.editable_channels_().iter_mut().for_each(|chan|{
-                chan.constant(0., t_reset, None);
-            });
-        });
-        self.edit_stop_time(false)
+        for dev in self.devices_().values_mut() {
+            for chan in dev.editable_channels_().iter_mut() {
+                chan.constant(0.0, reset_time, None)
+            }
+        }
     }
 
     /// Clears the compile cache for all registered devices.
@@ -871,22 +860,19 @@ pub trait BaseExperiment {
     /// # Returns
     ///
     /// Returns the edit stop time for the specified device.
-    fn device_edit_stop_time(&mut self, name: &str) -> f64 {
-        self.device_op(name, |dev| (*dev).edit_stop_time(false))
+    fn device_last_instr_end_time(&mut self, name: &str) -> f64 {
+        self.device_op(name, |dev| (*dev).last_instr_end_time())
     }
 
-    /// Retrieves the maximum `compiled_stop_time` from all registered devices.
-    ///
-    /// This method determines the longest stop time across all devices
-    /// that have been compiled, which may be useful for synchronization purposes.
+    /// Retrieves the `total_run_time` for the specified device.
     ///
     /// # Returns
     ///
-    /// The maximum `compiled_stop_time` across all devices.
+    /// The `total_run_time` for this device.
     ///
-    /// See [`BaseDevice::compiled_stop_time`] for more details on individual device stop times.
-    fn device_compiled_stop_time(&mut self, name: &str) -> f64 {
-        self.device_op(name, |dev| (*dev).compiled_stop_time())
+    /// See [`BaseDevice::total_run_time`] for more details.
+    fn device_total_run_time(&mut self, name: &str) -> f64 {
+        self.device_op(name, |dev| (*dev).total_run_time())
     }
 
     /// Clears the compilation cache for a specific device.
@@ -1335,6 +1321,12 @@ pub trait BaseExperiment {
     fn channel_clear_compile_cache(&mut self, dev_name: &str, chan_name: &str) {
         self.channel_op(dev_name, chan_name, |chan| (*chan).clear_compile_cache());
     }
+
+    fn channel_last_instr_end_time(&mut self, dev_name: &str, chan_name: &str) -> f64 {
+        self.channel_op(dev_name, chan_name, |chan| {
+            (*chan).last_instr_end_time()
+        })
+    }
 }
 
 /// A concrete struct consisting of a collection of devices.
@@ -1406,20 +1398,20 @@ macro_rules! impl_exp_boilerplate {
                 BaseExperiment::add_do_device(self, name, samp_rate);
             }
 
-            pub fn edit_stop_time(&self) -> f64 {
-                BaseExperiment::edit_stop_time(self, false)
+            pub fn last_instr_end_time(&self) -> f64 {
+                BaseExperiment::last_instr_end_time(self)
             }
 
-            pub fn compiled_stop_time(&self) -> f64 {
-                BaseExperiment::compiled_stop_time(self)
+            pub fn total_run_time(&self) -> f64 {
+                BaseExperiment::total_run_time(self)
             }
 
-            pub fn compile(&mut self, extra_tail_tick: bool) -> f64 {
-                BaseExperiment::compile(self, extra_tail_tick)
+            pub fn check_trig_config(&self) {
+                BaseExperiment::check_trig_config(self)
             }
 
-            pub fn compile_with_stoptime(&mut self, stop_time: f64) {
-                BaseExperiment::compile_with_stoptime(self, stop_time);
+            pub fn compile(&mut self, stop_time: Option<f64>) -> f64 {
+                BaseExperiment::compile(self, stop_time)
             }
 
             pub fn is_edited(&self) -> bool {
@@ -1438,8 +1430,8 @@ macro_rules! impl_exp_boilerplate {
                 BaseExperiment::clear_edit_cache(self);
             }
 
-            pub fn add_reset_tick(&mut self, t: Option<f64>) -> f64 {
-                BaseExperiment::add_reset_tick(self, t)
+            pub fn add_reset_tick(&mut self, reset_time: Option<f64>) {
+                BaseExperiment::add_reset_tick(self, reset_time)
             }
 
             pub fn clear_compile_cache(&mut self) {
@@ -1517,12 +1509,12 @@ macro_rules! impl_exp_boilerplate {
                 Ok(numpy::PyArray::from_array(py, &arr).to_object(py))
             }
 
-            pub fn device_edit_stop_time(&mut self, name: &str) -> f64 {
-                BaseExperiment::device_edit_stop_time(self, name)
+            pub fn device_last_instr_end_time(&mut self, name: &str) -> f64 {
+                BaseExperiment::device_last_instr_end_time(self, name)
             }
 
-            pub fn device_compiled_stop_time(&mut self, name: &str) -> f64 {
-                BaseExperiment::device_compiled_stop_time(self, name)
+            pub fn device_total_run_time(&mut self, name: &str) -> f64 {
+                BaseExperiment::device_total_run_time(self, name)
             }
 
             pub fn device_clear_compile_cache(&mut self, name: &str) {
@@ -1609,12 +1601,17 @@ macro_rules! impl_exp_boilerplate {
                 BaseExperiment::linramp(self, dev_name, chan_name, t, duration, start_val, end_val, keep_val);
             }
 
+            // CHANNEL METHODS
             pub fn channel_clear_compile_cache(&mut self, dev_name: &str, chan_name: &str) {
                 BaseExperiment::channel_clear_compile_cache(self, dev_name, chan_name);
             }
 
             pub fn channel_clear_edit_cache(&mut self, dev_name: &str, chan_name: &str) {
                 BaseExperiment::channel_clear_edit_cache(self, dev_name, chan_name);
+            }
+
+            pub fn channel_last_instr_end_time(&mut self, dev_name: &str, chan_name: &str) -> f64 {
+                BaseExperiment::channel_last_instr_end_time(self, dev_name, chan_name)
             }
 
             pub fn channel_calc_signal_nsamps(
