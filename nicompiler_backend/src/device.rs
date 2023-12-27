@@ -248,16 +248,17 @@ pub trait BaseDevice {
     /// Clears the edit-cache fields for all editable channels.
     /// Also see [`BaseChannel::clear_edit_cache`]
     fn clear_edit_cache(&mut self) {
-        self.editable_channels_()
-            .iter_mut()
-            .for_each(|chan| chan.clear_edit_cache());
+        self.clear_compile_cache();
+        for chan in self.channels_().values_mut() {
+            chan.clear_edit_cache()
+        }
     }
     /// Clears the compile-cache fields for all editable channels.
     /// Also see [`BaseChannel::clear_compile_cache`]
     fn clear_compile_cache(&mut self) {
-        self.editable_channels_()
-            .iter_mut()
-            .for_each(|chan| chan.clear_compile_cache());
+        for chan in self.channels_().values_mut() {
+            chan.clear_compile_cache()
+        }
     }
 
     /// Compiles all editable channels to produce a continuous instruction stream.
