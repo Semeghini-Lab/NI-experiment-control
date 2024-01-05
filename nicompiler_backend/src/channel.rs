@@ -279,7 +279,7 @@ pub trait BaseChannel {
     ///
     /// If the channel is not compiled, it returns `0`. Otherwise, it retrieves the last end position
     /// from the compiled cache.
-    fn total_samps(&self) -> usize {  // ToDo: TestMe
+    fn total_samps(&self) -> usize {
         match self.instr_end().last() {
             Some(&end_pos) => end_pos,
             None => 0
@@ -720,5 +720,152 @@ impl Channel {
             instr_end: Vec::new(),
             instr_val: Vec::new(),
         }
+    }
+}
+
+// ==================== Unit tests ====================
+#[cfg(test)]
+mod test {
+    mod add_instr {
+        use crate::instruction::*;
+        use crate::channel::*;
+
+        // #[test]
+        // fn back_to_back() {
+        //     // Edges matching integer clock periods
+        //     // Edges matching half-integer clock periods
+        //     todo!()
+        // }
+
+        // #[test]
+        // fn tick_level_control() {
+        //     // Set samp rate to 1 MSa/s and insert 1us-wide instructions
+        //     todo!()
+        // }
+    }
+
+    mod misc {
+        use crate::instruction::*;
+        use crate::channel::*;
+
+        #[test]
+        fn last_instr_end_pos() {
+            let mut my_chan = Channel::new(TaskType::AO, "ao0", 1e6, 0.0);
+            let mock_func = Instruction::new_const(1.23);
+
+            // No instructions
+            assert_eq!(my_chan.last_instr_end_pos(), 0);
+
+            // Instruction with a specified duration, `eff_end_pos = end_pos`
+            my_chan.add_instr(mock_func.clone(),
+                1.0, Some((1.0, true))
+            );
+            assert_eq!(my_chan.last_instr_end_pos(), 2000000);
+
+            // "Go-something" instruction - unspecified duration, `eff_end_pos = start_pos + 1`
+            my_chan.add_instr(mock_func.clone(),
+                3.0, None
+            );
+            assert_eq!(my_chan.last_instr_end_pos(), 3000001);
+
+            my_chan.clear_edit_cache();
+            assert_eq!(my_chan.last_instr_end_pos(), 0);
+        }
+    }
+
+    mod compile {
+        use crate::instruction::*;
+        use crate::channel::*;
+
+        #[test]
+        fn pad_before_first_instr() {
+            // The gap between 0 and the first instruction start should be padded with the default channel value
+            // If there is no gap, no padding instruction should be inserted.
+
+            let chan_dflt = -10.0;
+            let mut my_chan = Channel::new(TaskType::AO, "ao0", 1e6, chan_dflt);
+
+            // Finite gap
+            my_chan.add_instr(
+                Instruction::new_sine(1.23, Some(1.0), None, Some(0.5)),
+                1.0, Some((1.0, false))
+            );
+            my_chan.compile(my_chan.last_instr_end_pos());
+            assert_eq!(my_chan.instr_end()[0], 1000000);
+            assert!(my_chan.instr_val()[0].instr_type == InstrType::CONST);
+            assert!({
+                let &pad_val = my_chan.instr_val()[0].args.get("value").unwrap();
+                // Check for float equality with caution
+                (pad_val - chan_dflt).abs() < 1e-10
+            });
+
+            // No gap
+            my_chan.clear_edit_cache();
+            my_chan.add_instr(
+                Instruction::new_sine(1.23, Some(1.0), None, Some(0.5)),
+                0.0, Some((1.0, false))
+            );
+            my_chan.compile(my_chan.last_instr_end_pos());
+            assert_eq!(my_chan.instr_end()[0], 1000000);
+            assert!(my_chan.instr_val[0].instr_type == InstrType::SINE);
+        }
+
+        #[test]
+        fn pad_keep_val() {
+            // Padding after instruction with `Some((dur, keep_val))` duration specification.
+            // If keep_val is true, last function value (obtained as `eval_inplace(stop_time)`) should be kept.
+            // Otherwise, channel default value is kept.
+
+            let chan_dflt = -10.0;
+            let mut my_chan = Channel::new(TaskType::AO, "ao0", 1e6, chan_dflt);
+
+            // Convenience variables
+            let freq = 0.12;
+            let pulse_dur = 1.0;
+            let comp_stop_pos = (2.0 * pulse_dur * my_chan.samp_rate()).round() as usize;
+
+            // keep_val = true
+            my_chan.add_instr(
+                Instruction::new_sine(freq, Some(1.0), None, None),
+                0.0, Some((pulse_dur, true))
+            );
+            my_chan.compile(comp_stop_pos);
+            let pad_func = my_chan.instr_val()[1].clone();
+            assert!(pad_func.instr_type == InstrType::CONST);
+            assert!({
+                let &actual_pad_val = pad_func.args.get("value").unwrap();
+                let expected_pad_val = my_chan.instr_val[0].eval_point(pulse_dur);
+                (actual_pad_val - expected_pad_val).abs() < 1e-10
+            });
+
+            // keep_val = false
+            my_chan.clear_edit_cache();
+            my_chan.add_instr(
+                Instruction::new_sine(freq, Some(2.0), None, None),
+                0.0, Some((pulse_dur, false))
+            );
+            my_chan.compile(comp_stop_pos);
+            let pad_func = my_chan.instr_val()[1].clone();
+            assert!(pad_func.instr_type == InstrType::CONST);
+            assert!({
+                let &actual_pad_val = pad_func.args.get("value").unwrap();
+                (actual_pad_val - chan_dflt).abs() < 1e-10
+            });
+        }
+
+        // #[test]
+        // fn pad_go_something() {
+        //     todo!()
+        // }
+
+        // #[test]
+        // fn no_pad_back_to_back() {
+        //     todo!()
+        // }
+
+        // #[test]
+        // fn no_pad_back_to_end() {
+        //     todo!()
+        // }
     }
 }

@@ -286,7 +286,7 @@ pub trait BaseDevice {
         }
         self.channels()
             .values()
-            .filter(|chan| chan.editable())  // ToDo: remove this filter when cleaning up line->port merging
+            .filter(|chan| chan.editable())  // ToDo when splitting AO/DO types: remove `editable()` filter
             .filter(|chan| !chan.instr_list().is_empty())
             .any(|chan| {
                 let last_instr = chan.instr_list().last().unwrap();
@@ -420,7 +420,7 @@ pub trait BaseDevice {
     }
 
     /// Returns the total number of samples the card will generate according to the current compile cache.
-    fn total_samps(&self) -> usize {  // ToDo: TestMe
+    fn total_samps(&self) -> usize {
         // The assumption is that all the channels of any given device
         // must have precisely the same number of samples to generate
         // since all the channels are assumed to be driven by the same sample clock of the device.
@@ -464,14 +464,14 @@ pub trait BaseDevice {
     ///
     /// # Returns
     /// A `f64` representing the maximum stop time (in seconds) across all compiled channels.
-    fn total_run_time(&self) -> f64 {  // ToDo: TestMe
+    fn total_run_time(&self) -> f64 {
         self.total_samps() as f64 * self.clock_period()
     }
 
-    fn last_instr_end_pos(&self) -> usize {  // ToDo: TestMe
+    fn last_instr_end_pos(&self) -> usize {
         self.channels()
             .values()
-            .filter(|chan| chan.editable())  // ToDo: remove this filter when cleaning up line->port merging
+            .filter(|chan| chan.editable())  // ToDo when splitting AO/DO types: remove `editable()` filter
             .map(|chan| chan.last_instr_end_pos())
             .fold(0, usize::max)
     }
@@ -899,5 +899,104 @@ impl BaseDevice for Device {
 
     fn ref_clk_rate_(&mut self) -> &mut Option<f64> {
         &mut self.ref_clk_rate
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::device::*;
+    use crate::instruction::*;
+
+    #[test]
+    fn last_instr_end_pos() {
+        let mut dev = Device::new("Dev1", TaskType::AO, 1e3);
+        dev.add_channel("ao0", 0.0);
+        dev.add_channel("ao1", 0.0);
+        let mock_func = Instruction::new_const(0.0);
+
+        // No instructions
+        assert_eq!(dev.last_instr_end_pos(), 0);
+
+        // Instruction t=0..1 on ao0
+        dev.chan_("ao0").add_instr(mock_func.clone(),
+            0.0, Some((1.0, false))
+        );
+        assert_eq!(dev.last_instr_end_pos(), 1000);
+
+        // Instruction t=1..2 on ao1
+        dev.chan_("ao1").add_instr(mock_func.clone(),
+            1.0, Some((1.0, false))
+        );
+        assert_eq!(dev.last_instr_end_pos(), 2000);
+
+        // "Go-something" instruction on ao1 at t=2
+        dev.chan_("ao1").add_instr(mock_func.clone(),
+            2.0, None
+        );
+        assert_eq!(dev.last_instr_end_pos(), 2001);
+
+        dev.clear_edit_cache();
+        assert_eq!(dev.last_instr_end_pos(), 0);
+    }
+
+    #[test]
+    fn check_end_clipped() {
+        let mut dev = Device::new("Dev1", TaskType::AO, 1.0);
+        dev.add_channel("ao0", 0.0);
+        let mock_func = Instruction::new_const(0.0);
+
+        // (1) No instructions
+        assert_eq!(dev.check_end_clipped(0), false);
+
+        // (2) Finite duration instruction t = 0..1s:
+        //      start_pos = 0
+        //      end_pos = 1
+        dev.chan_("ao0").add_instr(mock_func.clone(),
+            0.0, Some((1.0, false))
+        );
+        assert_eq!(dev.chan("ao0").last_instr_end_pos(), 1);
+        assert_eq!(dev.check_end_clipped(2), false);
+        assert_eq!(dev.check_end_clipped(1), true);
+        dev.clear_edit_cache();
+
+        // (3) "Go-something" instruction at t = 0s:
+        //      start_pos = 0
+        //      eff_end_pos = 1
+        dev.chan_("ao0").add_instr(mock_func.clone(),
+            0.0, None
+        );
+        assert_eq!(dev.chan("ao0").last_instr_end_pos(), 1);
+        //  A "go-something" instruction is not meant to have the "closing" edge
+        //  so setting `stop_tick` to precisely `eff_end_pos` is not considered clipping
+        assert_eq!(dev.check_end_clipped(1), false);
+    }
+
+    #[test]
+    fn compile() {
+        let mut dev = Device::new("Dev1", TaskType::AO, 1e3);
+        dev.add_channel("ao0", 0.0);
+        dev.add_channel("ao1", 0.0);
+        let mock_func = Instruction::new_const(0.0);
+
+        // Not compiled yet
+        assert_eq!(dev.total_samps(), 0);
+
+        // Add some instructions on both channels
+        dev.chan_("ao0").add_instr(mock_func.clone(),
+            0.0, Some((1.0, false))
+        );
+        dev.chan_("ao1").add_instr(mock_func.clone(),
+            1.0, Some((1.0, false))
+        );
+        assert_eq!(dev.last_instr_end_pos(), 2000);
+
+        // Compile without clipping of the "closing edge" - no extra sample should be added
+        dev.compile(3.0);
+        assert_eq!(dev.total_samps(), 3000);
+
+        // Compile with stop_pos matching the end of a finite-duration instruction on "ao1" -
+        //  an additional sample should be added to form the "closing edge"
+        dev.compile(2.0);
+        assert_eq!(dev.total_samps(), 2001);
     }
 }

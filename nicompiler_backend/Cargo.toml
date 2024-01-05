@@ -14,6 +14,10 @@ crate-type = ["cdylib", "lib"] # Specify the "lib" to make it usable for other r
 name = "nicompiler_backend_bin"
 path = "src/main.rs"
 
+[[bin]]
+name = "unittest"
+path = "src/unittest.rs"
+
 [dependencies]
 maplit = "1.0.2"
 ndarray = "0.15.6"
