@@ -264,19 +264,19 @@ pub trait BaseDevice {
             .iter()
             .all(|channel| channel.is_fresh_compiled())
     }
-    /// Clears the edit-cache fields for all editable channels.
+    /// Clears the edit-cache fields for all channels.
     /// Also see [`BaseChannel::clear_edit_cache`]
     fn clear_edit_cache(&mut self) {
-        self.editable_channels_()
-            .iter_mut()
-            .for_each(|chan| chan.clear_edit_cache());
+        for chan in self.channels_().values_mut() {
+            chan.clear_edit_cache()
+        }
     }
-    /// Clears the compile-cache fields for all editable channels.
+    /// Clears the compile-cache fields for all channels.
     /// Also see [`BaseChannel::clear_compile_cache`]
     fn clear_compile_cache(&mut self) {
-        self.editable_channels_()
-            .iter_mut()
-            .for_each(|chan| chan.clear_compile_cache());
+        for chan in self.channels_().values_mut() {
+            chan.clear_compile_cache()
+        }
     }
 
     fn check_end_clipped(&self, stop_tick: usize) -> bool {  // ToDo: TestMe
