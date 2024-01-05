@@ -102,6 +102,21 @@ pub trait BaseDevice {
     fn export_ref_clk_(&mut self) -> &mut Option<bool>;
     fn ref_clk_rate_(&mut self) -> &mut Option<f64>;
 
+    /// Shortcut to borrow channel instance by name
+    fn chan(&self, name: &str) -> &Channel {
+        if !self.channels().contains_key(name) {
+            panic!("Device {} does not have channel {}", self.name(), name)
+        }
+        self.channels().get(name).unwrap()
+    }
+    /// Shortcut to mutably borrow channel instance by name
+    fn chan_(&mut self, name: &str) -> &mut Channel {
+        if !self.channels().contains_key(name) {
+            panic!("Device {} does not have channel {}", self.name(), name)
+        }
+        self.channels_().get_mut(name).unwrap()
+    }
+
     /// Returns sample clock period calculated as `1.0 / self.samp_rate()`
     fn clock_period(&self) -> f64 {
         1.0 / self.samp_rate()
