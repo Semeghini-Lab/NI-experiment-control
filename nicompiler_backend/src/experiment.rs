@@ -343,12 +343,16 @@ pub trait BaseExperiment {
     /// ```
     fn compile(&mut self, stop_time: Option<f64>) -> f64 {  // ToDo: TestMe
         // Sanity check: inter-device trigger configuration is valid
-        self.check_trig_config();
+        self.check_trig_config();  // ToDo: move this to hardware-specific streaming sub-crate
 
         let stop_time = match stop_time {
             Some(stop_time) => {
                 if stop_time < self.last_instr_end_time() {
-                    panic!("Attempted to compile with stop_time = {stop_time} [s] while the last instruction end time is {} [s]", self.last_instr_end_time())
+                    panic!(
+                        "Attempted to compile with stop_time={stop_time} [s] while the last instruction end time is {} [s]\n\
+                        If you intended to provide stop_time=last_instr_end_time, use stop_time=None",
+                        self.last_instr_end_time()
+                    )
                 };
                 stop_time
             },

@@ -339,8 +339,10 @@ pub trait BaseDevice {
     fn compile(&mut self, stop_time: f64) -> f64 {  // ToDo: TestMe
         let stop_tick = (stop_time * self.samp_rate()).round() as usize;
         if stop_tick < self.last_instr_end_pos() {
-            panic!("Given stop_time {stop_time} was rounded to {stop_tick} clock cycles which is below the last instruction end_pos {}",
-                   self.last_instr_end_pos())
+            panic!(
+                "Given stop_time {stop_time} was rounded to {stop_tick} clock cycles which is below the last instruction end_pos {}",
+                self.last_instr_end_pos()
+            )
         }
 
         // If on any of the channels, the last instruction has `end_spec = Some(end_pos, ...)`
