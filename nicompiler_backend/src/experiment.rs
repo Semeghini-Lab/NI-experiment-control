@@ -255,6 +255,21 @@ pub trait BaseExperiment {
         self.add_device_base(Device::new(name, TaskType::DO, samp_rate));
     }
 
+    /// Shortcut to borrow device instance by name
+    fn dev(&self, name: &str) -> &Device {
+        if !self.devices().contains_key(name) {
+            panic!("There is no device {name} registered")
+        }
+        self.devices().get(name).unwrap()
+    }
+    /// Shortcut to mutably borrow device instance by name
+    fn dev_(&mut self, name: &str) -> &mut Device {
+        if !self.devices().contains_key(name) {
+            panic!("There is no device {name} registered")
+        }
+        self.devices_().get_mut(name).unwrap()
+    }
+
     /// Retrieves the latest `edit_stop_time` from all registered devices.
     /// See [`BaseDevice::edit_stop_time`] for more information.
     ///
