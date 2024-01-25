@@ -281,6 +281,9 @@ pub trait BaseDevice {
     /// Clears the edit-cache fields for all channels.
     /// Also see [`BaseChannel::clear_edit_cache`]
     fn clear_edit_cache(&mut self) {
+        // Remove all made-up "port" channels
+        self.channels_().retain(|_name, chan| chan.editable());
+
         for chan in self.channels_().values_mut() {
             chan.clear_edit_cache()
         }
@@ -288,6 +291,9 @@ pub trait BaseDevice {
     /// Clears the compile-cache fields for all channels.
     /// Also see [`BaseChannel::clear_compile_cache`]
     fn clear_compile_cache(&mut self) {
+        // Remove all made-up "port" channels
+        self.channels_().retain(|_name, chan| chan.editable());
+
         for chan in self.channels_().values_mut() {
             chan.clear_compile_cache()
         }
@@ -362,6 +368,11 @@ pub trait BaseDevice {
 
         // For DO channels: merge line channels into port channels
         if self.task_type() == TaskType::DO {
+            // Remove all made-up "port" channels left from the previous compile run
+            //  (although all port channels with new instructions coming would be replaced anyways during `self.channels_().insert()`,
+            //  this step cleans out any old port channels for which there are no instructions this time)
+            self.channels_().retain(|_name, chan| chan.editable());
+
             for match_port in self.unique_port_numbers() {
                 // Collect a sorted list of possible intervals
                 let mut instr_end_set = BTreeSet::new();
@@ -446,7 +457,7 @@ pub trait BaseDevice {
         let samps_per_chan: IndexMap<String, usize> =
             self.channels()
                 .into_iter()
-                .filter(|(_chan_name, chan)| chan.is_compiled())
+                .filter(|(_chan_name, chan)| !chan.instr_end().is_empty())
                 .map(|(chan_name, chan)| (chan_name.to_string(), chan.total_samps()))
                 .collect();
 

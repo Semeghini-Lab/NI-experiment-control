@@ -180,8 +180,9 @@ pub trait BaseChannel {
     /// channel.compile(3e7 as usize); // Compile up to 3 seconds (given a sampling rate of 10^7)
     /// ```
     fn compile(&mut self, stop_pos: usize) {
-        // (1) Exclude trivial cases; Sanity checks
-        if self.instr_list().len() == 0 {
+        self.clear_compile_cache();
+
+        if self.instr_list().is_empty() {
             return;
         }
         if stop_pos < self.last_instr_end_pos() {
@@ -190,12 +191,8 @@ pub trait BaseChannel {
                    stop_pos,
                    self.last_instr_end_pos());
         }
-        // (ignore double compiles)
-        if self.is_fresh_compiled() && stop_pos == self.total_samps() {
-            return;
-        }
 
-        // (2) Calculate exhaustive instruction coverage from 0 to stop_pos (instructions + padding)
+        // (1) Calculate exhaustive instruction coverage from 0 to stop_pos (instructions + padding)
         let mut instr_val: Vec<Instruction> = Vec::new();
         let mut instr_end: Vec<usize> = Vec::new();
 
@@ -240,10 +237,10 @@ pub trait BaseChannel {
             }
         };
 
-        // (3) Transfer prepared instr_val and instr_end into compile cache vectors
+        // (2) Transfer prepared instr_val and instr_end into compile cache vectors
         //     (merge adjacent instructions, if possible)
         assert_eq!(instr_val.len(), instr_end.len());
-        self.clear_compile_cache();
+        // No need to clear compile cache - it has already been cleaned in the very beginning
         for i in 0..instr_end.len() {
             if self.instr_val().is_empty() || instr_val[i] != *self.instr_val().last().unwrap() {
                 self.instr_val_().push(instr_val[i].clone());
@@ -271,7 +268,7 @@ pub trait BaseChannel {
     /// Specifically, the method clears the `instr_end` and `instr_val` fields.
     /// If the edit cache is empty, it also sets the `fresh_compiled` field to `true`.
     fn clear_compile_cache(&mut self) {
-        *self.fresh_compiled_() = self.instr_list().len() == 0;
+        *self.fresh_compiled_() = self.instr_list().is_empty();
         self.instr_end_().clear();
         self.instr_val_().clear();
     }
