@@ -243,6 +243,20 @@ pub trait BaseDevice {
         self.channels_().insert(name.to_string(), new_channel);
     }
 
+    fn add_reset_instr(&mut self, reset_time: f64) {
+        let reset_pos = (reset_time * self.samp_rate()).round() as usize;
+        if reset_pos < self.last_instr_end_pos() {
+            panic!(
+                "Given reset_time {reset_time} was rounded to {reset_pos} clock cycles \
+                which is below the last instruction end_pos {}",
+                self.last_instr_end_pos()
+            )
+        }
+        for chan in self.editable_channels_().iter_mut() {  // ToDo when splitting AO/DO types: remove `editable` filter
+            chan.add_reset_instr(reset_pos)
+        }
+    }
+
     /// A device is compiled if any of its editable channels are compiled.
     /// Also see [`BaseChannel::is_compiled`]
     fn is_compiled(&self) -> bool {

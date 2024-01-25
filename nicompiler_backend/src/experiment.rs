@@ -473,7 +473,7 @@ pub trait BaseExperiment {
     /// assert!(sig[[0, 9]] == 1. && sig[[0, 10]] == 0.); // go_high takes effect on the tick corresponding to specified time. 
     /// assert!(sig[[1, 9]] == 1. && sig[[1, 10]] == 1.); 
     /// 
-    /// let reset_tick_time = exp.add_reset_tick();
+    /// let reset_tick_time = exp.add_reset_instr();
     /// // Reset tick happens at the earliest unspecified interval across all channels
     /// assert!(reset_tick_time == 1.0); 
     /// exp.compile_with_stoptime(5.);
@@ -482,21 +482,23 @@ pub trait BaseExperiment {
     /// assert!(sig[[1, 9]] == 1. && sig[[1, 10]] == 0.); // Also zeros channel 1 at t=1
     /// // println!("{:?}, reset_tick_time={}", sig, reset_tick_time);
     /// ```
-    fn add_reset_tick(&mut self, reset_time: Option<f64>) {  // ToDo: TestMe
+    fn add_reset_instr(&mut self, reset_time: Option<f64>) {  // ToDo: TestMe
         let last_instr_end_time = self.last_instr_end_time();
         let reset_time = match reset_time {
             Some(reset_time) => {
-                assert!(last_instr_end_time <= reset_time,
-                        "Requested to insert the all-channel reset at t = {reset_time} [s] \
-                         but some channels have instructions spanning until {last_instr_end_time} [s]");
+                if reset_time < last_instr_end_time {
+                    panic!(
+                        "Requested to insert the all-channel reset instruction at t = {reset_time} [s] \
+                        but some channels have instructions spanning until {last_instr_end_time} [s].\n\
+                        If you intended to provide `reset_time=last_instr_end_time`, use `reset_time=None`"
+                    )
+                }
                 reset_time
             },
             None => last_instr_end_time
         };
         for dev in self.devices_().values_mut() {
-            for chan in dev.editable_channels_().iter_mut() {
-                chan.constant(0.0, reset_time, None)
-            }
+            dev.add_reset_instr(reset_time)
         }
     }
 
@@ -1445,8 +1447,8 @@ macro_rules! impl_exp_boilerplate {
                 BaseExperiment::clear_edit_cache(self);
             }
 
-            pub fn add_reset_tick(&mut self, reset_time: Option<f64>) {
-                BaseExperiment::add_reset_tick(self, reset_time)
+            pub fn add_reset_instr(&mut self, reset_time: Option<f64>) {
+                BaseExperiment::add_reset_instr(self, reset_time)
             }
 
             pub fn clear_compile_cache(&mut self) {

@@ -103,6 +103,7 @@ pub trait BaseChannel {
     fn is_fresh_compiled(&self) -> bool;
     /// The `default_value` trait specifies the signal value for not explicitly defined intervals.
     fn default_value(&self) -> f64;
+    fn reset_value(&self) -> f64;
     /// Provides a reference to the edit cache of instrbook list.
     fn instr_list(&self) -> &BTreeSet<InstrBook>;
     /// Returns the ending points of compiled instructions.
@@ -454,10 +455,24 @@ pub trait BaseChannel {
         self.instr_list_().insert(new_instr_book);
         *self.fresh_compiled_() = false;
     }
-
     /// Utility function to add a constant instruction to the channel
     fn constant(&mut self, value: f64, t: f64, dur_spec: Option<(f64, bool)>) {
         self.add_instr(Instruction::new_const(value), t, dur_spec);
+    }
+    fn add_reset_instr(&mut self, reset_pos: usize) {
+        if reset_pos < self.last_instr_end_pos() {
+            panic!(
+                "Requested to insert reset instruction at reset_pos = {reset_pos} \
+                which is below the last_instr_end_pos = {}",
+                self.last_instr_end_pos()
+            )
+        }
+        let reset_instr = InstrBook::new(
+            reset_pos,
+            None,
+            Instruction::new_const(self.reset_value())
+        );
+        self.instr_list_().insert(reset_instr);
     }
 
     /// Utility function for signal sampling.
@@ -659,6 +674,9 @@ impl BaseChannel for Channel {
     }
     fn default_value(&self) -> f64 {
         self.default_value
+    }
+    fn reset_value(&self) -> f64 {
+        0.0  // ToDo when splitting AO/DO types
     }
     fn instr_list(&self) -> &BTreeSet<InstrBook> {
         &self.instr_list
