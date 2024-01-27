@@ -299,7 +299,7 @@ pub trait BaseDevice {
         }
     }
 
-    fn check_end_clipped(&self, stop_tick: usize) -> bool {  // ToDo: TestMe
+    fn check_end_clipped(&self, stop_tick: usize) -> bool {
         if stop_tick < self.last_instr_end_pos() {
             panic!("Given stop_tick {stop_tick} is below the last instruction end_pos {}",
                    self.last_instr_end_pos())
@@ -336,7 +336,7 @@ pub trait BaseDevice {
     ///
     /// # Arguments
     /// - `stop_time`: The stop time used to compile the channels.
-    fn compile(&mut self, stop_time: f64) -> f64 {  // ToDo: TestMe
+    fn compile(&mut self, stop_time: f64) -> f64 {
         let stop_tick = (stop_time * self.samp_rate()).round() as usize;
         if stop_tick < self.last_instr_end_pos() {
             panic!(

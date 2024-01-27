@@ -287,7 +287,7 @@ pub trait BaseExperiment {
     /// exp.high("PXI1Slot6", "port0/line4", 0., 6.); // stop time at 6
     /// assert_eq!(exp.edit_stop_time(), 6.);
     /// ```
-    fn last_instr_end_time(&self) -> f64 {  // ToDo: TestMe
+    fn last_instr_end_time(&self) -> f64 {
         self.devices()
             .values()
             .map(|dev| dev.last_instr_end_time())
@@ -298,7 +298,7 @@ pub trait BaseExperiment {
     /// See [`BaseDevice::total_run_time`] for more information.
     ///
     /// The maximum `total_run_time` across all devices.
-    fn total_run_time(&self) -> f64 {  // ToDo: TestMe
+    fn total_run_time(&self) -> f64 {
         self.devices()
             .values()
             .map(|dev| dev.total_run_time())
@@ -341,7 +341,7 @@ pub trait BaseExperiment {
     /// exp.compile_with_stoptime(5.); // Experiment signal will stop at t=5 now
     /// assert_eq!(exp.compiled_stop_time(), 5.);
     /// ```
-    fn compile(&mut self, stop_time: Option<f64>) -> f64 {  // ToDo: TestMe
+    fn compile(&mut self, stop_time: Option<f64>) -> f64 {
         // Sanity check: inter-device trigger configuration is valid
         self.check_trig_config();  // ToDo: move this to hardware-specific streaming sub-crate
 
@@ -486,7 +486,7 @@ pub trait BaseExperiment {
     /// assert!(sig[[1, 9]] == 1. && sig[[1, 10]] == 0.); // Also zeros channel 1 at t=1
     /// // println!("{:?}, reset_tick_time={}", sig, reset_tick_time);
     /// ```
-    fn add_reset_instr(&mut self, reset_time: Option<f64>) {  // ToDo: TestMe
+    fn add_reset_instr(&mut self, reset_time: Option<f64>) {
         let last_instr_end_time = self.last_instr_end_time();
         let reset_time = match reset_time {
             Some(reset_time) => {
@@ -1678,3 +1678,218 @@ impl Experiment {
 }
 
 impl_exp_boilerplate!(Experiment);
+
+#[cfg(test)]
+/// One of the main parts of the `BaseExperiment` logic is to handle a collection of devices
+/// with different and incommensurate sample clock rates.
+/// Their clock grids generally don't align, so timing has to be in `f64` at the `BaseExperiment` level
+/// while each device, when give a float time, should round it to its' own `usize` clock grid.
+///
+/// Clock grid mismatch mostly affects the operations at the global sequence end - compiling
+/// with some (or None) stop time, adding reset instruction, and calculating total run time.
+///
+/// In particular:
+/// * Devices cannot always physically stop at the same time. Even if requested to compile
+///   to the same total duration, actual run time of each device may be different;
+/// * The `usize clock grid` -> `common f64 time` (typically max across all devices) -> back to `usize clock grid`
+///   conversion process can potentially lead to "last sample clipping" errors due to unsafe rounding.
+///
+/// -----------------------------------------------
+/// For all the tests below we pick:
+///     Dev1: samp_rate = 1000 Sa/s
+///     Dev2: samp_rate = 123 Sa/s
+/// Their clock grids do not match anywhere except for integer multiple of 1s.
+///
+/// We typically add pulses to both devices with nominally identical edge times of 0.1s, 0.2s, ..., 0.9s, 1.0s
+///
+/// * For Dev1, these times match clock grid and the actual pulses will have the expected edges:
+///     0.100  0.200  0.300  0.400  0.500  0.600  0.700  0.800  0.900  1.000
+///
+/// * For Dev2, these times don't match clock grid and rounding will make edges "jump" around originally specified values:
+///     0.098  0.203  0.301  0.398  0.496  0.602  0.699  0.797  0.902  1.000
+///
+/// As a result, the `last_instr_end_time` for Dev2 is sometimes slightly above, slightly below,
+/// or precisely equal to that for Dev1, giving the full range of how finial edges could compare
+/// across different devices.
+///
+/// We can also run from 0s to 10s to repeat the 1s mismatch period 10 times.
+mod test {
+    mod compile_stop_time {
+        use crate::experiment::*;
+        use crate::instruction::*;
+
+        #[test]
+        /// Test to ensure there are no panics with compiling with `stop_time = None`
+        /// (flash with the `last_instr_end_time`) for the case of incommensurate clock grids.
+        ///
+        /// **Successful test**: no device should panic at `dev.compile(exp.last_instr_end_time())`
+        /// due to its' last instruction being clipped.
+        fn incommensurate_clocks() {
+            let mut exp = Experiment::new();
+            exp.add_do_device("Dev1", 1000.0);
+            exp.add_do_device("Dev2", 123.0);
+            exp.dev_("Dev1").add_channel("port0/line0", 0.0);
+            exp.dev_("Dev2").add_channel("port0/line0", 0.0);
+
+            let mock_func = Instruction::new_const(1.0);  // actual function doesn't matter
+
+            // Array of nominal stop times:
+            //  from 0s to 1s in steps of 100ms to go through the full mismatch period
+            //  actually go from 0s to 10s to repeat this 10 times
+            let interv = 100e-3;
+            let dur = 50e-3;
+            let stop_time_arr: Vec<f64> = (1..101).into_iter().map(|i| interv * i as f64).collect();
+
+            for stop_time in stop_time_arr {
+                for dev in exp.devices_().values_mut() {
+                    for chan in dev.editable_channels_() {
+                        chan.add_instr(
+                            mock_func.clone(),
+                            stop_time - dur, Some((dur, false))
+                        )
+                    }
+                }
+                // The actual test - this call should not panic due to any last instructions being clipped:
+                exp.compile(None);
+
+                // Additional (not really necessary) check to ensure no instructions were clipped
+                //  (hard to check for the exact individual total_run_times
+                //  because it would require keeping track of the rounding jumps at instruction adding
+                //  and the extra tail tick when compiling):
+                let dev1 = exp.dev("Dev1");
+                assert!(dev1.last_instr_end_time() - 1e-10 < dev1.total_run_time());
+                let dev2 = exp.dev("Dev2");
+                assert!(dev2.last_instr_end_time() - 1e-10 < dev2.total_run_time());
+
+                /*
+                println!("\n=============================================");
+                let dev1 = exp.dev("Dev1");
+                println!("dev1.last_instr_end_time() = {}", dev1.last_instr_end_time());
+                println!("dev1.total_samps() = {}", dev1.total_samps());
+                println!("dev1.total_run_time() = {}", dev1.total_run_time());
+
+                println!("\n");
+                let dev2 = exp.dev("Dev2");
+                println!("dev2.last_instr_end_time() = {}", dev2.last_instr_end_time());
+                println!("dev2.total_samps() = {}", dev2.total_samps());
+                println!("dev2.total_run_time() = {}", dev2.total_run_time());
+                */
+            }
+        }
+
+        #[test]
+        /// When the requested compile stop time matches an integer tick across all clock grids
+        /// and is far away from any closing edges of last pulses (so no extra sample is added anywhere),
+        /// total run time must be precisely equal to the requested stop time.
+        ///
+        /// We pick
+        ///     Dev1: samp_rate = 1000 Sa/s
+        ///     Dev2: samp_rate = 123 Sa/s
+        /// Their clock ticks generally do not match, but align for integer multiple of 1s.
+        ///
+        /// So compiling with `stop_time = Some(1.0)` far away from any closing pulse edges
+        /// must give `total_run_time = 1.0`
+        fn predictable_total_run_time() {
+            let mut exp = Experiment::new();
+            exp.add_do_device("Dev1", 1000.0);
+            exp.add_do_device("Dev2", 123.0);
+            exp.dev_("Dev1").add_channel("port0/line0", 0.0);
+            exp.dev_("Dev2").add_channel("port0/line0", 0.0);
+
+            let mock_func = Instruction::new_const(0.0);  // actual function doesn't matter
+
+            exp.dev_("Dev1").chan_("port0/line0").add_instr(
+                mock_func.clone(),
+                0.0, Some((0.5, false))
+            );
+            exp.dev_("Dev2").chan_("port0/line0").add_instr(
+                mock_func.clone(),
+                0.0, Some((0.5, false))
+            );
+
+            exp.compile(Some(1.0));
+            assert!(
+                f64::abs(exp.total_run_time() - 1.0) < 1e-10
+            );
+        }
+    }
+
+    mod add_reset_instr {
+        use crate::experiment::*;
+        use crate::instruction::*;
+
+        #[test]
+        /// Main goal - no device should panic due to reset instruction colliding with the end
+        /// of its latest instruction.
+        fn incommensurate_clocks() {
+            let mut exp = Experiment::new();
+            exp.add_do_device("Dev1", 1000.0);
+            exp.add_do_device("Dev2", 123.0);
+            exp.dev_("Dev1").add_channel("port0/line0", 0.0);
+            exp.dev_("Dev2").add_channel("port0/line0", 0.0);
+
+            let mock_func = Instruction::new_const(0.0);
+
+            // Prepare the range of nominal "last_instr_end_time":
+            //      0.1, 0.2, ..., 0.9, 1.0, 1.1, ..., 9.9, 10.0
+            let interv = 100e-3;
+            let dur = 50e-3;
+            let stop_time_arr: Vec<f64> = (1..101).into_iter().map(|i| interv * i as f64).collect();
+            // println!("stop_time_arr = {stop_time_arr:?}");
+
+            for stop_time in stop_time_arr {
+                exp.clear_edit_cache();
+                for dev in exp.devices_().values_mut() {
+                    for chan in dev.editable_channels_() {  // ToDo when splitting AO/DO types: remove `editable` filter
+                        chan.add_instr(
+                            mock_func.clone(),
+                            stop_time - dur, Some((dur, true))
+                        )
+                    }
+                }
+                // Neither of the following calls should panic:
+                exp.add_reset_instr(None);
+                exp.compile(None);
+            }
+        }
+
+        #[test]
+        /// When requested reset time matches an integer clock tick across all devices,
+        /// reset should happen precisely at this time
+        fn predictable_reset_time() {
+            let mut exp = Experiment::new();
+            exp.add_do_device("Dev1", 1000.0);
+            exp.add_do_device("Dev2", 123.0);
+            exp.dev_("Dev1").add_channel("port0/line0", 0.0);
+            exp.dev_("Dev2").add_channel("port0/line0", 0.0);
+
+            let mock_func = Instruction::new_const(1.0);
+            for dev in exp.devices_().values_mut() {
+                for chan in dev.editable_channels_() {
+                    chan.add_instr(mock_func.clone(), 0.0, None)
+                }
+            }
+            // In this test, clock grids align at `t = 1.0s`
+            let reset_time = 1.0;
+            exp.add_reset_instr(Some(reset_time));
+            exp.compile(None);
+
+            // Confirm that all channels actually give their reset values at `t = match_time`
+            for dev in exp.devices().values() {
+                for chan in dev.editable_channels() {
+                    // Reset is the last instruction, so its' start position is the end of the previous instruction:
+                    let actual_reset_pos = chan.instr_end()[chan.instr_end().len() - 2];
+                    let expected_reset_pos = (reset_time * chan.samp_rate()).round() as usize;
+                    assert_eq!(actual_reset_pos, expected_reset_pos);
+
+                    // Additionally, confirm the reset function indeed gives the reset value
+                    // (this only probes the function of the reset instruction and does not probe reset time)
+                    let reset_func = chan.instr_val().last().unwrap();
+                    assert!(f64::abs(
+                        reset_func.eval_point(reset_time) - chan.reset_value()  // ToDo: this could be written as `chan.calc_signal_nsamps(1.0, 1.0, 1)[0]`, but currently `fill_signal_nsamps()` requires `start_pos < end_pos`
+                    ) < 1e-10)
+                }
+            }
+        }
+    }
+}
