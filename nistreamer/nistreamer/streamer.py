@@ -99,7 +99,7 @@ class NIStreamer:
 
     def stream_exp(
             self,
-            stream_buftime: Optional[float] = 50,
+            stream_buftime: Optional[float] = 150,
             nreps: Optional[int] = 1
     ):
         self._dll.stream_exp(
