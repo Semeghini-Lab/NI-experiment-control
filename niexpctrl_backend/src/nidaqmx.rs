@@ -90,6 +90,7 @@ pub const DAQMX_VAL_CHANPERLINE: CInt32 = 0;
 pub const DAQMX_VAL_CHANFORALLLINES: CInt32 = 1;
 pub const DAQMX_VAL_STARTTRIGGER: CInt32 = 12491;
 pub const DAQMX_VAL_10MHZREFCLOCK: CInt32 = 12536;
+pub const DAQMX_VAL_DO_NOT_INVERT_POLARITY: CInt32 = 0;
 
 #[link(name = "NIDAQmx")]
 extern "C" {
@@ -160,6 +161,7 @@ extern "C" {
         reserved: *mut CBool32,
     ) -> CInt32;
 
+    fn DAQmxConnectTerms(sourceTerminal: CConstStr, destinationTerminal: CConstStr, signalModifiers: CInt32) -> CInt32;
     fn DAQmxExportSignal(handle: TaskHandle, signalID: CInt32, outputTerminal: CConstStr)
         -> CInt32;
     fn DAQmxSetRefClkSrc(handle: TaskHandle, src: CConstStr) -> CInt32;
@@ -263,6 +265,11 @@ pub fn daqmx_call<F: FnOnce() -> CInt32>(func: F) {
 pub fn reset_ni_device(name: &str) {
     let name_cstr = std::ffi::CString::new(name).expect("Failed to convert device name to CString");
     daqmx_call(|| unsafe { DAQmxResetDevice(name_cstr.as_ptr()) });
+}
+pub fn connect_terms(src: &str, dest: &str) {
+    let src = std::ffi::CString::new(src).expect("Failed to convert src to CString");
+    let dest = std::ffi::CString::new(dest).expect("Failed to convert dest to CString");
+    daqmx_call(|| unsafe { DAQmxConnectTerms(src.as_ptr(), dest.as_ptr(), DAQMX_VAL_DO_NOT_INVERT_POLARITY) });
 }
 
 /// Represents a National Instruments (NI) DAQmx task.

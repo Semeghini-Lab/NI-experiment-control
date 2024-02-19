@@ -244,7 +244,7 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         if let Some(ref_clk_line) = self.ref_clk_line() {
             match self.export_ref_clk().unwrap() {
                 false => task.cfg_ref_clk(ref_clk_line, self.ref_clk_rate().unwrap()),
-                true => task.export_signal(DAQMX_VAL_10MHZREFCLOCK, ref_clk_line),
+                true => {},  // task.export_signal(DAQMX_VAL_10MHZREFCLOCK, ref_clk_line)
             };
         }
     }
