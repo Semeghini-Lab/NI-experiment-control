@@ -116,5 +116,3 @@ class NIStreamer:
         for card_group in [self._ao_card_dict.values(), self._do_card_dict.values()]:
             for card in card_group:
                 card.reset()
-
-        # self._dll.reset_devices()  # ToDo: remove

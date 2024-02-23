@@ -25,8 +25,17 @@ def connect_terms(src: str, dest: str):
     """
     return raw_connect_terms(src=src, dest=dest)
 
+
 def disconnect_terms(src: str, dest: str):
-    return raw_connect_terms(src=src, dest=dest)
+    return raw_disconnect_terms(src=src, dest=dest)
+
+
+def share_ref_clk(dev: str, line: str):
+    connect_terms(
+        src=f'/{dev}/10MHzRefClock',
+        dest=f'/{dev}/{line}'
+    )
+
 
 def reset_dev(name: str):
     return raw_reset_dev(name=name)
