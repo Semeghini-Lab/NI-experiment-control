@@ -81,11 +81,11 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         &self,
         sem: &Arc<Semaphore>,
         num_devices: usize,
-        stream_buftime: f64,
+        bufsize_ms: f64,
         nreps: usize,
     ) {
-        let mut timer = TickTimer::new();
-        let mut timer_ = TickTimer::new();
+        let mut timer1 = TickTimer::new();
+        let mut timer2 = TickTimer::new();
 
         assert!(
             self.is_compiled(),
@@ -95,12 +95,13 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
 
         // (Not-done) trick: in principle, calculation of the first signal can be done independently of daqmx setup
         // Still have to figure out how to do in rust.
-        let seq_len = self.total_samps();  // ToDo: the previous approach was dangerous, truncation may strip the final tick off. Consider using `self.compiled_stop_pos()` or `.round()`
-        let buffer_size = std::cmp::min(
+        let buf_dur = bufsize_ms / 1000.0;
+        let seq_len = self.total_samps();
+        let buf_size = std::cmp::min(
             seq_len,
-            (stream_buftime * self.samp_rate() / 1000.) as usize,
+            (buf_dur * self.samp_rate()).round() as usize,
         );
-        let mut counter = StreamCounter::new(seq_len, buffer_size);
+        let mut counter = StreamCounter::new(seq_len, buf_size);
         let (mut start_pos, mut end_pos) = counter.tick_next();
 
         // DAQmx Setup
@@ -108,7 +109,7 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         self.cfg_task_channels(&task);
 
         // Configure buffer, writing method, clock and sync
-        task.cfg_output_buffer(buffer_size);
+        task.cfg_output_buffer(buf_size);
         task.disallow_regen();
         let bufwrite = |signal| {
             match self.task_type() {
@@ -117,53 +118,57 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
             };
         };
         self.cfg_clk_sync(&task, &seq_len);
-        timer.tick_print(&format!(
+        timer1.tick_print(&format!(
             "{} cfg (task channels, buffers, clk & sync)",
             self.name()
         ));
 
         // Obtain the first signal (optional: from parallel thread), and do first bufwrite
         let signal = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
-        timer.tick_print(&format!("{} wait to receive signal", self.name()));
+        timer1.tick_print(&format!("{} calc initial sample chunk", self.name()));
         bufwrite(signal);
-        timer.tick_print(&format!("{} bufwrite", self.name()));
+        timer1.tick_print(&format!("{} initial bufwrite", self.name()));
 
         for _rep in 0..nreps {
             // For every repetition, make sure the primary device starts last
-            if self.export_trig().unwrap_or(false) {
-                (0..num_devices).for_each(|_| sem.acquire());
-                sem.release(); // Release the semaphore to restore count to 1, in preparation for the next run.
+            match self.export_trig() {
+                // The primary device waits for all others to flag they started their tasks
+                Some(true) => {
+                    (0..num_devices).for_each(|_| sem.acquire());
+                    sem.release(); // Release the semaphore to restore count to 1, in preparation for the next run.
+                },
+                _ => {}
             }
             task.start();
-            timer_.tick_print(&format!("{} start (restart) overhead", self.name()));
-            if !self.export_trig().unwrap_or(true) {
-                sem.release();
+            timer2.tick_print(&format!("{} start (restart) overhead", self.name()));
+            match self.export_trig() {
+                // All non-primary devices (both trigger users, and the ones not using trigger at all)
+                // should flag they have started their task
+                Some(true) => {},
+                _ => sem.release()
             }
-            // Main chunk for streaming
+
+            // Main streaming loop
             while end_pos != seq_len {
                 (start_pos, end_pos) = counter.tick_next();
-                let signal_stream =
-                    self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
+                let signal_stream = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
                 bufwrite(signal_stream);
             }
+
+            // Finishing this streaming run:
             if nreps > 1 {
                 // If we're on repeat: don't wait for the task to finish, calculate and write the next chunk
                 (start_pos, end_pos) = counter.tick_next();
-                let signal_next_start =
-                    self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
-                task.wait_until_done(stream_buftime * 10. / 1000.);
-                timer_.tick_print(&format!("{} end", self.name()));
+                let signal_next_start = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
+                task.wait_until_done(buf_dur * 10.0);
+                timer2.tick_print(&format!("{} end", self.name()));
                 task.stop();
                 bufwrite(signal_next_start);
             } else {
-                task.wait_until_done(stream_buftime * 10. / 1000.);
-                timer_.tick_print(&format!("{} end", self.name()));
+                task.wait_until_done(buf_dur * 10.0);
+                timer2.tick_print(&format!("{} end", self.name()));
                 task.stop();
             }
-            if self.export_ref_clk().unwrap_or(false) { 
-                (0..num_devices).for_each(|_| sem.acquire());
-            }
-            sem.release();
         }
     }
 
@@ -224,11 +229,14 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
     ///    configure it accordingly, while others will export the signal.
     fn cfg_clk_sync(&self, task: &NiTask, seq_len: &usize) {
         let seq_len = *seq_len as u64;
+
         // Configure sample clock first
         let samp_clk_src = self.samp_clk_src().unwrap_or("");
         task.cfg_sample_clk(samp_clk_src, self.samp_rate(), seq_len);
-        // Configure start trigger: primary devices export, while secondary devices configure task
-        // to expect start trigger
+
+        // Configure start trigger:
+        //  * primary device exports,
+        //  * secondary devices configure task to expect start trigger
         if let Some(trig_line) = self.trig_line() {
             match self.export_trig().unwrap() {
                 true => task.export_signal(
@@ -240,13 +248,13 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
                 }
             }
         };
-        // Configure reference clock behavior
-        if let Some(ref_clk_line) = self.ref_clk_line() {
-            match self.export_ref_clk().unwrap() {
-                false => task.cfg_ref_clk(ref_clk_line, self.ref_clk_rate().unwrap()),
-                true => {},  // task.export_signal(DAQMX_VAL_10MHZREFCLOCK, ref_clk_line)
-            };
+        // Configure PLL locking to external reference clock signal
+        if let Some((src, rate)) = self.ext_ref_clk() {
+            task.cfg_ref_clk(src, rate)
         }
+        // if let Some(ref_clk_line) = self.ref_clk_src() {
+        //     task.cfg_ref_clk(ref_clk_line, self.ref_clk_rate().unwrap())
+        // }  // ToDo: remove
     }
 }
 

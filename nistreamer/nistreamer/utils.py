@@ -1,6 +1,7 @@
 import numpy as np
-from typing import Union
-
+from niexpctrl_backend import connect_terms as raw_connect_terms
+from niexpctrl_backend import disconnect_terms as raw_disconnect_terms
+from niexpctrl_backend import reset_dev as raw_reset_dev
 # Import plotly
 PLOTLY_INSTALLED = False
 try:
@@ -13,6 +14,22 @@ except ImportError:
         'but plotting functionality will not be available.\n'
         'To install, run `pip install plotly` in your Python environment'
     )
+
+
+def connect_terms(src: str, dest: str):
+    """Statically (independently of any NI task) connect terminals
+
+    :param src:
+    :param dest:
+    :return:
+    """
+    return raw_connect_terms(src=src, dest=dest)
+
+def disconnect_terms(src: str, dest: str):
+    return raw_connect_terms(src=src, dest=dest)
+
+def reset_dev(name: str):
+    return raw_reset_dev(name=name)
 
 
 class RendOption:

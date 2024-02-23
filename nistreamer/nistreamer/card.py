@@ -1,5 +1,6 @@
 from niexpctrl_backend import Experiment as RawDLL
 from .channel import AOChanProxy, DOChanProxy
+from .utils import connect_terms, reset_dev
 from typing import Optional, Union, Literal
 
 
@@ -23,7 +24,7 @@ class BaseCardProxy:
         self._export_trig = None  # None (default) means not using start trigger
         self._trig_line = None
         # External reference clock
-        self._export_ref_clk = None  # None (default) means not using reference clock
+        self._ref_clk_export = None  # None (default) means not using reference clock
         self._ref_clk_rate = None
         self._ref_clk_line = None
 
@@ -75,9 +76,9 @@ class BaseCardProxy:
 
     @property
     def ref_clk_info(self):
-        if self._export_ref_clk is True:
+        if self._ref_clk_export is True:
             return f'Exported {self._ref_clk_rate*1e-6:.2f} MHz reference to {self._ref_clk_line}'
-        elif self._export_ref_clk is False:
+        elif self._ref_clk_export is False:
             return f'Imported {self._ref_clk_rate*1e-6:.2f} MHz reference from {self._ref_clk_line}'
         else:
             return 'Not using external reference clock'
@@ -98,14 +99,49 @@ class BaseCardProxy:
         self._export_trig = export
         self._trig_line = line
 
-    def cfg_ref_clk(self, line: str, rate=10e6, export: bool = False):
-        self._dll.device_cfg_ref_clk(
-            name=self.max_name,
-            ref_clk_line=line,
-            ref_clk_rate=rate,
-            export_ref_clk=export,
-        )
-        self._export_ref_clk = export
+    def cfg_ref_clk(self, line: str, rate: float = 10e6, export: bool = False):
+        """Configure PLL-locking of the onboard clock to external reference clock signal.
+
+        :param line: (str) terminal/line to import the reference signal from. Format: '/ThisDevName/TerminalName'
+        :param rate: (float, optional) reference signal frequency (default is 10 MHz)
+        :param export: (bool, optional) if False (default), import external reference and lock to it.
+                     If True, export own onboard reference.
+        :return: None
+
+        ------------------------------------------------------------------
+        Note:
+        a card does not have to be a part of the pulse sequence or even be added to the NIStreamer instance
+        to provide 10 MHz reference signal. Any NI card, as long as it supports exporting reference clock
+        and is powered up, can source the reference signal. To export reference clock from such an "unregistered" card,
+        use the `utils.connect_terms()` function with '/YourDevName/10MHzRefClock' as the source terminal:
+            connect_terms(
+                src='/YourDevName/10MHzRefClock',
+                dest='/YourDevName/TargetTerminalName'
+            )
+
+        For PCIe cards connected with RTSI cable it may look like this:
+            connect_terms(src='/Dev1/10MHzRefClock', dest='/Dev1/RTSI7')
+
+        For PXIe cards using PXI backplane trigger lines it may look like this:
+            connect_terms(src='/PXI1Slot1/10MHzRefClock', dest='/PXI1Slot1/PXI_Trig7')
+
+        Established connection can be overwritten by calling `connect_terms()` again with different arguments
+        or completely removed by calling `utils.disconnect_terms()` or 'utils.reset_dev()'.
+        """
+        if export:
+            if abs(rate - 10e6) > 1.0:
+                raise ValueError(f'Only 10 MHz reference clock export is currently supported')
+            connect_terms(
+                src=f'/{self.max_name}/10MHzRefClock',
+                dest=f'/{self.max_name}/{line}'
+            )
+        else:
+            self._dll.device_import_ref_clk(
+                name=self.max_name,
+                src=line,
+                rate=rate,
+            )
+        self._ref_clk_export = export
         self._ref_clk_line = line
         self._ref_clk_rate = rate
 
@@ -114,7 +150,7 @@ class BaseCardProxy:
         self._dll.device_clear_compile_cache(name=self.max_name)  # FixMe[Rust]: change `dev_name` to `max_name`
 
     def reset(self):
-        self._dll.reset_device(name=self.max_name)  # FixMe[Rust]: change `dev_name` to `max_name`
+        reset_dev(name=self.max_name)
 
         # Update proxy values
         # self.samp_rate = samp_rate  # FixMe - should self.samp_rate be changed?
@@ -124,7 +160,7 @@ class BaseCardProxy:
         self.samp_clk_src = None
         self._export_trig = None
         self._trig_line = None
-        self._export_ref_clk = None
+        self._ref_clk_export = None
         self._ref_clk_rate = None
         self._ref_clk_line = None
 

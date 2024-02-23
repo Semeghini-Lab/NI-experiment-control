@@ -89,18 +89,18 @@ pub trait BaseDevice {
     fn samp_clk_src(&self) -> Option<&str>;
     fn trig_line(&self) -> Option<&str>;
     fn export_trig(&self) -> Option<bool>;
-    fn ref_clk_line(&self) -> Option<&str>;
-    fn export_ref_clk(&self) -> Option<bool>;
-    fn ref_clk_rate(&self) -> Option<f64>;
+    fn ext_ref_clk(&self) -> Option<(&str, f64)>;
+    // fn ref_clk_src(&self) -> Option<&str>;  // ToDo: remove
+    // fn ref_clk_rate(&self) -> Option<f64>;
 
     // Mutable accessors
     fn channels_(&mut self) -> &mut IndexMap<String, Channel>;
     fn samp_clk_src_(&mut self) -> &mut Option<String>;
     fn trig_line_(&mut self) -> &mut Option<String>;
     fn export_trig_(&mut self) -> &mut Option<bool>;
-    fn ref_clk_line_(&mut self) -> &mut Option<String>;
-    fn export_ref_clk_(&mut self) -> &mut Option<bool>;
-    fn ref_clk_rate_(&mut self) -> &mut Option<f64>;
+    fn ext_ref_clk_(&mut self) -> &mut Option<(String, f64)>;
+    // fn ref_clk_src_(&mut self) -> &mut Option<String>;  // ToDo: remove
+    // fn ref_clk_rate_(&mut self) -> &mut Option<f64>;
 
     /// Shortcut to borrow channel instance by name
     fn chan(&self, name: &str) -> &Channel {
@@ -164,15 +164,11 @@ pub trait BaseDevice {
     /// * `ref_clk_line` - The line or channel to import or export the device's reference clock.
     /// * `ref_clk_rate` - The rate of the reference clock in Hz.
     /// * `export_ref_clk` - A boolean that determines whether to export (if `true`) or import (if `false`) the reference clock.
-    fn cfg_ref_clk(&mut self, ref_clk_line: &str, ref_clk_rate: f64, export_ref_clk: bool) {
-        if export_ref_clk {
-            assert_eq!(ref_clk_rate, 1e7,
-                "Device {} needs to explicitly acknowledge exporting 10Mhz clk by setting ref_clk_rate=1e7",
-                self.name());
-        }
-        *(self.ref_clk_line_()) = Some(ref_clk_line.to_string());
-        *(self.ref_clk_rate_()) = Some(ref_clk_rate);
-        *(self.export_ref_clk_()) = Some(export_ref_clk);
+    fn import_ref_clk(&mut self, src: &str, rate: f64) {
+        *(self.ext_ref_clk_()) = Some((src.to_string(), rate))
+
+        // *(self.ref_clk_src_()) = Some(src.to_string());  // ToDo: remove
+        // *(self.ref_clk_rate_()) = Some(rate);
     }
 
     /// Returns a vector of references to editable channels
@@ -819,9 +815,9 @@ pub struct Device {
     samp_clk_src: Option<String>,
     trig_line: Option<String>,
     export_trig: Option<bool>,
-    ref_clk_line: Option<String>,
-    export_ref_clk: Option<bool>,
-    ref_clk_rate: Option<f64>,
+    ext_ref_clk: Option<(String, f64)>,  // here (src: String, rate: f64)
+    // ref_clk_src: Option<String>,  // ToDo: remove
+    // ref_clk_rate: Option<f64>,
 }
 
 impl Device {
@@ -850,9 +846,9 @@ impl Device {
             samp_clk_src: None,
             trig_line: None,
             export_trig: None,
-            ref_clk_line: None,
-            export_ref_clk: None,
-            ref_clk_rate: None,
+            ext_ref_clk: None,
+            // ref_clk_src: None,  // ToDo: remove
+            // ref_clk_rate: None,
         }
     }
 }
@@ -887,17 +883,20 @@ impl BaseDevice for Device {
         self.export_trig
     }
 
-    fn ref_clk_line(&self) -> Option<&str> {
-        self.ref_clk_line.as_deref()
+    fn ext_ref_clk(&self) -> Option<(&str, f64)> {
+        match &self.ext_ref_clk {
+            Some((src, rate)) => Some((&src, *rate)),
+            None => None,
+        }
     }
 
-    fn export_ref_clk(&self) -> Option<bool> {
-        self.export_ref_clk
-    }
-
-    fn ref_clk_rate(&self) -> Option<f64> {
-        self.ref_clk_rate
-    }
+    // fn ref_clk_src(&self) -> Option<&str> {  // ToDo: remove
+    //     self.ref_clk_src.as_deref()
+    // }
+    //
+    // fn ref_clk_rate(&self) -> Option<f64> {
+    //     self.ref_clk_rate
+    // }
 
     // Mutable accessors
     fn channels_(&mut self) -> &mut IndexMap<String, Channel> {
@@ -916,17 +915,17 @@ impl BaseDevice for Device {
         &mut self.export_trig
     }
 
-    fn ref_clk_line_(&mut self) -> &mut Option<String> {
-        &mut self.ref_clk_line
+    fn ext_ref_clk_(&mut self) -> &mut Option<(String, f64)> {
+        &mut self.ext_ref_clk
     }
 
-    fn export_ref_clk_(&mut self) -> &mut Option<bool> {
-        &mut self.export_ref_clk
-    }
-
-    fn ref_clk_rate_(&mut self) -> &mut Option<f64> {
-        &mut self.ref_clk_rate
-    }
+    // fn ref_clk_src_(&mut self) -> &mut Option<String> {  // ToDo: remove
+    //     &mut self.ref_clk_src
+    // }
+    //
+    // fn ref_clk_rate_(&mut self) -> &mut Option<f64> {
+    //     &mut self.ref_clk_rate
+    // }
 }
 
 #[cfg(test)]

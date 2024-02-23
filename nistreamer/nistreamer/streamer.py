@@ -94,11 +94,11 @@ class NIStreamer:
 
     def stream_exp(
             self,
-            stream_buftime: Optional[float] = 150,
+            bufsize_ms: Optional[float] = 150,
             nreps: Optional[int] = 1
     ):
         self._dll.stream_exp(
-            stream_buftime=stream_buftime,
+            bufsize_ms=bufsize_ms,
             nreps=nreps
         )
 
@@ -113,4 +113,8 @@ class NIStreamer:
         self._dll.check_trig_config()
 
     def reset_all(self):
-        self._dll.reset_devices()
+        for card_group in [self._ao_card_dict.values(), self._do_card_dict.values()]:
+            for card in card_group:
+                card.reset()
+
+        # self._dll.reset_devices()  # ToDo: remove

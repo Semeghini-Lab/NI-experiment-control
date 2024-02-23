@@ -14,10 +14,6 @@ crate-type = ["cdylib", "lib"]
 name = "niexpctrl_backend_bin"
 path = "src/main.rs"
 
-[[bin]]
-name = "connect_terms"
-path = "src/connect_terms.rs"
-
 [dependencies]
 pyo3 = { version = "0.19.2", features = [ "multiple-pymethods" ] }
 nicompiler_backend = { path = "../nicompiler_backend" }

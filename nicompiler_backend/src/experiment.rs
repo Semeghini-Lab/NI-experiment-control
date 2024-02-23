@@ -845,25 +845,14 @@ pub trait BaseExperiment {
     /// * `export_ref_clk` - A boolean that determines whether to export (if `true`) or import (if `false`) the reference clock.
     ///
     /// See also: [`BaseDevice::cfg_ref_clk`]
-    fn device_cfg_ref_clk(
+    fn device_import_ref_clk(
         &mut self,
         name: &str,
-        ref_clk_line: &str,
-        ref_clk_rate: f64,
-        export_ref_clk: bool,
+        src: &str,
+        rate: f64,
     ) {
-        assert!(
-            !export_ref_clk
-                || (export_ref_clk
-                    && self
-                        .devices()
-                        .values()
-                        .all(|dev| dev.export_ref_clk().is_none())),
-            "Device {} cannot export reference clock since another device already exports reference clock.",
-            name
-        );
         self.device_op(name, |dev| {
-            (*dev).cfg_ref_clk(ref_clk_line, ref_clk_rate, export_ref_clk)
+            (*dev).import_ref_clk(src, rate)
         })
     }
 
@@ -1476,19 +1465,17 @@ macro_rules! impl_exp_boilerplate {
                 BaseExperiment::device_cfg_trig(self, name, trig_line, export_trig);
             }
 
-            pub fn device_cfg_ref_clk(
+            pub fn device_import_ref_clk(
                 &mut self,
                 name: &str,
-                ref_clk_line: &str,
-                ref_clk_rate: f64,
-                export_ref_clk: bool,
+                src: &str,
+                rate: f64,
             ) {
-                BaseExperiment::device_cfg_ref_clk(
+                BaseExperiment::device_import_ref_clk(
                     self,
                     name,
-                    ref_clk_line,
-                    ref_clk_rate,
-                    export_ref_clk,
+                    src,
+                    rate,
                 );
             }
 

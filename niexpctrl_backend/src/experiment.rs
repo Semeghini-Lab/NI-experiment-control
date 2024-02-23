@@ -100,7 +100,7 @@ impl Experiment {
     /// preloaded to ensure continuous streaming.
     /// * `nreps`: Number of repetitions for the streaming process. The devices will continuously stream
     /// their data for this many repetitions.
-    pub fn stream_exp(&self, stream_buftime: f64, nreps: usize) {
+    pub fn stream_exp(&self, bufsize_ms: f64, nreps: usize) {
         // Simple parallelization: invoke stream_task for every device
         let sem_shared = Arc::new(Semaphore::new(1));
         self.compiled_devices().par_iter().for_each(|dev| {
@@ -108,7 +108,7 @@ impl Experiment {
             dev.stream_task(
                 &sem_clone,
                 self.compiled_devices().len(),
-                stream_buftime,
+                bufsize_ms,
                 nreps,
             );
         });

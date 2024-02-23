@@ -162,6 +162,7 @@ extern "C" {
     ) -> CInt32;
 
     fn DAQmxConnectTerms(sourceTerminal: CConstStr, destinationTerminal: CConstStr, signalModifiers: CInt32) -> CInt32;
+    fn DAQmxDisconnectTerms(sourceTerminal: CConstStr, destinationTerminal: CConstStr) -> CInt32;
     fn DAQmxExportSignal(handle: TaskHandle, signalID: CInt32, outputTerminal: CConstStr)
         -> CInt32;
     fn DAQmxSetRefClkSrc(handle: TaskHandle, src: CConstStr) -> CInt32;
@@ -229,6 +230,7 @@ pub fn daqmx_call<F: FnOnce() -> CInt32>(func: F) {
         panic!("DAQmx Error: {}", error_string);
     }
 }
+
 /// Resets a specified National Instruments (NI) device.
 ///
 /// This function attempts to reset the provided NI device by invoking the `DAQmxResetDevice` method.
@@ -261,7 +263,6 @@ pub fn daqmx_call<F: FnOnce() -> CInt32>(func: F) {
 /// # Note
 ///
 /// Ensure that the device name provided is valid and that the device is accessible when invoking this function.
-
 pub fn reset_ni_device(name: &str) {
     let name_cstr = std::ffi::CString::new(name).expect("Failed to convert device name to CString");
     daqmx_call(|| unsafe { DAQmxResetDevice(name_cstr.as_ptr()) });
@@ -270,6 +271,11 @@ pub fn connect_terms(src: &str, dest: &str) {
     let src = std::ffi::CString::new(src).expect("Failed to convert src to CString");
     let dest = std::ffi::CString::new(dest).expect("Failed to convert dest to CString");
     daqmx_call(|| unsafe { DAQmxConnectTerms(src.as_ptr(), dest.as_ptr(), DAQMX_VAL_DO_NOT_INVERT_POLARITY) });
+}
+pub fn disconnect_terms(src: &str, dest: &str) {
+    let src = std::ffi::CString::new(src).expect("Failed to convert src to CString");
+    let dest = std::ffi::CString::new(dest).expect("Failed to convert dest to CString");
+    daqmx_call(|| unsafe { DAQmxDisconnectTerms(src.as_ptr(), dest.as_ptr()) });
 }
 
 /// Represents a National Instruments (NI) DAQmx task.
@@ -296,7 +302,6 @@ pub fn connect_terms(src: &str, dest: &str) {
 /// # Note
 ///
 /// Ensure you have the necessary NI-DAQmx drivers and libraries installed and accessible when using this struct and its associated methods.
-
 pub struct NiTask {
     handle: TaskHandle,
 }
@@ -341,8 +346,8 @@ impl NiTask {
         })
     }
 
-    pub fn cfg_output_buffer(&self, buf_sz: usize) {
-        daqmx_call(|| unsafe { DAQmxCfgOutputBuffer(self.handle, buf_sz as CUint32) });
+    pub fn cfg_output_buffer(&self, buf_size: usize) {
+        daqmx_call(|| unsafe { DAQmxCfgOutputBuffer(self.handle, buf_size as CUint32) });
     }
 
     pub fn create_ao_chan(&self, name: &str) {

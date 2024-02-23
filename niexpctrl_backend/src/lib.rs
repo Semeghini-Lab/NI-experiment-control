@@ -133,12 +133,31 @@ pub mod utils;
 
 pub use crate::device::*;
 pub use crate::experiment::Experiment;
-pub use crate::nidaqmx::*;
+// pub use crate::nidaqmx::*;
 pub use crate::utils::*;
 pub use nicompiler_backend::*;
 
 #[pymodule]
 fn niexpctrl_backend(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Experiment>()?;
+    m.add_function(wrap_pyfunction!(reset_dev, m)?)?;
+    m.add_function(wrap_pyfunction!(connect_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(disconnect_terms, m)?)?;
+    Ok(())
+}
+
+#[pyfunction]
+fn reset_dev(_py: Python, name: &str) -> PyResult<()> {
+    crate::nidaqmx::reset_ni_device(name);
+    Ok(())
+}
+#[pyfunction]
+fn connect_terms(_py: Python, src: &str, dest: &str) -> PyResult<()> {
+    crate::nidaqmx::connect_terms(src, dest);
+    Ok(())
+}
+#[pyfunction]
+fn disconnect_terms(_py: Python, src: &str, dest: &str) -> PyResult<()> {
+    crate::nidaqmx::disconnect_terms(src, dest);
     Ok(())
 }
