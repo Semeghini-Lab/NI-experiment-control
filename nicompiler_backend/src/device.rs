@@ -86,19 +86,21 @@ pub trait BaseDevice {
     fn name(&self) -> &str;
     fn task_type(&self) -> TaskType;
     fn samp_rate(&self) -> f64;
+    // ToDo: move this to NIStreamer crate:
     fn samp_clk_src(&self) -> Option<&str>;
     fn trig_line(&self) -> Option<&str>;
     fn export_trig(&self) -> Option<bool>;
-    fn ext_ref_clk(&self) -> Option<(&str, f64)>;
+    fn ref_clk(&self) -> Option<(&str, bool, f64)>;
     // fn ref_clk_src(&self) -> Option<&str>;  // ToDo: remove
     // fn ref_clk_rate(&self) -> Option<f64>;
 
     // Mutable accessors
     fn channels_(&mut self) -> &mut IndexMap<String, Channel>;
+    // ToDo: move this to NIStreamer crate:
     fn samp_clk_src_(&mut self) -> &mut Option<String>;
     fn trig_line_(&mut self) -> &mut Option<String>;
     fn export_trig_(&mut self) -> &mut Option<bool>;
-    fn ext_ref_clk_(&mut self) -> &mut Option<(String, f64)>;
+    fn ref_clk_(&mut self) -> &mut Option<(String, bool, f64)>;
     // fn ref_clk_src_(&mut self) -> &mut Option<String>;  // ToDo: remove
     // fn ref_clk_rate_(&mut self) -> &mut Option<f64>;
 
@@ -164,8 +166,9 @@ pub trait BaseDevice {
     /// * `ref_clk_line` - The line or channel to import or export the device's reference clock.
     /// * `ref_clk_rate` - The rate of the reference clock in Hz.
     /// * `export_ref_clk` - A boolean that determines whether to export (if `true`) or import (if `false`) the reference clock.
-    fn import_ref_clk(&mut self, src: &str, rate: f64) {
-        *(self.ext_ref_clk_()) = Some((src.to_string(), rate))
+    fn import_ref_clk(&mut self, src: &str, rate: f64) {  // ToDo: move this to NIStreamer crate
+        todo!();
+        // *(self.ref_clk_()) = Some((src.to_string(), rate))
 
         // *(self.ref_clk_src_()) = Some(src.to_string());  // ToDo: remove
         // *(self.ref_clk_rate_()) = Some(rate);
@@ -812,10 +815,11 @@ pub struct Device {
     task_type: TaskType,
     samp_rate: f64,
 
+    // ToDo: move this to NIStreamer crate
     samp_clk_src: Option<String>,
     trig_line: Option<String>,
     export_trig: Option<bool>,
-    ext_ref_clk: Option<(String, f64)>,  // here (src: String, rate: f64)
+    ref_clk: Option<(String, bool, f64)>,  // here (line: String, export: bool, rate: f64)
     // ref_clk_src: Option<String>,  // ToDo: remove
     // ref_clk_rate: Option<f64>,
 }
@@ -843,10 +847,11 @@ impl Device {
             task_type,
             samp_rate,
 
+            // ToDo: move this to NIStreamer crate:
             samp_clk_src: None,
             trig_line: None,
             export_trig: None,
-            ext_ref_clk: None,
+            ref_clk: None,
             // ref_clk_src: None,  // ToDo: remove
             // ref_clk_rate: None,
         }
@@ -883,9 +888,9 @@ impl BaseDevice for Device {
         self.export_trig
     }
 
-    fn ext_ref_clk(&self) -> Option<(&str, f64)> {
-        match &self.ext_ref_clk {
-            Some((src, rate)) => Some((&src, *rate)),
+    fn ref_clk(&self) -> Option<(&str, bool, f64)> {
+        match &self.ref_clk {
+            Some((line, export, rate)) => Some((&line, *export, *rate)),
             None => None,
         }
     }
@@ -915,8 +920,8 @@ impl BaseDevice for Device {
         &mut self.export_trig
     }
 
-    fn ext_ref_clk_(&mut self) -> &mut Option<(String, f64)> {
-        &mut self.ext_ref_clk
+    fn ref_clk_(&mut self) -> &mut Option<(String, bool, f64)> {
+        &mut self.ref_clk
     }
 
     // fn ref_clk_src_(&mut self) -> &mut Option<String> {  // ToDo: remove

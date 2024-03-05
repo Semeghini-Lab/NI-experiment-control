@@ -172,6 +172,70 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         }
     }
 
+    fn cfg_run(&self, bufsize_ms: f64) -> (NiTask, StreamCounter) {
+        let buf_dur = bufsize_ms / 1000.0;
+        let seq_len = self.total_samps();
+        let buf_size = std::cmp::min(
+            seq_len,
+            (buf_dur * self.samp_rate()).round() as usize,
+        );
+        let mut counter = StreamCounter::new(seq_len, buf_size);
+        let (mut start_pos, mut end_pos) = counter.tick_next();
+
+        // DAQmx Setup
+        let task = NiTask::new();
+        self.cfg_task_channels(&task);
+        task.cfg_output_buffer(buf_size);
+        task.disallow_regen();
+        self.cfg_clk_sync(&task, seq_len);
+
+        // Calc and write the initial sample chunk into the buffer
+        let bufwrite = |signal| {
+            match self.task_type() {
+                TaskType::AO => task.write_analog(&signal),
+                TaskType::DO => task.write_digital_port(&signal.map(|&x| x as u32)),
+            };
+        };
+
+        let signal = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
+        bufwrite(signal);
+
+        // FixMe [after Device move to streamer crate]:
+        //  store NiTask+StreamCounter in internal fields instead of returning and storing in Experiment
+        (task, counter)
+    }
+
+    fn stream_run(&self, sem: Arc<Semaphore>, dev_num: usize, calc_next: bool, task: &NiTask, counter: &mut StreamCounter, wait_timeout: f64) {
+        // The device exporting start trigger should start last
+        match self.export_trig() {
+            Some(true) => {
+                for _ in 0..(dev_num - 1) {(*sem).acquire()}
+                task.start();
+            },
+            _ => {
+                task.start();
+                (*sem).release()
+            }
+        }
+        // Main streaming loop
+        while end_pos != seq_len {
+            (start_pos, end_pos) = counter.tick_next();
+            let signal_stream = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
+            task.bufwrite(signal_stream, self.task_type());
+        }
+        // Finish this streaming run
+        if calc_next {
+            (start_pos, end_pos) = counter.tick_next();
+            let samp_arr = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
+            task.wait_until_done(wait_timeout);
+            task.stop();
+            task.bufwrite(samp_arr, self.task_type());
+        } else {
+            task.wait_until_done(wait_timeout);
+            task.stop();
+        }
+    }
+
     /// Helper function that configures the task channels for the device.
     ///
     /// This method is a helper utility designed to configure the task channels based on the device's `task_type`.
@@ -227,14 +291,14 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
     ///    while secondary devices will configure their tasks to expect the start trigger.
     /// 3. Configures reference clocking based on the device's `ref_clk_line`. Devices that import the reference clock will
     ///    configure it accordingly, while others will export the signal.
-    fn cfg_clk_sync(&self, task: &NiTask, seq_len: &usize) {
-        let seq_len = *seq_len as u64;
+    fn cfg_clk_sync(&self, task: &NiTask, seq_len: usize) {
+        let seq_len = seq_len as u64;
 
-        // Configure sample clock first
+        // (1) Configure sample clock first
         let samp_clk_src = self.samp_clk_src().unwrap_or("");
         task.cfg_sample_clk(samp_clk_src, self.samp_rate(), seq_len);
 
-        // Configure start trigger:
+        // (2) Configure start trigger:
         //  * primary device exports,
         //  * secondary devices configure task to expect start trigger
         if let Some(trig_line) = self.trig_line() {
@@ -248,9 +312,13 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
                 }
             }
         };
-        // Configure PLL locking to external reference clock signal
-        if let Some((src, rate)) = self.ext_ref_clk() {
-            task.cfg_ref_clk(src, rate)
+
+        // (3) Configure PLL locking to external reference clock signal
+        if let Some((src, export, rate)) = self.ref_clk() {
+            match export {
+                true => {},  // ref clock has already been exported statically
+                false => task.cfg_ref_clk(src, rate),
+            }
         }
         // if let Some(ref_clk_line) = self.ref_clk_src() {
         //     task.cfg_ref_clk(ref_clk_line, self.ref_clk_rate().unwrap())

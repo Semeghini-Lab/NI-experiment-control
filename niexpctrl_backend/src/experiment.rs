@@ -50,12 +50,15 @@ use pyo3::prelude::*;
 use rayon::prelude::*;
 use indexmap::IndexMap;
 use std::sync::Arc;
+use std::thread;
 
 use nicompiler_backend::*;
 
 use crate::device::*;
+use crate::nidaqmx;
 use crate::nidaqmx::*;
 use crate::utils::Semaphore;
+use crate::utils::StreamCounter;  // FixMe [after Device move to streamer crate]
 
 /// An extended version of the [`nicompiler_backend::Experiment`] struct, tailored to provide direct
 /// interfacing capabilities with NI devices.
@@ -79,12 +82,114 @@ use crate::utils::Semaphore;
 #[pyclass]
 pub struct Experiment {
     devices: IndexMap<String, Device>,
+    // FixMe [after Device move to streamer crate]:
+    //  NiTask handles and StreamCounters should be saved in Device fields
+    ni_tasks: IndexMap<String, NiTask>,
+    stream_counters: IndexMap<String, StreamCounter>,
+    bufsize_ms: f64
 }
 
 impl_exp_boilerplate!(Experiment);
 
 #[pymethods]
 impl Experiment {
+
+    pub fn run(&self, bufsize_ms: f64, nreps: usize) {
+        todo!()
+    }
+
+    fn cfg_run(&mut self, bufsize_ms: f64) {  // -> Result<(), String>
+
+        /* ToDo:
+        Add consistency check here:
+        no clash between any exports (ref clk, start_trig, samp_clk)
+        */
+
+        // Static ref clk export
+        let mut exporting_devs: Vec<&Device> = self.devices.values().filter(|dev| {
+            match dev.ref_clk() {
+                Some((_line, export, _rate)) => export,
+                None => false,
+            }
+        }).collect();
+        match exporting_devs.len() {
+            0 => {},
+            1 => {
+                let dev = exporting_devs[0];
+                let name = dev.name();
+                let (line, _export, _rate) = dev.ref_clk().unwrap();
+                /* ToDo:
+                Try tristating the terminal on all other cards to ensure the line is not driven
+                */
+                nidaqmx::connect_terms(
+                    &format!("/{name}/10MHzRefClock"),
+                    &format!("/{name}/{line}")
+                );
+            },
+            _ => panic!("Only one device can export reference clock")
+        };
+
+        // Configure NI DAQmx tasks on all compiled devices
+        let mut thread_handles = Vec::new();
+        for dev in self.compiled_devices() {
+            let join_handle = thread::Builder::new()
+                .name(dev.name().to_string())
+                .spawn(move || {
+                    dev.cfg_run(bufsize_ms)
+                });
+            thread_handles.push(join_handle.unwrap());
+        }
+        for handle in thread_handles {
+            // FixMe [after Device move to streamer crate]: NiTask+StreamCounter should be saved in Device fields
+            let dev_name = handle.thread().name().unwrap().to_string();
+            let (ni_task, stream_counter) = handle.join().unwrap();
+            self.ni_tasks.insert(
+                dev_name.clone(),
+                ni_task
+            );
+            self.stream_counters.insert(
+                dev_name,
+                stream_counter
+            );
+        }
+        // FixMe [after Device move to streamer crate]: bufsize_ms should be saved in Device fields
+        self.bufsize_ms = bufsize_ms;
+    }
+
+    fn stream_run(&mut self, calc_next: bool) {
+        let shared_sem = Arc::new(Semaphore::new(0));
+        let mut join_handles = Vec::new();
+
+        for dev in self.devices().values() {
+            let sem_clone = shared_sem.clone();
+            join_handle = thread::Builder::new().name(dev.name().to_string()).spawn(move || {
+               dev.stream_run(
+                   sem_clone,
+                   self.compiled_devices().len(),
+                   calc_next,
+                   // FixMe [after Device move to streamer crate]: this should be stored in Device fields:
+                   self.ni_tasks.get(dev.name()).unwrap(),
+                   self.stream_counters.get_mut(dev.name()).unwrap(),
+                   10 * (self.bufsize_ms / 1000.0)
+               )
+            }).unwrap();
+        }
+        for handle in join_handles {
+            handle.join()
+        }
+    }
+
+    fn clean_run(&mut self) {
+        // FixMe [after Device move to streamer crate]: call Device.clear_run() instead
+        self.ni_tasks.clear();
+        self.stream_counters.clear();
+        self.bufsize_ms = 0.0;
+    }
+
+    fn check_line_not_driven(&self, line: &str, exclude_dev: &str) {  //  -> Result<bool, String>
+        todo!()
+    }
+
     /// Starts the streaming process for all compiled devices within the experiment.
     ///
     /// This method leverages multi-threading to concurrently stream multiple devices.
@@ -180,6 +285,11 @@ impl Experiment {
     pub fn new() -> Self {
         Self {
             devices: IndexMap::new(),
+            // FixMe [after Device move to streamer crate]:
+            //  NiTask+StreamCounter should be saved in Device fields
+            ni_tasks: IndexMap::new(),
+            stream_counters: IndexMap::new(),
+            bufsize_ms: 0.0
         }
     }
 }

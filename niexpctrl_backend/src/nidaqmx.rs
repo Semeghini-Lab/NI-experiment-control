@@ -69,6 +69,7 @@ use libc;
 use ndarray::Array2;
 use std::fs::OpenOptions;
 use std::io::Write;
+use nicompiler_backend::TaskType;
 
 type CConstStr = *const libc::c_char;
 type CCharBuf = *mut libc::c_char;
@@ -475,6 +476,15 @@ impl NiTask {
             DAQmxGetWriteTotalSampPerChanGenerated(self.handle, &mut data as *mut CUint64)
         });
         data as u64
+    }
+}
+
+impl NiTask {
+    pub fn bufwrite(&self, signal: Array2<f64>, task_type: TaskType) -> usize {
+        match task_type {
+            TaskType::AO => self.write_analog(&signal),
+            TaskType::DO => self.write_digital_port(&signal.map(|&x| x as u32))
+        }
     }
 }
 
