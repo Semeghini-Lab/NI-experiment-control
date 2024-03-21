@@ -49,14 +49,14 @@ use numpy;
 use pyo3::prelude::*;
 use rayon::prelude::*;
 use indexmap::IndexMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 use nicompiler_backend::*;
 
 use crate::device::*;
 use crate::nidaqmx;
-use crate::nidaqmx::*;
+// use crate::nidaqmx::*;
 use crate::utils::Semaphore;
 use crate::utils::StreamCounter;  // FixMe [after Device move to streamer crate]
 
@@ -84,7 +84,7 @@ pub struct Experiment {
     devices: IndexMap<String, Device>,
     // FixMe [after Device move to streamer crate]:
     //  NiTask handles and StreamCounters should be saved in Device fields
-    ni_tasks: IndexMap<String, NiTask>,
+    ni_tasks: IndexMap<String, nidaqmx::NiTask>,
     stream_counters: IndexMap<String, StreamCounter>,
     bufsize_ms: f64
 }
@@ -132,10 +132,10 @@ impl Experiment {
         // Configure NI DAQmx tasks on all compiled devices
         let mut thread_handles = Vec::new();
         for dev in self.compiled_devices() {
-            let join_handle = thread::Builder::new()
-                .name(dev.name().to_string())
+            let dev_arc = Arc::new(Mutex::new(dev));
+            let join_handle = thread::Builder::new().name(dev.name().to_string())
                 .spawn(move || {
-                    dev.cfg_run(bufsize_ms)
+                    dev_arc.cfg_run(bufsize_ms)
                 });
             thread_handles.push(join_handle.unwrap());
         }
@@ -153,26 +153,30 @@ impl Experiment {
             );
         }
         // FixMe [after Device move to streamer crate]: bufsize_ms should be saved in Device fields
+
+        // FixMe: store bufsize_ms as Device field
         self.bufsize_ms = bufsize_ms;
     }
 
+    /*
     fn stream_run(&mut self, calc_next: bool) {
         let shared_sem = Arc::new(Semaphore::new(0));
         let mut join_handles = Vec::new();
 
         for dev in self.devices().values() {
             let sem_clone = shared_sem.clone();
-            join_handle = thread::Builder::new().name(dev.name().to_string()).spawn(move || {
-               dev.stream_run(
-                   sem_clone,
-                   self.compiled_devices().len(),
-                   calc_next,
-                   // FixMe [after Device move to streamer crate]: this should be stored in Device fields:
-                   self.ni_tasks.get(dev.name()).unwrap(),
-                   self.stream_counters.get_mut(dev.name()).unwrap(),
-                   10 * (self.bufsize_ms / 1000.0)
-               )
-            }).unwrap();
+            join_handle = thread::Builder::new().name(dev.name().to_string())
+                .spawn(move || {
+                    dev.stream_run(
+                        sem_clone,
+                        self.compiled_devices().len(),
+                        calc_next,
+                        // FixMe [after Device move to streamer crate]: this should be stored in Device fields:
+                        self.ni_tasks.get(dev.name()).unwrap(),
+                        self.stream_counters.get_mut(dev.name()).unwrap(),
+                        10 * (self.bufsize_ms / 1000.0)
+                    )
+                }).unwrap();
         }
         for handle in join_handles {
             handle.join()
@@ -189,6 +193,7 @@ impl Experiment {
     fn check_line_not_driven(&self, line: &str, exclude_dev: &str) {  //  -> Result<bool, String>
         todo!()
     }
+    */
 
     /// Starts the streaming process for all compiled devices within the experiment.
     ///
@@ -238,7 +243,7 @@ impl Experiment {
     /// exp.reset_device("PXI1Slot3");
     /// ```
     pub fn reset_device(&mut self, name: &str) {
-        self.device_op(name, |_dev| reset_ni_device(name));
+        self.device_op(name, |_dev| nidaqmx::reset_ni_device(name));
     }
 
     /// Resets all the devices that are registered and associated with the experiment.
@@ -259,7 +264,7 @@ impl Experiment {
     pub fn reset_devices(&self) {
         self.devices
             .values()
-            .for_each(|dev| reset_ni_device(dev.name()));
+            .for_each(|dev| nidaqmx::reset_ni_device(dev.name()));
     }
 }
 

@@ -190,51 +190,52 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         self.cfg_clk_sync(&task, seq_len);
 
         // Calc and write the initial sample chunk into the buffer
-        let bufwrite = |signal| {
-            match self.task_type() {
-                TaskType::AO => task.write_analog(&signal),
-                TaskType::DO => task.write_digital_port(&signal.map(|&x| x as u32)),
-            };
-        };
+        // let bufwrite = |signal| {
+        //     match self.task_type() {
+        //         TaskType::AO => task.write_analog(&signal),
+        //         TaskType::DO => task.write_digital_port(&signal.map(|&x| x as u32)),
+        //     };
+        // };
 
         let signal = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
-        bufwrite(signal);
+        task.bufwrite(signal, self.task_type());
+        // bufwrite(signal);
 
         // FixMe [after Device move to streamer crate]:
         //  store NiTask+StreamCounter in internal fields instead of returning and storing in Experiment
         (task, counter)
     }
 
-    fn stream_run(&self, sem: Arc<Semaphore>, dev_num: usize, calc_next: bool, task: &NiTask, counter: &mut StreamCounter, wait_timeout: f64) {
-        // The device exporting start trigger should start last
-        match self.export_trig() {
-            Some(true) => {
-                for _ in 0..(dev_num - 1) {(*sem).acquire()}
-                task.start();
-            },
-            _ => {
-                task.start();
-                (*sem).release()
-            }
-        }
-        // Main streaming loop
-        while end_pos != seq_len {
-            (start_pos, end_pos) = counter.tick_next();
-            let signal_stream = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
-            task.bufwrite(signal_stream, self.task_type());
-        }
-        // Finish this streaming run
-        if calc_next {
-            (start_pos, end_pos) = counter.tick_next();
-            let samp_arr = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
-            task.wait_until_done(wait_timeout);
-            task.stop();
-            task.bufwrite(samp_arr, self.task_type());
-        } else {
-            task.wait_until_done(wait_timeout);
-            task.stop();
-        }
-    }
+    // fn stream_run(&self, sem: Arc<Semaphore>, dev_num: usize, calc_next: bool, task: &NiTask, counter: &mut StreamCounter, wait_timeout: f64) {
+    //     // The device exporting start trigger should start last
+    //     match self.export_trig() {
+    //         Some(true) => {
+    //             for _ in 0..(dev_num - 1) {(*sem).acquire()}
+    //             task.start();
+    //         },
+    //         _ => {
+    //             task.start();
+    //             (*sem).release()
+    //         }
+    //     }
+    //     // Main streaming loop
+    //     while end_pos != seq_len {
+    //         (start_pos, end_pos) = counter.tick_next();
+    //         let signal_stream = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
+    //         task.bufwrite(signal_stream, self.task_type());
+    //     }
+    //     // Finish this streaming run
+    //     if calc_next {
+    //         (start_pos, end_pos) = counter.tick_next();
+    //         let samp_arr = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
+    //         task.wait_until_done(wait_timeout);
+    //         task.stop();
+    //         task.bufwrite(samp_arr, self.task_type());
+    //     } else {
+    //         task.wait_until_done(wait_timeout);
+    //         task.stop();
+    //     }
+    // }
 
     /// Helper function that configures the task channels for the device.
     ///
