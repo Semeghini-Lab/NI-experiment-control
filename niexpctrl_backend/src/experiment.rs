@@ -50,7 +50,6 @@ use pyo3::prelude::*;
 use rayon::prelude::*;
 use indexmap::IndexMap;
 use std::sync::{Arc, Mutex};
-use std::thread;
 
 use nicompiler_backend::*;
 
@@ -84,9 +83,8 @@ pub struct Experiment {
     devices: IndexMap<String, Device>,
     // FixMe [after Device move to streamer crate]:
     //  NiTask handles and StreamCounters should be saved in Device fields
-    ni_tasks: IndexMap<String, nidaqmx::NiTask>,
-    stream_counters: IndexMap<String, StreamCounter>,
-    bufsize_ms: f64
+    // ni_tasks: IndexMap<String, nidaqmx::NiTask>,
+    stream_counters: IndexMap<String, StreamCounter>
 }
 
 impl_exp_boilerplate!(Experiment);
@@ -130,6 +128,14 @@ impl Experiment {
         };
 
         // Configure NI DAQmx tasks on all compiled devices
+        let res_vec: Vec<_> = self.compiled_devices().par_iter_mut().map(
+            |dev| -> _ {
+                let (task, counter) = dev.cfg_run(bufsize_ms);
+                (dev.name().to_string(), Arc::new(Mutex::new(task)), counter)
+            }
+        ).collect();
+
+        /*
         let mut thread_handles = Vec::new();
         for dev in self.compiled_devices() {
             let dev_arc = Arc::new(Mutex::new(dev));
@@ -152,10 +158,7 @@ impl Experiment {
                 stream_counter
             );
         }
-        // FixMe [after Device move to streamer crate]: bufsize_ms should be saved in Device fields
-
-        // FixMe: store bufsize_ms as Device field
-        self.bufsize_ms = bufsize_ms;
+        */
     }
 
     /*
@@ -210,19 +213,19 @@ impl Experiment {
     /// preloaded to ensure continuous streaming.
     /// * `nreps`: Number of repetitions for the streaming process. The devices will continuously stream
     /// their data for this many repetitions.
-    pub fn stream_exp(&self, bufsize_ms: f64, nreps: usize) {
-        // Simple parallelization: invoke stream_task for every device
-        let sem_shared = Arc::new(Semaphore::new(1));
-        self.compiled_devices().par_iter().for_each(|dev| {
-            let sem_clone = sem_shared.clone();
-            dev.stream_task(
-                &sem_clone,
-                self.compiled_devices().len(),
-                bufsize_ms,
-                nreps,
-            );
-        });
-    }
+    // pub fn stream_exp(&self, bufsize_ms: f64, nreps: usize) {
+    //     // Simple parallelization: invoke stream_task for every device
+    //     let sem_shared = Arc::new(Semaphore::new(1));
+    //     self.compiled_devices().par_iter().for_each(|dev| {
+    //         let sem_clone = sem_shared.clone();
+    //         dev.stream_task(
+    //             &sem_clone,
+    //             self.compiled_devices().len(),
+    //             bufsize_ms,
+    //             nreps,
+    //         );
+    //     });
+    // }
 
     /// Resets a specific device associated with the experiment using the NI-DAQmx framework.
     ///
@@ -292,9 +295,8 @@ impl Experiment {
             devices: IndexMap::new(),
             // FixMe [after Device move to streamer crate]:
             //  NiTask+StreamCounter should be saved in Device fields
-            ni_tasks: IndexMap::new(),
-            stream_counters: IndexMap::new(),
-            bufsize_ms: 0.0
+            // ni_tasks: IndexMap::new(),
+            stream_counters: IndexMap::new()
         }
     }
 }

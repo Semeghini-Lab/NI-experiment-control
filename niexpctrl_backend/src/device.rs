@@ -77,6 +77,7 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
     /// The method relies on various helper functions and methods, such as `is_compiled`, `cfg_task_channels`, and
     /// `calc_signal_nsamps`, to achieve its functionality. Ensure that all dependencies are correctly set up and
     /// that the device has been properly compiled before calling this method.
+    /*
     fn stream_task(
         &self,
         sem: &Arc<Semaphore>,
@@ -171,6 +172,7 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
             }
         }
     }
+    */
 
     fn cfg_run(&self, bufsize_ms: f64) -> (NiTask, StreamCounter) {
         let buf_dur = bufsize_ms / 1000.0;
@@ -179,6 +181,10 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
             seq_len,
             (buf_dur * self.samp_rate()).round() as usize,
         );
+        // FixMe: handle a very rare but still possible case:
+        //  if seq_len % buf_size == 1, the very final sample chunk will contain only 1 sample
+        //  and NI DAQmx bufwrite will fail - min sample number to write is 2
+        //  (but once >=2, any other sample number to write is valid)
         let mut counter = StreamCounter::new(seq_len, buf_size);
         let (mut start_pos, mut end_pos) = counter.tick_next();
 
@@ -206,36 +212,38 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         (task, counter)
     }
 
-    // fn stream_run(&self, sem: Arc<Semaphore>, dev_num: usize, calc_next: bool, task: &NiTask, counter: &mut StreamCounter, wait_timeout: f64) {
-    //     // The device exporting start trigger should start last
-    //     match self.export_trig() {
-    //         Some(true) => {
-    //             for _ in 0..(dev_num - 1) {(*sem).acquire()}
-    //             task.start();
-    //         },
-    //         _ => {
-    //             task.start();
-    //             (*sem).release()
-    //         }
-    //     }
-    //     // Main streaming loop
-    //     while end_pos != seq_len {
-    //         (start_pos, end_pos) = counter.tick_next();
-    //         let signal_stream = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
-    //         task.bufwrite(signal_stream, self.task_type());
-    //     }
-    //     // Finish this streaming run
-    //     if calc_next {
-    //         (start_pos, end_pos) = counter.tick_next();
-    //         let samp_arr = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
-    //         task.wait_until_done(wait_timeout);
-    //         task.stop();
-    //         task.bufwrite(samp_arr, self.task_type());
-    //     } else {
-    //         task.wait_until_done(wait_timeout);
-    //         task.stop();
-    //     }
-    // }
+    /*
+    fn stream_run(&self, sem: Arc<Semaphore>, dev_num: usize, calc_next: bool, task: &NiTask, counter: &mut StreamCounter, wait_timeout: f64) {
+        // The device exporting start trigger should start last
+        match self.export_trig() {
+            Some(true) => {
+                for _ in 0..(dev_num - 1) {(*sem).acquire()}
+                task.start();
+            },
+            _ => {
+                task.start();
+                (*sem).release()
+            }
+        }
+        // Main streaming loop
+        while end_pos != seq_len {
+            (start_pos, end_pos) = counter.tick_next();
+            let signal_stream = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
+            task.bufwrite(signal_stream, self.task_type());
+        }
+        // Finish this streaming run
+        if calc_next {
+            (start_pos, end_pos) = counter.tick_next();
+            let samp_arr = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
+            task.wait_until_done(wait_timeout);
+            task.stop();
+            task.bufwrite(samp_arr, self.task_type());
+        } else {
+            task.wait_until_done(wait_timeout);
+            task.stop();
+        }
+    }
+    */
 
     /// Helper function that configures the task channels for the device.
     ///
