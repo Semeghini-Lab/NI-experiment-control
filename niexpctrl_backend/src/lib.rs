@@ -124,6 +124,7 @@
 //! exp.stream_exp(50., 2)
 //! ```
 
+use pyo3::exceptions::{PyException, PyValueError};
 use pyo3::prelude::*;
 
 pub mod device;
@@ -148,16 +149,23 @@ fn niexpctrl_backend(_py: Python, m: &PyModule) -> PyResult<()> {
 
 #[pyfunction]
 fn reset_dev(_py: Python, name: &str) -> PyResult<()> {
-    crate::nidaqmx::reset_ni_device(name);
-    Ok(())
+    match crate::nidaqmx::reset_ni_device(name) {
+        Ok(()) => Ok(()),
+        Err(ni_err) => Err(PyValueError::new_err(ni_err.to_string())),
+    }
+
 }
 #[pyfunction]
 fn connect_terms(_py: Python, src: &str, dest: &str) -> PyResult<()> {
-    crate::nidaqmx::connect_terms(src, dest);
-    Ok(())
+    match crate::nidaqmx::connect_terms(src, dest) {
+        Ok(()) => Ok(()),
+        Err(ni_err) => Err(PyValueError::new_err(ni_err.to_string())),
+    }
 }
 #[pyfunction]
 fn disconnect_terms(_py: Python, src: &str, dest: &str) -> PyResult<()> {
-    crate::nidaqmx::disconnect_terms(src, dest);
-    Ok(())
+    match crate::nidaqmx::disconnect_terms(src, dest) {
+        Ok(()) => Ok(()),
+        Err(ni_err) => Err(PyValueError::new_err(ni_err.to_string())),
+    }
 }

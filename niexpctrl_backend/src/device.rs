@@ -154,6 +154,8 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
                 (start_pos, end_pos) = counter.tick_next();
                 let signal_stream = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
                 bufwrite(signal_stream);
+                // FixMe: add timeout = max(1 second, 2*buf_dur) to avoid deadlocks (hardware bug - trigger not connected -> deadlock).
+                //  Also add option to specify WaitInfinitely for advanced cases (external sample clock freezing and external trigger)
             }
 
             // Finishing this streaming run:
