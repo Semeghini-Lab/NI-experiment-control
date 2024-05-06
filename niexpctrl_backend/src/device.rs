@@ -31,8 +31,39 @@ use crate::nidaqmx::*;
 use crate::utils::{Semaphore, StreamCounter};
 
 use std::sync::Arc;
+use std::sync::mpsc::{SendError, RecvError};
 
 use nicompiler_backend::*;
+
+pub struct WorkerError {
+    msg: String
+}
+impl From<SendError<()>> for WorkerError {
+    fn from(_value: SendError<()>) -> Self {
+        Self {
+            msg: "Worker thread encountered SendError".to_string()
+        }
+    }
+}
+impl From<RecvError> for WorkerError {
+    fn from(_value: RecvError) -> Self {
+        Self {
+            msg: "Worker encountered RecvError".to_string()
+        }
+    }
+}
+impl From<DAQmxError> for WorkerError {
+    fn from(value: DAQmxError) -> Self {
+        Self{msg: value.to_string()}
+    }
+}
+impl From<String> for WorkerError {
+    fn from(value: String) -> Self {
+        Self {
+            msg: format!("Worker thread encountered the following error: \n{value}")
+        }
+    }
+}
 
 /// The `StreamableDevice` trait extends the [`nicompiler_backend::BaseDevice`] trait of [`nicompiler_backend::Device`]
 /// to provide additional functionality for streaming tasks.

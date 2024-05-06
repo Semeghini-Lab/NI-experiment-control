@@ -2,6 +2,7 @@ mod device;
 mod experiment;
 mod nidaqmx;
 mod utils;
+mod worker_cmd_chan;
 
 use niexpctrl_backend::*;
 

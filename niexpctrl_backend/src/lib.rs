@@ -131,6 +131,7 @@ pub mod device;
 pub mod experiment;
 pub mod nidaqmx;
 pub mod utils;
+pub mod worker_cmd_chan;
 
 pub use crate::device::*;
 pub use crate::experiment::Experiment;

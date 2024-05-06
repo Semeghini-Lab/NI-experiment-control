@@ -49,7 +49,10 @@ use numpy;
 use pyo3::prelude::*;
 use rayon::prelude::*;
 use indexmap::IndexMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
+use std::sync::mpsc::{Sender, Receiver, channel};
+use std::thread::JoinHandle;
 
 use nicompiler_backend::*;
 
@@ -58,6 +61,7 @@ use crate::nidaqmx;
 // use crate::nidaqmx::*;
 use crate::utils::Semaphore;
 use crate::utils::StreamCounter;  // FixMe [after Device move to streamer crate]
+use crate::worker_cmd_chan::{CmdChan, CmdRecvr, WorkerCmd};
 
 /// An extended version of the [`nicompiler_backend::Experiment`] struct, tailored to provide direct
 /// interfacing capabilities with NI devices.
@@ -84,10 +88,103 @@ pub struct Experiment {
     // FixMe [after Device move to streamer crate]:
     //  NiTask handles and StreamCounters should be saved in Device fields
     // ni_tasks: IndexMap<String, nidaqmx::NiTask>,
-    stream_counters: IndexMap<String, StreamCounter>
+    running_devs: IndexMap<String, Arc<Mutex<Device>>>,
+    worker_handles: IndexMap<String, JoinHandle<Result<(), WorkerError>>>,
+    worker_report_recvrs: IndexMap<String, Receiver<()>>,
+    worker_cmd_chan: CmdChan,
 }
 
 impl_exp_boilerplate!(Experiment);
+
+impl Experiment {
+    pub fn cfg_run_(&mut self, bufsize_ms: f64) -> Result<(), String> {
+
+        let running_dev_names: Vec<String> = self.devices
+            .iter()
+            .filter(|(_name, dev)| dev.is_compiled())
+            .map(|(name, _dev)| name.to_string())
+            .collect();
+        if running_dev_names.is_empty() {
+            return Ok(())
+        };
+        // FixMe: this is a dirty hack.
+        //  Transfer device objects to a separate IndexMap to be able to wrap them into Arc<Mutex<>> for multithreading
+        for dev_name in running_dev_names {
+            let dev = self.devices.shift_remove(&dev_name).unwrap();
+            self.running_devs.insert(dev_name, Arc::new(Mutex::new(dev)));
+        }
+
+        /* ToDo:
+        Add consistency check here:
+        no clash between any exports (ref clk, start_trig, samp_clk)
+        */
+
+        // Static ref clk export
+        let mut exporting_devs: Vec<&Device> = self.devices.values().filter(|dev| {
+            match dev.ref_clk() {
+                Some((_line, export, _rate)) => export,
+                None => false,
+            }
+        }).collect();
+        match exporting_devs.len() {
+            0 => {},
+            1 => {
+                let dev = exporting_devs[0];
+                let name = dev.name();
+                let (line, _export, _rate) = dev.ref_clk().unwrap();
+                /* ToDo:
+                Try tristating the terminal on all other cards to ensure the line is not driven
+                */
+                nidaqmx::connect_terms(
+                    &format!("/{name}/10MHzRefClock"),
+                    &format!("/{name}/{line}")
+                ).unwrap();
+            },
+            _ => panic!("Only one device can export reference clock at a time")
+        };
+
+        // Prepare thread sync mechanisms
+
+        // - command broadcasting channel
+        self.worker_cmd_chan = CmdChan::new();  // the old instance can be reused, but refreshing here to zero `msg_num` for simplicity
+
+        // - inter-worker start sync channels
+        let trig_wait_num =
+        let mut start_sync_chans = Vec::new();
+        for dev_name in running_dev_names.iter() {
+
+        }
+
+
+        for (dev_name, dev) in self.running_devs.iter() {
+            // - worker command receiver
+            let cmd_recvr = self.worker_cmd_chan.new_recvr();
+
+            // - worker report channel
+            let (report_sender, report_recvr) = channel();
+            self.worker_report_recvrs.insert(dev_name.to_string(), report_recvr);
+
+            // ToDo: launch thread here
+        }
+
+        todo!()
+    }
+    pub fn stream_run_(&mut self, calc_next: bool) -> Result<(), String> {
+        todo!()
+    }
+    pub fn close_run_(&mut self) {
+
+        // FixMe: this is a dirty hack.
+        //  Transfer device objects to a separate IndexMap to be able to wrap them into Arc<Mutex<>> for multithreading
+        // Return all used device objects back to the main IndexMap
+        for (dev_name, dev_box) in self.running_devs.into_iter() {
+            let dev = Arc::into_inner(dev_box).unwrap().into_inner();
+            self.devices.insert(dev_name, dev)
+        }
+
+        todo!()
+    }
+}
 
 #[pymethods]
 impl Experiment {
@@ -296,7 +393,10 @@ impl Experiment {
             // FixMe [after Device move to streamer crate]:
             //  NiTask+StreamCounter should be saved in Device fields
             // ni_tasks: IndexMap::new(),
-            stream_counters: IndexMap::new()
+            running_devs: IndexMap::new(),
+            worker_handles: IndexMap::new(),
+            worker_report_recvrs: IndexMap::new(),
+            worker_cmd_chan: CmdChan::new(),
         }
     }
 }
