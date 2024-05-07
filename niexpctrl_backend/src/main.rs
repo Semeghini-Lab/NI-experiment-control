@@ -56,11 +56,11 @@ use niexpctrl_backend::*;
 fn main() {
     let mut exp = Experiment::new();
     // Define devices and associated channels
-    exp.add_ao_device("PXI1Slot3", 1e6);
-    exp.add_ao_channel("PXI1Slot3", 10, 0.);
+    exp.add_ao_device("PXI1Slot2", 1e6);
+    exp.add_ao_channel("PXI1Slot2", 0, 0.);
 
-    exp.linramp("PXI1Slot3", "ao10", 0., 1., 0., 1., true);
+    exp.linramp("PXI1Slot2", "ao0", 0., 1., 0., 1., true);
 
     exp.compile(true);
-    exp.stream_exp(50., 1);
+    exp.stream_exp(50., 50);
 }

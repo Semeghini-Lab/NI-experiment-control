@@ -33,7 +33,8 @@
 //! To ensure type safety and clarity, the module defines several type aliases (e.g., `CConstStr`,
 //! `CUint32`) and constants (e.g., `DAQMX_VAL_RISING`, `DAQMX_VAL_VOLTS`) that map to their C
 //! counterparts. These are used throughout the module to ensure that function signatures and calls
-//! match their expected types.
+//! match their expected types. Original C-declarations can be found in `NIDAQmx.h` under the `include` 
+//! directory of the DAQmx driver. 
 //!
 //! ## Cleanup and Resource Management
 //!
@@ -90,6 +91,7 @@ pub const DAQMX_VAL_CHANPERLINE: CInt32 = 0;
 pub const DAQMX_VAL_CHANFORALLLINES: CInt32 = 1;
 pub const DAQMX_VAL_STARTTRIGGER: CInt32 = 12491;
 pub const DAQMX_VAL_10MHZREFCLOCK: CInt32 = 12536;
+pub const DAQMX_VAL_TASKRESERVE: CInt32 = 4;
 
 #[link(name = "NIDAQmx")]
 extern "C" {
@@ -169,6 +171,7 @@ extern "C" {
         triggerSource: CConstStr,
         triggerEdge: CInt32,
     ) -> CInt32;
+    fn DAQmxTaskControl(handle: TaskHandle, action: CInt32) -> CInt32; 
     fn DAQmxGetWriteCurrWritePos(handle: TaskHandle, data: *mut CUint64) -> CInt32;
     fn DAQmxGetWriteTotalSampPerChanGenerated(handle: TaskHandle, data: *mut CUint64) -> CInt32;
 }
@@ -317,6 +320,9 @@ impl NiTask {
     }
     pub fn disallow_regen(&self) {
         daqmx_call(|| unsafe { DAQmxSetWriteRegenMode(self.handle, DAQMX_VAL_DONOTALLOWREGEN) });
+    }
+    pub fn reserve(&self) {
+        daqmx_call(|| unsafe { DAQmxTaskControl(self.handle, DAQMX_VAL_TASKRESERVE)});
     }
 
     pub fn cfg_sample_clk(&self, clk_src: &str, samp_rate: f64, seq_len: u64) {

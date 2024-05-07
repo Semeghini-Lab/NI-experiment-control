@@ -156,6 +156,9 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
                 timer_.tick_print(&format!("{} end", self.name()));
                 task.stop();
                 bufwrite(signal_next_start);
+                // Reserving the task before entering the next semaphore-wait marginally decreases 
+                //    the restart overhead to 5-20ms
+                task.reserve(); 
             } else {
                 task.wait_until_done(stream_buftime * 10. / 1000.);
                 timer_.tick_print(&format!("{} end", self.name()));
