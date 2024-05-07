@@ -324,7 +324,7 @@ pub trait BaseExperiment {
     /// # use nicompiler_backend::*;
     /// let mut exp = Experiment::new();
     /// exp.add_ao_device("PXI1Slot6", 1e6);
-    /// exp.device_cfg_trig("PXI1Slot6", "PXI_Trig0", false);
+    /// exp.device_set_start_trig_term("PXI1Slot6", "PXI_Trig0");
     /// // This will panic as there are no primary devices, but PXI1Slot6 is expecting a trigger source
     /// exp.compile_with_stoptime(10.0);
     /// ```
@@ -342,9 +342,6 @@ pub trait BaseExperiment {
     /// assert_eq!(exp.compiled_stop_time(), 5.);
     /// ```
     fn compile(&mut self, stop_time: Option<f64>) -> f64 {
-        // Sanity check: inter-device trigger configuration is valid
-        self.check_trig_config();  // ToDo: move this to hardware-specific streaming sub-crate
-
         let stop_time = match stop_time {
             Some(stop_time) => {
                 if stop_time < self.last_instr_end_time() {
@@ -362,20 +359,6 @@ pub trait BaseExperiment {
             dev.compile(stop_time);
         }
         return self.total_run_time()
-    }
-
-    /// This is a sanity check to ensure inter-device trigger configuration is valid
-    fn check_trig_config(&self) {
-        assert!(
-            self.devices().values().all(|d| d.export_trig().is_none())
-                || self
-                .devices()
-                .values()
-                .filter(|d| d.export_trig() == Some(true))
-                .count()
-                == 1,
-            "Cannot compile an experiment with devices expecting yet no device exporting trigger"
-        );
     }
 
     /// Retrieves a list of devices that have been successfully compiled.
@@ -794,7 +777,7 @@ pub trait BaseExperiment {
     ///
     /// See also: [`BaseDevice::cfg_samp_clk_src`]
     fn device_cfg_samp_clk_src(&mut self, name: &str, src: &str) {
-        self.device_op(name, |dev| (*dev).cfg_samp_clk_src(src))
+        self.device_op(name, |dev| (*dev).set_samp_clk_src(src))
     }
 
     /// Configures the trigger settings of a device in the experiment while ensuring synchronization.
@@ -818,18 +801,18 @@ pub trait BaseExperiment {
     /// This method will panic if the synchronization condition related to a device exporting triggers is violated.
     ///
     /// See also: [`BaseDevice::cfg_trig`]
-    fn device_cfg_trig(&mut self, name: &str, trig_line: &str, export_trig: bool) {
-        assert!(
-            !export_trig
-                || (export_trig
-                    && self
-                        .devices()
-                        .values()
-                        .all(|dev| dev.export_trig().is_none())),
-            "Device {} cannot export triggers since another device already exports triggers.",
-            name
-        );
-        self.device_op(name, |dev| (*dev).cfg_trig(trig_line, export_trig))
+    fn device_set_start_trig_term(&mut self, name: &str, terminal: &str) {
+        // assert!(
+        //     !export_trig
+        //         || (export_trig
+        //             && self
+        //                 .devices()
+        //                 .values()
+        //                 .all(|dev| dev.export_trig().is_none())),
+        //     "Device {} cannot export triggers since another device already exports triggers.",
+        //     name
+        // );
+        self.device_op(name, |dev| (*dev).set_start_trig_term(trig_line));
     }
 
     /// Configures the reference clock settings of a device in the experiment.
@@ -1461,8 +1444,8 @@ macro_rules! impl_exp_boilerplate {
                 BaseExperiment::device_cfg_samp_clk_src(self, name, src);
             }
 
-            pub fn device_cfg_trig(&mut self, name: &str, trig_line: &str, export_trig: bool) {
-                BaseExperiment::device_cfg_trig(self, name, trig_line, export_trig);
+            pub fn device_set_start_trig_term(&mut self, name: &str, terminal: &str) {
+                BaseExperiment::device_set_start_trig_term(self, name, terminal);
             }
 
             pub fn device_import_ref_clk(

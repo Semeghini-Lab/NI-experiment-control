@@ -58,6 +58,7 @@ use nicompiler_backend::*;
 
 use crate::device::*;
 use crate::nidaqmx;
+use crate::nidaqmx::DAQmxError;
 // use crate::nidaqmx::*;
 use crate::utils::Semaphore;
 use crate::utils::StreamCounter;  // FixMe [after Device move to streamer crate]
@@ -87,7 +88,8 @@ pub struct Experiment {
     devices: IndexMap<String, Device>,
     // FixMe [after Device move to streamer crate]:
     //  NiTask handles and StreamCounters should be saved in Device fields
-    // ni_tasks: IndexMap<String, nidaqmx::NiTask>,
+    ref_clk_provider: Option<(String, String)>,  // Some((dev_name, terminal_name))
+    start_trig_primary: Option<String>,  // Some(dev_name)
     running_devs: IndexMap<String, Arc<Mutex<Device>>>,
     worker_handles: IndexMap<String, JoinHandle<Result<(), WorkerError>>>,
     worker_report_recvrs: IndexMap<String, Receiver<()>>,
@@ -97,6 +99,41 @@ pub struct Experiment {
 impl_exp_boilerplate!(Experiment);
 
 impl Experiment {
+
+    pub fn set_start_trig_primary(&mut self, dev: Option<String>) {
+        self.start_trig_primary = dev;
+    }
+    pub fn get_start_trig_primary(&self) -> Option<String> {
+        self.start_trig_primary.clone()
+    }
+
+    pub fn set_ref_clk_provider(&mut self, provider: Option<(String, String)>) {
+        self.ref_clk_provider = provider;
+    }
+    pub fn get_ref_clk_provider(&self) -> Option<(String, String)> {
+        self.ref_clk_provider.clone()
+    }
+
+    fn export_ref_clk_(&mut self) -> Result<(), DAQmxError> {
+        if let Some((dev_name, term_name)) = &self.ref_clk_provider {
+            // ToDo: Try tristating the terminal on all other cards in the streamer to ensure the line is not driven
+            nidaqmx::connect_terms(
+                &format!("/{dev_name}/10MHzRefClock"),
+                &format!("/{dev_name}/{term_name}")
+            )?;
+        };
+        Ok(())
+    }
+    pub fn undo_export_ref_clk_(&mut self) -> Result<(), DAQmxError> {
+        if let Some((dev_name, term_name)) = &self.ref_clk_provider {
+            nidaqmx::disconnect_terms(
+                &format!("/{dev_name}/10MHzRefClock"),
+                &format!("/{dev_name}/{term_name}")
+            )?;
+        };
+        Ok(())
+    }
+
     pub fn cfg_run_(&mut self, bufsize_ms: f64) -> Result<(), String> {
 
         let running_dev_names: Vec<String> = self.devices
@@ -114,47 +151,10 @@ impl Experiment {
             self.running_devs.insert(dev_name, Arc::new(Mutex::new(dev)));
         }
 
-        /* ToDo:
-        Add consistency check here:
-        no clash between any exports (ref clk, start_trig, samp_clk)
-        */
-
         // Static ref clk export
-        let mut exporting_devs: Vec<&Device> = self.devices.values().filter(|dev| {
-            match dev.ref_clk() {
-                Some((_line, export, _rate)) => export,
-                None => false,
-            }
-        }).collect();
-        match exporting_devs.len() {
-            0 => {},
-            1 => {
-                let dev = exporting_devs[0];
-                let name = dev.name();
-                let (line, _export, _rate) = dev.ref_clk().unwrap();
-                /* ToDo:
-                Try tristating the terminal on all other cards to ensure the line is not driven
-                */
-                nidaqmx::connect_terms(
-                    &format!("/{name}/10MHzRefClock"),
-                    &format!("/{name}/{line}")
-                ).unwrap();
-            },
-            _ => panic!("Only one device can export reference clock at a time")
+        if let Err(daqmx_err) = self.export_ref_clk_() {
+            return Err(daqmx_err.to_string())
         };
-
-        // Prepare thread sync mechanisms
-
-        // - command broadcasting channel
-        self.worker_cmd_chan = CmdChan::new();  // the old instance can be reused, but refreshing here to zero `msg_num` for simplicity
-
-        // - inter-worker start sync channels
-        let trig_wait_num =
-        let mut start_sync_chans = Vec::new();
-        for dev_name in running_dev_names.iter() {
-
-        }
-
 
         for (dev_name, dev) in self.running_devs.iter() {
             // - worker command receiver
@@ -182,6 +182,7 @@ impl Experiment {
             self.devices.insert(dev_name, dev)
         }
 
+        let _ = self.undo_export_ref_clk_();
         todo!()
     }
 }
@@ -392,11 +393,17 @@ impl Experiment {
             devices: IndexMap::new(),
             // FixMe [after Device move to streamer crate]:
             //  NiTask+StreamCounter should be saved in Device fields
-            // ni_tasks: IndexMap::new(),
+            ref_clk_provider: None,
             running_devs: IndexMap::new(),
             worker_handles: IndexMap::new(),
             worker_report_recvrs: IndexMap::new(),
             worker_cmd_chan: CmdChan::new(),
         }
+    }
+}
+
+impl Drop for Experiment {
+    fn drop(&mut self) {
+        self.close_run_();
     }
 }

@@ -290,17 +290,17 @@ pub fn daqmx_call<F: FnOnce() -> CInt32>(func: F) -> Result<(), DAQmxError> {
 ///
 /// Ensure that the device name provided is valid and that the device is accessible when invoking this function.
 pub fn reset_ni_device(name: &str) -> Result<(), DAQmxError> {
-    let name_cstr = std::ffi::CString::new(name).expect("Failed to convert device name to CString");
+    let name_cstr = std::ffi::CString::new(name)?;
     daqmx_call(|| unsafe { DAQmxResetDevice(name_cstr.as_ptr()) })
 }
 pub fn connect_terms(src: &str, dest: &str) -> Result<(), DAQmxError> {
-    let src = std::ffi::CString::new(src).expect("Failed to convert src to CString");
-    let dest = std::ffi::CString::new(dest).expect("Failed to convert dest to CString");
+    let src = std::ffi::CString::new(src)?;
+    let dest = std::ffi::CString::new(dest)?;
     daqmx_call(|| unsafe { DAQmxConnectTerms(src.as_ptr(), dest.as_ptr(), DAQMX_VAL_DO_NOT_INVERT_POLARITY) })
 }
 pub fn disconnect_terms(src: &str, dest: &str) -> Result<(), DAQmxError> {
-    let src = std::ffi::CString::new(src).expect("Failed to convert src to CString");
-    let dest = std::ffi::CString::new(dest).expect("Failed to convert dest to CString");
+    let src = std::ffi::CString::new(src)?;
+    let dest = std::ffi::CString::new(dest)?;
     daqmx_call(|| unsafe { DAQmxDisconnectTerms(src.as_ptr(), dest.as_ptr()) })
 }
 

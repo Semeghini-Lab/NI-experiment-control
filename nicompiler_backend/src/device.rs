@@ -86,23 +86,9 @@ pub trait BaseDevice {
     fn name(&self) -> &str;
     fn task_type(&self) -> TaskType;
     fn samp_rate(&self) -> f64;
-    // ToDo: move this to NIStreamer crate:
-    fn samp_clk_src(&self) -> Option<&str>;
-    fn trig_line(&self) -> Option<&str>;
-    fn export_trig(&self) -> Option<bool>;
-    fn ref_clk(&self) -> Option<(&str, bool, f64)>;
-    // fn ref_clk_src(&self) -> Option<&str>;  // ToDo: remove
-    // fn ref_clk_rate(&self) -> Option<f64>;
 
     // Mutable accessors
     fn channels_(&mut self) -> &mut IndexMap<String, Channel>;
-    // ToDo: move this to NIStreamer crate:
-    fn samp_clk_src_(&mut self) -> &mut Option<String>;
-    fn trig_line_(&mut self) -> &mut Option<String>;
-    fn export_trig_(&mut self) -> &mut Option<bool>;
-    fn ref_clk_(&mut self) -> &mut Option<(String, bool, f64)>;
-    // fn ref_clk_src_(&mut self) -> &mut Option<String>;  // ToDo: remove
-    // fn ref_clk_rate_(&mut self) -> &mut Option<f64>;
 
     /// Shortcut to borrow channel instance by name
     fn chan(&self, name: &str) -> &Channel {
@@ -122,56 +108,6 @@ pub trait BaseDevice {
     /// Returns sample clock period calculated as `1.0 / self.samp_rate()`
     fn clock_period(&self) -> f64 {
         1.0 / self.samp_rate()
-    }
-    /// Configures the sample clock source for the device.
-    ///
-    /// This method sets the `samp_clk_src` field of the device to the provided source string.
-    ///
-    /// # Arguments
-    ///
-    /// * `src` - The name of the sample clock source.
-    fn cfg_samp_clk_src(&mut self, src: &str) {
-        *(self.samp_clk_src_()) = Some(src.to_string());
-    }
-
-    /// Configures the trigger settings for the device.
-    ///
-    /// Depending on the value of `export_trig`, this method either:
-    ///
-    /// * Exports the device task's start trigger to `trig_line` (if `export_trig` is `true`), or
-    /// * Imports the device task's start trigger from `trig_line` (if `export_trig` is `false`).
-    ///
-    /// # Arguments
-    ///
-    /// * `trig_line` - The trigger line identifier.
-    /// * `export_trig` - A boolean that determines whether to export or import the trigger.
-    fn cfg_trig(&mut self, trig_line: &str, export_trig: bool) {
-        *(self.trig_line_()) = Some(trig_line.to_string());
-        *(self.export_trig_()) = Some(export_trig);
-    }
-
-    /// Configures the reference clock settings for the device.
-    ///
-    /// If `export_ref_clk` is set to `true`, this method:
-    ///
-    /// * Exports the device's 10MHz on-board reference clock to `ref_clk_line`,
-    /// * Asserts that `ref_clk_rate` is set to 1e7 (10MHz).
-    ///
-    /// If `export_ref_clk` is set to `false`, this method:
-    ///
-    /// * Sets the device's reference clock to the designated line and rate provided by the arguments.
-    ///
-    /// # Arguments
-    ///
-    /// * `ref_clk_line` - The line or channel to import or export the device's reference clock.
-    /// * `ref_clk_rate` - The rate of the reference clock in Hz.
-    /// * `export_ref_clk` - A boolean that determines whether to export (if `true`) or import (if `false`) the reference clock.
-    fn import_ref_clk(&mut self, src: &str, rate: f64) {  // ToDo: move this to NIStreamer crate
-        todo!();
-        // *(self.ref_clk_()) = Some((src.to_string(), rate))
-
-        // *(self.ref_clk_src_()) = Some(src.to_string());  // ToDo: remove
-        // *(self.ref_clk_rate_()) = Some(rate);
     }
 
     /// Returns a vector of references to editable channels
@@ -816,12 +752,17 @@ pub struct Device {
     samp_rate: f64,
 
     // ToDo: move this to NIStreamer crate
-    samp_clk_src: Option<String>,
-    trig_line: Option<String>,
-    export_trig: Option<bool>,
-    ref_clk: Option<(String, bool, f64)>,  // here (line: String, export: bool, rate: f64)
-    // ref_clk_src: Option<String>,  // ToDo: remove
-    // ref_clk_rate: Option<f64>,
+    start_trig_in: Option<String>,
+    start_trig_out: Option<String>,
+    samp_clk_in: Option<String>,
+    samp_clk_out: Option<String>, /*
+                                mxFunctions.DAQmxExportSignal(
+                                    taskHandle=task_handle,
+                                    signalID=mxConst.DAQmx_Val_SampleClock,
+                                    outputTerminal=f'/Dev3/PFI1'
+                                )
+                                */
+    ref_clk_in: Option<String>,
 }
 
 impl Device {
@@ -848,13 +789,47 @@ impl Device {
             samp_rate,
 
             // ToDo: move this to NIStreamer crate:
-            samp_clk_src: None,
-            trig_line: None,
-            export_trig: None,
-            ref_clk: None,
-            // ref_clk_src: None,  // ToDo: remove
-            // ref_clk_rate: None,
+            start_trig_in: None,
+            start_trig_out: None,
+            samp_clk_in: None,
+            samp_clk_out: None,
+            ref_clk_in: None,
         }
+    }
+
+    pub fn get_start_trig_in(&self) -> Option<String> {
+        self.start_trig_in.clone()
+    }
+    pub fn set_start_trig_in(&mut self, terminal: Option<String>) {
+        self.start_trig_in = terminal;
+    }
+
+    pub fn get_start_trig_out(&self) -> Option<String> {
+        self.start_trig_out.clone()
+    }
+    pub fn set_start_trig_out(&mut self, terminal: Option<String>) {
+        self.start_trig_out = terminal;
+    }
+
+    pub fn get_samp_clk_in(&self) -> Option<String> {
+        self.samp_clk_in.clone()
+    }
+    pub fn set_samp_clk_in(&mut self, terminal: Option<String>) {
+        self.samp_clk_in = terminal;
+    }
+
+    pub fn get_samp_clk_out(&self) -> Option<String> {
+        self.samp_clk_out.clone()
+    }
+    pub fn set_samp_clk_out(&mut self, terminal: Option<String>) {
+        self.samp_clk_out = terminal;
+    }
+
+    pub fn get_ref_clk_in(&self) -> Option<String> {
+        self.ref_clk_in.clone()
+    }
+    pub fn set_ref_clk_in(&mut self, terminal: Option<String>) {
+        self.ref_clk_in = terminal;
     }
 }
 
@@ -876,61 +851,10 @@ impl BaseDevice for Device {
         self.samp_rate
     }
 
-    fn samp_clk_src(&self) -> Option<&str> {
-        self.samp_clk_src.as_deref()
-    }
-
-    fn trig_line(&self) -> Option<&str> {
-        self.trig_line.as_deref()
-    }
-
-    fn export_trig(&self) -> Option<bool> {
-        self.export_trig
-    }
-
-    fn ref_clk(&self) -> Option<(&str, bool, f64)> {
-        match &self.ref_clk {
-            Some((line, export, rate)) => Some((&line, *export, *rate)),
-            None => None,
-        }
-    }
-
-    // fn ref_clk_src(&self) -> Option<&str> {  // ToDo: remove
-    //     self.ref_clk_src.as_deref()
-    // }
-    //
-    // fn ref_clk_rate(&self) -> Option<f64> {
-    //     self.ref_clk_rate
-    // }
-
     // Mutable accessors
     fn channels_(&mut self) -> &mut IndexMap<String, Channel> {
         &mut self.channels
     }
-
-    fn samp_clk_src_(&mut self) -> &mut Option<String> {
-        &mut self.samp_clk_src
-    }
-
-    fn trig_line_(&mut self) -> &mut Option<String> {
-        &mut self.trig_line
-    }
-
-    fn export_trig_(&mut self) -> &mut Option<bool> {
-        &mut self.export_trig
-    }
-
-    fn ref_clk_(&mut self) -> &mut Option<(String, bool, f64)> {
-        &mut self.ref_clk
-    }
-
-    // fn ref_clk_src_(&mut self) -> &mut Option<String> {  // ToDo: remove
-    //     &mut self.ref_clk_src
-    // }
-    //
-    // fn ref_clk_rate_(&mut self) -> &mut Option<f64> {
-    //     &mut self.ref_clk_rate
-    // }
 }
 
 #[cfg(test)]

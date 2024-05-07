@@ -31,7 +31,7 @@ use crate::nidaqmx::*;
 use crate::utils::{Semaphore, StreamCounter};
 
 use std::sync::Arc;
-use std::sync::mpsc::{SendError, RecvError};
+use std::sync::mpsc::{Sender, Receiver, SendError, RecvError};
 
 use nicompiler_backend::*;
 
@@ -63,6 +63,12 @@ impl From<String> for WorkerError {
             msg: format!("Worker thread encountered the following error: \n{value}")
         }
     }
+}
+
+pub enum StartSync {
+    Primary(Vec<Receiver<()>>),
+    Secondary(Sender<()>),
+    None
 }
 
 /// The `StreamableDevice` trait extends the [`nicompiler_backend::BaseDevice`] trait of [`nicompiler_backend::Device`]
