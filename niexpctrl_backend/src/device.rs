@@ -151,7 +151,8 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
                 (start_pos, end_pos) = counter.tick_next();
                 let signal_next_start =
                     self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
-                task.wait_until_done(stream_buftime * 10. / 1000.);
+                // Wait for ten times the specified streaming buffer time (s) in miliseconds
+                task.wait_until_done(stream_buftime * 10. / 1000.); 
                 timer_.tick_print(&format!("{} end", self.name()));
                 task.stop();
                 bufwrite(signal_next_start);
