@@ -144,7 +144,52 @@ impl Experiment {
         if running_dev_names.is_empty() {
             return Ok(())
         };
-        // FixMe: this is a dirty hack.
+
+
+        /* ToDo: Maybe add a consistency check here: no clash between any exports (ref clk, start_trig, samp_clk) */
+
+        // Prepare thread sync mechanisms
+
+        // - command broadcasting channel
+        self.worker_cmd_chan = CmdChan::new();  // the old instance can be reused, but refreshing here to zero `msg_num` for simplicity
+
+        // - inter-worker start_trig sync channels
+        let mut start_sync = IndexMap::new();
+        if let Some(primary_dev_name) = &self.start_trig_primary {
+            // Sanity checks
+            if !running_dev_names.contains(primary_dev_name) {
+                return Err(format!("Either the primary device name '{primary_dev_name}' is invalid or this device didn't get any instructions and will not run at all"))
+            };
+            if self.devices.get(primary_dev_name).unwrap().get_start_trig_out().is_none() {
+                return Err(format!("Device '{primary_dev_name}' was designated to be the start trigger primary, but has no trigger output terminal specified"))
+            };
+
+            // Create and pack sender-receiver pairs
+            let mut recvr_vec = Vec::new();
+            // - first create all the secondaries
+            for dev_name in running_dev_names.iter().filter(|dev_name| dev_name != primary_dev_name) {
+                let (sender, recvr) = channel();
+                recvr_vec.push(recvr);
+                start_sync.insert(
+                    dev_name.to_string(),
+                    StartSync::Secondary(sender)
+                )
+            }
+            // - now create the primary
+            start_sync.insert(
+                primary_dev_name.to_string(),
+                StartSync::Primary(recvr_vec)
+            );
+        } else {
+            for dev_name in running_dev_names.iter() {
+                start_sync.insert(
+                    dev_name.to_string(),
+                    StartSync::None,
+                )
+            }
+        }
+
+        // FixMe: this is a temporary dirty hack.
         //  Transfer device objects to a separate IndexMap to be able to wrap them into Arc<Mutex<>> for multithreading
         for dev_name in running_dev_names {
             let dev = self.devices.shift_remove(&dev_name).unwrap();
