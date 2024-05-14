@@ -81,6 +81,15 @@ use crate::utils::*;
 ///
 /// When creating a new type that represents an NI device, implementing this trait ensures that the type has all the necessary methods and behaviors typical of NI devices. Implementers can then extend or override these methods as necessary to provide device-specific behavior or optimizations.
 pub trait BaseDevice {
+    // ToDo: this is a temporary dirty fix. Remove after crate merge
+    //  BaseDevice does not need to include anything about hardware settings
+    fn get_start_trig_in(&self) -> Option<String>;
+    fn get_start_trig_out(&self) -> Option<String>;
+    fn get_samp_clk_in(&self) -> Option<String>;
+    fn get_samp_clk_out(&self) -> Option<String>;
+    fn get_ref_clk_in(&self) -> Option<String>;
+    // ToDo: this is a temporary dirty fix. Remove after crate merge
+
     // Immutable accessors (getters)
     fn channels(&self) -> &IndexMap<String, Channel>;
     fn name(&self) -> &str;
@@ -834,6 +843,25 @@ impl Device {
 }
 
 impl BaseDevice for Device {
+    // ToDo: this is a temporary dirty fix. Remove after crate merge
+    //  BaseDevice does not need to include anything about hardware settings
+    fn get_start_trig_in(&self) -> Option<String> {
+        self.get_start_trig_in()
+    }
+    fn get_start_trig_out(&self) -> Option<String> {
+        self.get_start_trig_out()
+    }
+    fn get_samp_clk_in(&self) -> Option<String> {
+        self.get_samp_clk_in()
+    }
+    fn get_samp_clk_out(&self) -> Option<String> {
+        self.get_samp_clk_out()
+    }
+    fn get_ref_clk_in(&self) -> Option<String> {
+        self.get_ref_clk_in()
+    }
+    // ToDo: this is a temporary dirty fix. Remove after crate merge
+
     // Immutable accessors (getters)
     fn channels(&self) -> &IndexMap<String, Channel> {
         &self.channels

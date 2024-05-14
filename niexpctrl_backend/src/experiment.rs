@@ -45,6 +45,7 @@
 //! module. Also, make sure to explore other related modules like [`device`], [`utils`] for comprehensive
 //! device streaming behavior and NI-DAQmx specific operations, respectively.
 
+use std::collections::HashMap;
 use numpy;
 use pyo3::prelude::*;
 use rayon::prelude::*;
@@ -52,6 +53,7 @@ use indexmap::IndexMap;
 use std::sync::Arc;
 use parking_lot::Mutex;
 use std::sync::mpsc::{Sender, Receiver, channel};
+use std::thread;
 use std::thread::JoinHandle;
 
 use nicompiler_backend::*;
@@ -134,8 +136,66 @@ impl Experiment {
         Ok(())
     }
 
-    pub fn cfg_run_(&mut self, bufsize_ms: f64) -> Result<(), String> {
+    fn collect_thread_reports(&mut self) -> Result<(), String> {
+        // Wait for each worker thread to report completion or stop working (by returning or panicking)
+        let mut failed_worker_names = Vec::new();
+        for (dev_name, recvr) in self.worker_report_recvrs.iter() {
+            match recvr.recv() {
+                Ok(()) => {},
+                Err(_err) => { failed_worker_names.push(dev_name.to_string())},
+            };
+        };
+        if failed_worker_names.is_empty() {
+            return Ok(())
+        }
 
+        // If any of the workers did not report Ok, they must have stopped either by gracefully returning a WorkerError or by panicking.
+        // Collect info from all failed workers and return the full error message.
+
+        // For each failed worker:
+        // * dispose of thread_report_receiver
+        // * join the thread to collect error info (join() will automatically consume and dispose of the thread handle)
+        let mut err_msg_map = IndexMap::new();
+        for dev_name in failed_worker_names.iter() {
+            self.worker_report_recvrs.shift_remove(dev_name).unwrap();
+
+            let join_handle = self.worker_handles.shift_remove(dev_name).unwrap();
+            match join_handle.join() {
+                Ok(worker_result) => {
+                    // The worker had an error but returned gracefully. The WorkerError should be contained in the return result
+                    match worker_result {
+                        Err(worker_error) => err_msg_map.insert(dev_name.to_string(), worker_error.to_string()),
+                        Ok(_) => panic!("Unexpected scenario - worker '{dev_name}' has stopped working (did not report completion on thread_report_recvr) but returned a non-error result"),
+                    }
+                },
+                Err(_panic_info) => {
+                    // The worker has panicked. Panic info should be contained in the returned object
+                    err_msg_map.insert(dev_name.to_string(), format!("Worker has panicked"))
+                },
+            };
+        }
+        // Assemble and return the full error message string
+        let mut full_err_msg = String::new();
+        for (dev_name, err_msg) in err_msg_map {
+            full_err_msg.push_str(&format!(
+                "[{dev_name}] {err_msg}\n"
+            ))
+        }
+
+        // FixMe: this is a temporary dirty hack.
+        //  Transfer device objects back to the main map (they were transferred out to be able to wrap them into Arc<Mutex<>> for multithreading)
+        for dev_name in failed_worker_names.iter() {
+            let dev_container = self.running_devs.shift_remove(dev_name).unwrap();
+            let dev = Arc::into_inner(dev_container).unwrap().into_inner();  // this line extracts Device instance from Arc<Mutex<>> container
+            self.devices.insert(dev_name.to_string(), dev);
+        }
+
+        // println!("[collect_thread_reports()] list of failed threads: {:?}", failed_worker_names);
+        // println!("[collect_thread_reports()] full error message:\n{}", full_err_msg);
+        Err(full_err_msg)
+    }
+
+    pub fn cfg_run_(&mut self, bufsize_ms: f64) -> Result<(), String> {
         let running_dev_names: Vec<String> = self.devices
             .iter()
             .filter(|(_name, dev)| dev.is_compiled())
@@ -145,7 +205,6 @@ impl Experiment {
             return Ok(())
         };
 
-
         /* ToDo: Maybe add a consistency check here: no clash between any exports (ref clk, start_trig, samp_clk) */
 
         // Prepare thread sync mechanisms
@@ -154,7 +213,7 @@ impl Experiment {
         self.worker_cmd_chan = CmdChan::new();  // the old instance can be reused, but refreshing here to zero `msg_num` for simplicity
 
         // - inter-worker start_trig sync channels
-        let mut start_sync = IndexMap::new();
+        let mut start_sync = HashMap::new();
         if let Some(primary_dev_name) = &self.start_trig_primary {
             // Sanity checks
             if !running_dev_names.contains(primary_dev_name) {
@@ -196,23 +255,40 @@ impl Experiment {
             self.running_devs.insert(dev_name, Arc::new(Mutex::new(dev)));
         }
 
-        // Static ref clk export
+        // Do static ref clk export
+        /* We are using static ref_clk export (as opposed to task-based export) to be able to always use
+        the same card as the clock reference source even if this card does not run this time. */
         if let Err(daqmx_err) = self.export_ref_clk_() {
             return Err(daqmx_err.to_string())
         };
 
-        for (dev_name, dev) in self.running_devs.iter() {
+        for (dev_name, dev_container) in self.running_devs.iter() {
             // - worker command receiver
             let cmd_recvr = self.worker_cmd_chan.new_recvr();
 
             // - worker report channel
-            let (report_sender, report_recvr) = channel();
+            let (report_sendr, report_recvr) = channel();
             self.worker_report_recvrs.insert(dev_name.to_string(), report_recvr);
 
-            // ToDo: launch thread here
+            // Launch worker thread
+            let dev_mutex = dev_container.clone();
+            let spawn_result = thread::Builder::new().name(dev_name.to_string())
+                .spawn(move || -> Result<(), WorkerError> {
+                    let mut dev = dev_mutex.lock();
+                    dev.worker_loop(
+                        bufsize_ms,
+                        cmd_recvr, report_sendr,
+                        start_sync.remove(dev_name).unwrap()
+                    )
+                });
+            let handle = match spawn_result {
+                Ok(handle) => handle,
+                Err(err) => return Err(err.to_string())
+            };
+            self.worker_handles.insert(dev_name.to_string(), handle);
         }
-
-        todo!()
+        // Wait for all workers to report completion (handle error collection if necessary)
+        self.collect_thread_reports()
     }
     pub fn stream_run_(&mut self, calc_next: bool) -> Result<(), String> {
         todo!()

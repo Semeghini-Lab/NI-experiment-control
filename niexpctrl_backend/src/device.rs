@@ -32,8 +32,10 @@ use crate::utils::{Semaphore, StreamCounter};
 
 use std::sync::Arc;
 use std::sync::mpsc::{Sender, Receiver, SendError, RecvError};
+use ndarray::Array2;
 
 use nicompiler_backend::*;
+use crate::worker_cmd_chan::{CmdRecvr, WorkerCmd};
 
 pub struct WorkerError {
     msg: String
@@ -62,6 +64,11 @@ impl From<String> for WorkerError {
         Self {
             msg: format!("Worker thread encountered the following error: \n{value}")
         }
+    }
+}
+impl ToString for WorkerError {
+    fn to_string(&self) -> String {
+        self.msg.clone()
     }
 }
 
@@ -213,7 +220,31 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
     }
     */
 
-    fn cfg_run(&self, bufsize_ms: f64) -> (NiTask, StreamCounter) {
+    fn worker_loop(
+        &mut self,
+        bufsize_ms: f64,
+        mut cmd_recvr: CmdRecvr, report_sendr: Sender<()>,
+        start_sync: StartSync,
+    ) -> Result<(), WorkerError> {
+        let (task, mut counter) = self.cfg_run_(bufsize_ms)?;
+        report_sendr.send(())?;
+
+        loop {
+            match cmd_recvr.recv()? {
+                WorkerCmd::Stream => {
+                    self.stream_run_(&task, &mut counter, &start_sync)?;
+                    report_sendr.send(())?;
+                },
+                WorkerCmd::Clear => {
+                    self.close_run_(task, counter)?;
+                    break
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn cfg_run_(&self, bufsize_ms: f64) -> Result<(NiTask, StreamCounter), WorkerError> {
         let buf_dur = bufsize_ms / 1000.0;
         let seq_len = self.total_samps();
         let buf_size = std::cmp::min(
@@ -225,14 +256,13 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         //  and NI DAQmx bufwrite will fail - min sample number to write is 2
         //  (but once >=2, any other sample number to write is valid)
         let mut counter = StreamCounter::new(seq_len, buf_size);
-        let (mut start_pos, mut end_pos) = counter.tick_next();
 
         // DAQmx Setup
-        let task = NiTask::new();
-        self.cfg_task_channels(&task);
-        task.cfg_output_buffer(buf_size);
-        task.disallow_regen();
-        self.cfg_clk_sync(&task, seq_len);
+        let task = NiTask::new()?;
+        self.create_task_channels(&task)?;
+        task.cfg_output_buffer(buf_size)?;
+        task.disallow_regen()?;
+        self.cfg_clk_sync(&task, seq_len)?;
 
         // Calc and write the initial sample chunk into the buffer
         // let bufwrite = |signal| {
@@ -242,15 +272,28 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         //     };
         // };
 
-        let signal = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
-        task.bufwrite(signal, self.task_type());
+        let (mut start_pos, mut end_pos) = counter.tick_next();
+        let samp_arr = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
+        self.write_buf(&task, samp_arr)?;
         // bufwrite(signal);
 
         // FixMe [after Device move to streamer crate]:
         //  store NiTask+StreamCounter in internal fields instead of returning and storing in Experiment
-        (task, counter)
+        Ok((task, counter))
+    }
+    fn stream_run_(&self, task: &NiTask, counter: &mut StreamCounter, start_sync: &StartSync, calc_next: bool) -> Result<(), WorkerError> {
+        todo!()
+    }
+    fn close_run_(&self, task: NiTask, counter: StreamCounter) -> Result<(), WorkerError> {
+        todo!()
     }
 
+    fn write_buf(&self, task: &NiTask, samp_arr: Array2<f64>, timeout: WriteTimeout) -> Result<usize, DAQmxError> {
+        match self.task_type() {
+            TaskType::AO => task.write_analog(&samp_arr, timeout),
+            TaskType::DO => task.write_digital_port(&samp_arr.map(|&x| x as u32), timeout),
+        }
+    }
     /*
     fn stream_run(&self, sem: Arc<Semaphore>, dev_num: usize, calc_next: bool, task: &NiTask, counter: &mut StreamCounter, wait_timeout: f64) {
         // The device exporting start trigger should start last
@@ -303,20 +346,21 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
     /// `create_do_chan` method for each channel.
     ///
     /// The channel names are constructed using the format `/{device_name}/{channel_name}`.
-    fn cfg_task_channels(&self, task: &NiTask) {
+    fn create_task_channels(&self, task: &NiTask) -> Result<(), DAQmxError> {
         match self.task_type() {
             TaskType::AO => {
                 // Require compiled, streamable channels
-                self.compiled_channels(true, false).iter().for_each(|chan| {
-                    task.create_ao_chan(&format!("/{}/{}", &self.name(), chan.name()));
-                });
+                for chan in self.compiled_channels(true, false).iter() {
+                    task.create_ao_chan(&format!("/{}/{}", self.name(), chan.name()))?;
+                };
             }
             TaskType::DO => {
-                self.compiled_channels(true, false).iter().for_each(|chan| {
-                    task.create_do_chan(&format!("/{}/{}", &self.name(), chan.name()));
-                });
+                for chan in self.compiled_channels(true, false).iter() {
+                    task.create_do_chan(&format!("/{}/{}", self.name(), chan.name()))?;
+                };
             }
-        }
+        };
+        Ok(())
     }
 
     /// Configures the synchronization and clock behavior for the device.
@@ -339,38 +383,58 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
     ///    while secondary devices will configure their tasks to expect the start trigger.
     /// 3. Configures reference clocking based on the device's `ref_clk_line`. Devices that import the reference clock will
     ///    configure it accordingly, while others will export the signal.
-    fn cfg_clk_sync(&self, task: &NiTask, seq_len: usize) {
-        let seq_len = seq_len as u64;
+    fn cfg_clk_sync(&self, task: &NiTask, seq_len: usize) -> Result<(), DAQmxError> {
+        // (1) Sample clock timing mode (includes samp_clk_in). Additionally, config samp_clk_out
+        let samp_clk_in = self.get_samp_clk_in().unwrap_or("".to_string());
+        task.cfg_samp_clk_timing(
+            &samp_clk_in,
+            self.samp_rate(),
+            seq_len as u64
+        )?;
+        if let Some(samp_clk_out) = self.get_samp_clk_out() {
+            task.export_signal(
+                DAQMX_VAL_SAMPLECLOCK,
+                &format!("/{}/{}", self.name(), samp_clk_out)
+            )?
+        };
+        // (2) Start trigger:
+        if let Some(start_trig_in) = self.get_start_trig_in() {
+            task.cfg_dig_edge_start_trigger(&format!("/{}/{}", self.name(), start_trig_in))?
+        };
+        if let Some(start_trig_out) = self.get_start_trig_out() {
+            task.export_signal(
+                DAQMX_VAL_STARTTRIGGER,
+                &format!("/{}/{}", self.name(), start_trig_out)
+            )?
+        };
+        // (3) Reference clock
+        /*  Only handling ref_clk import here.
 
-        // (1) Configure sample clock first
-        let samp_clk_src = self.samp_clk_src().unwrap_or("");
-        task.cfg_sample_clk(samp_clk_src, self.samp_rate(), seq_len);
+        The "easily accessible" static ref_clk export from a single card should have already been done
+        by the Streamer if user specified `ref_clk_provider`.
+        Not providing the "easy access" to exporting ref_clk from more than one card on purpose.
 
-        // (2) Configure start trigger:
-        //  * primary device exports,
-        //  * secondary devices configure task to expect start trigger
-        if let Some(trig_line) = self.trig_line() {
-            match self.export_trig().unwrap() {
-                true => task.export_signal(
-                    DAQMX_VAL_STARTTRIGGER,
-                    &format!("/{}/{}", &self.name(), trig_line),
-                ),
-                false => {
-                    task.cfg_dig_edge_start_trigger(&format!("/{}/{}", &self.name(), trig_line,))
-                }
-            }
+        (Reminder: we are using static ref_clk export (as opposed to task-based export) to be able to always use
+        the same card as the clock reference source even if this card does not run this time)
+
+        NIDAQmx allows exporting 10MHz ref_clk from more than one card. And this even has a realistic use case
+        of chained clock locking when a given card both locks to external ref_clk and exports its own
+        reference for use by another card.
+
+        The risk is that the user may do ref_clk export and forget to add pulses to this card. In such case
+        the reference signal will show up but it will not be locked to the input reference
+        since locking is only done on the per-task basis. This may lead to very hard-to-find footguns
+        because it is hard to distinguish between locked and free-running 10MHz signals.
+
+        For that reason, we still leave room for arbitrary (static) export from any number of cards,
+        but only expose it through the "advanced" function `nidaqmx::connect_terms()`.
+        */
+        if let Some(ref_clk_in) = self.get_ref_clk_in() {
+            task.set_ref_clk_src(&format!("/{}/{}", self.name(), ref_clk_in))?;
+            task.set_ref_clk_rate(10.0e6)?;
         };
 
-        // (3) Configure PLL locking to external reference clock signal
-        if let Some((src, export, rate)) = self.ref_clk() {
-            match export {
-                true => {},  // ref clock has already been exported statically
-                false => task.cfg_ref_clk(src, rate),
-            }
-        }
-        // if let Some(ref_clk_line) = self.ref_clk_src() {
-        //     task.cfg_ref_clk(ref_clk_line, self.ref_clk_rate().unwrap())
-        // }  // ToDo: remove
+        Ok(())
     }
 }
 

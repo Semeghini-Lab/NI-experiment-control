@@ -91,6 +91,7 @@ pub const DAQMX_VAL_WAITINFINITELY: CFloat64 = -1.0;
 pub const DAQMX_VAL_CHANPERLINE: CInt32 = 0;
 pub const DAQMX_VAL_CHANFORALLLINES: CInt32 = 1;
 pub const DAQMX_VAL_STARTTRIGGER: CInt32 = 12491;
+pub const DAQMX_VAL_SAMPLECLOCK: CInt32 = 12487;
 pub const DAQMX_VAL_10MHZREFCLOCK: CInt32 = 12536;
 pub const DAQMX_VAL_DO_NOT_INVERT_POLARITY: CInt32 = 0;
 
@@ -195,6 +196,11 @@ impl From<NulError> for DAQmxError {
     fn from(value: NulError) -> Self {
         DAQmxError::new(format!("Failed to convert '{}' to CString", value.to_string()))
     }
+}
+
+pub enum WriteTimeout {
+    Finite(f64),
+    Infinite,
 }
 
 /// Calls a DAQmx C-function and handles potential errors.
@@ -356,7 +362,7 @@ impl NiTask {
         daqmx_call(|| unsafe { DAQmxSetWriteRegenMode(self.handle, DAQMX_VAL_DONOTALLOWREGEN) })
     }
 
-    pub fn cfg_sample_clk(&self, clk_src: &str, samp_rate: f64, seq_len: u64) -> Result<(), DAQmxError> {
+    pub fn cfg_samp_clk_timing(&self, clk_src: &str, samp_rate: f64, seq_len: u64) -> Result<(), DAQmxError> {
         let src_cstring = std::ffi::CString::new(clk_src)?;
         daqmx_call(|| unsafe {
             DAQmxCfgSampClkTiming(
@@ -403,16 +409,20 @@ impl NiTask {
         })
     }
 
-    pub fn write_digital_port(&self, signal_arr: &Array2<u32>) -> Result<usize, DAQmxError> {
+    pub fn write_digital_port(&self, samp_arr: &Array2<u32>, timeout: WriteTimeout) -> Result<usize, DAQmxError> {
+        let timeout = match timeout {
+            WriteTimeout::Finite(timeout) => timeout,
+            WriteTimeout::Infinite => DAQMX_VAL_WAITINFINITELY as f64,
+        };
         let mut nwritten: CInt32 = 0;
         daqmx_call(|| unsafe {
             DAQmxWriteDigitalU32(
                 self.handle,
-                signal_arr.shape()[1] as CInt32,
+                samp_arr.shape()[1] as CInt32,
                 false as CBool32,
-                DAQMX_VAL_WAITINFINITELY,
+                timeout,
                 DAQMX_VAL_GROUPBYCHANNEL,
-                signal_arr.as_ptr(),
+                samp_arr.as_ptr(),
                 &mut nwritten as *mut CInt32,
                 std::ptr::null_mut(),
             )
@@ -420,16 +430,20 @@ impl NiTask {
         Ok(nwritten as usize)
     }
 
-    pub fn write_digital_lines(&self, signal_arr: &Array2<u8>) -> Result<usize, DAQmxError> {
+    pub fn write_digital_lines(&self, samp_arr: &Array2<u8>, timeout: WriteTimeout) -> Result<usize, DAQmxError> {
+        let timeout = match timeout {
+            WriteTimeout::Finite(timeout) => timeout,
+            WriteTimeout::Infinite => DAQMX_VAL_WAITINFINITELY as f64,
+        };
         let mut nwritten: CInt32 = 0;
         daqmx_call(|| unsafe {
             DAQmxWriteDigitalLines(
                 self.handle,
-                signal_arr.shape()[1] as CInt32,
+                samp_arr.shape()[1] as CInt32,
                 false as CBool32,
-                DAQMX_VAL_WAITINFINITELY,
+                timeout,
                 DAQMX_VAL_GROUPBYCHANNEL,
-                signal_arr.as_ptr(),
+                samp_arr.as_ptr(),
                 &mut nwritten as *mut CInt32,
                 std::ptr::null_mut(),
             )
@@ -437,20 +451,24 @@ impl NiTask {
         Ok(nwritten as usize)
     }
 
-    pub fn write_analog(&self, signal_arr: &Array2<f64>) -> Result<usize, DAQmxError> {
+    pub fn write_analog(&self, samp_arr: &Array2<f64>, timeout: WriteTimeout) -> Result<usize, DAQmxError> {
+        let timeout = match timeout {
+            WriteTimeout::Finite(timeout) => timeout,
+            WriteTimeout::Infinite => DAQMX_VAL_WAITINFINITELY as f64,
+        };
         let mut nwritten: CInt32 = 0;
         daqmx_call(|| unsafe {
             DAQmxWriteAnalogF64(
                 self.handle,
-                signal_arr.shape()[1] as CInt32,
+                samp_arr.shape()[1] as CInt32,
                 false as CBool32,
-                DAQMX_VAL_WAITINFINITELY,
+                timeout,
                 DAQMX_VAL_GROUPBYCHANNEL,
-                signal_arr.as_ptr(),
+                samp_arr.as_ptr(),
                 &mut nwritten as *mut CInt32,
                 std::ptr::null_mut(),
             )
-        });
+        })?;
         Ok(nwritten as usize)
     }
 
