@@ -78,6 +78,27 @@ pub enum StartSync {
     None
 }
 
+pub struct StreamBundle {
+    task_type: TaskType,
+    ni_task: NiTask,
+    counter: StreamCounter,
+    buf_write_timeout: Option<f64>,  // Some(finite_timeout_in_seconds) or None - wait infinitely
+}
+impl StreamBundle {
+    fn write_buf(&self, samp_arr: Array2<f64>) -> Result<usize, DAQmxError> {
+        match self.task_type {
+            TaskType::AO => self.ni_task.write_analog(
+                &samp_arr,
+                self.buf_write_timeout.clone()
+            ),
+            TaskType::DO => self.ni_task.write_digital_port(
+                &samp_arr.map(|&x| x as u32),
+                self.buf_write_timeout.clone()
+            ),
+        }
+    }
+}
+
 /// The `StreamableDevice` trait extends the [`nicompiler_backend::BaseDevice`] trait of [`nicompiler_backend::Device`]
 /// to provide additional functionality for streaming tasks.
 pub trait StreamableDevice: BaseDevice + Sync + Send {
@@ -226,17 +247,17 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         mut cmd_recvr: CmdRecvr, report_sendr: Sender<()>,
         start_sync: StartSync,
     ) -> Result<(), WorkerError> {
-        let (task, mut counter) = self.cfg_run_(bufsize_ms)?;
+        let mut stream_bundle = self.cfg_run_(bufsize_ms)?;
         report_sendr.send(())?;
 
         loop {
             match cmd_recvr.recv()? {
                 WorkerCmd::Stream => {
-                    self.stream_run_(&task, &mut counter, &start_sync)?;
+                    self.stream_run_(&mut stream_bundle, &start_sync)?;
                     report_sendr.send(())?;
                 },
                 WorkerCmd::Clear => {
-                    self.close_run_(task, counter)?;
+                    self.close_run_(stream_bundle)?;
                     break
                 }
             }
@@ -244,8 +265,13 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         Ok(())
     }
 
-    fn cfg_run_(&self, bufsize_ms: f64) -> Result<(NiTask, StreamCounter), WorkerError> {
+    fn cfg_run_(&self, bufsize_ms: f64) -> Result<StreamBundle, WorkerError> {
         let buf_dur = bufsize_ms / 1000.0;
+        let buf_write_timeout = match self.get_min_bufwrite_timeout() {
+            Some(min_timeout) => Some(std::cmp::max(10.0*buf_dur, min_timeout)),
+            None => None,
+        };
+
         let seq_len = self.total_samps();
         let buf_size = std::cmp::min(
             seq_len,
@@ -264,36 +290,30 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         task.disallow_regen()?;
         self.cfg_clk_sync(&task, seq_len)?;
 
-        // Calc and write the initial sample chunk into the buffer
-        // let bufwrite = |signal| {
-        //     match self.task_type() {
-        //         TaskType::AO => task.write_analog(&signal),
-        //         TaskType::DO => task.write_digital_port(&signal.map(|&x| x as u32)),
-        //     };
-        // };
+        // Bundle NiTask, StreamCounter, buf_write_timeout, and task_type together for convenience:
+        let mut stream_bundle = StreamBundle {
+            task_type: self.task_type(),
+            ni_task: task,
+            counter,
+            buf_write_timeout,
+        };
 
-        let (mut start_pos, mut end_pos) = counter.tick_next();
+        // Calc and write the initial sample chunk into the buffer
+        let (mut start_pos, mut end_pos) = stream_bundle.counter.tick_next();
         let samp_arr = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
-        self.write_buf(&task, samp_arr)?;
-        // bufwrite(signal);
+        stream_bundle.write_buf(samp_arr)?;
 
         // FixMe [after Device move to streamer crate]:
-        //  store NiTask+StreamCounter in internal fields instead of returning and storing in Experiment
-        Ok((task, counter))
+        //  store NiTask+StreamCounter in internal fields instead of returning and passing to stream_/close_run_()
+        Ok(stream_bundle)
     }
-    fn stream_run_(&self, task: &NiTask, counter: &mut StreamCounter, start_sync: &StartSync, calc_next: bool) -> Result<(), WorkerError> {
+    fn stream_run_(&self, stream_bundle: &mut StreamBundle, start_sync: &StartSync, calc_next: bool) -> Result<(), WorkerError> {
         todo!()
     }
-    fn close_run_(&self, task: NiTask, counter: StreamCounter) -> Result<(), WorkerError> {
+    fn close_run_(&self, stream_bundle: StreamBundle) -> Result<(), WorkerError> {
         todo!()
     }
 
-    fn write_buf(&self, task: &NiTask, samp_arr: Array2<f64>, timeout: WriteTimeout) -> Result<usize, DAQmxError> {
-        match self.task_type() {
-            TaskType::AO => task.write_analog(&samp_arr, timeout),
-            TaskType::DO => task.write_digital_port(&samp_arr.map(|&x| x as u32), timeout),
-        }
-    }
     /*
     fn stream_run(&self, sem: Arc<Semaphore>, dev_num: usize, calc_next: bool, task: &NiTask, counter: &mut StreamCounter, wait_timeout: f64) {
         // The device exporting start trigger should start last

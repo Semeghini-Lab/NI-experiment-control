@@ -70,7 +70,6 @@ use libc;
 use ndarray::Array2;
 use std::fs::OpenOptions;
 use std::io::Write;
-use nicompiler_backend::TaskType;
 
 type CConstStr = *const libc::c_char;
 type CCharBuf = *mut libc::c_char;
@@ -196,11 +195,6 @@ impl From<NulError> for DAQmxError {
     fn from(value: NulError) -> Self {
         DAQmxError::new(format!("Failed to convert '{}' to CString", value.to_string()))
     }
-}
-
-pub enum WriteTimeout {
-    Finite(f64),
-    Infinite,
 }
 
 /// Calls a DAQmx C-function and handles potential errors.
@@ -409,10 +403,10 @@ impl NiTask {
         })
     }
 
-    pub fn write_digital_port(&self, samp_arr: &Array2<u32>, timeout: WriteTimeout) -> Result<usize, DAQmxError> {
+    pub fn write_digital_port(&self, samp_arr: &Array2<u32>, timeout: Option<f64>) -> Result<usize, DAQmxError> {
         let timeout = match timeout {
-            WriteTimeout::Finite(timeout) => timeout,
-            WriteTimeout::Infinite => DAQMX_VAL_WAITINFINITELY as f64,
+            Some(timeout) => timeout as CFloat64,
+            None => DAQMX_VAL_WAITINFINITELY,
         };
         let mut nwritten: CInt32 = 0;
         daqmx_call(|| unsafe {
@@ -430,10 +424,10 @@ impl NiTask {
         Ok(nwritten as usize)
     }
 
-    pub fn write_digital_lines(&self, samp_arr: &Array2<u8>, timeout: WriteTimeout) -> Result<usize, DAQmxError> {
+    pub fn write_digital_lines(&self, samp_arr: &Array2<u8>, timeout: Option<f64>) -> Result<usize, DAQmxError> {
         let timeout = match timeout {
-            WriteTimeout::Finite(timeout) => timeout,
-            WriteTimeout::Infinite => DAQMX_VAL_WAITINFINITELY as f64,
+            Some(timeout) => timeout as CFloat64,
+            None => DAQMX_VAL_WAITINFINITELY,
         };
         let mut nwritten: CInt32 = 0;
         daqmx_call(|| unsafe {
@@ -451,10 +445,10 @@ impl NiTask {
         Ok(nwritten as usize)
     }
 
-    pub fn write_analog(&self, samp_arr: &Array2<f64>, timeout: WriteTimeout) -> Result<usize, DAQmxError> {
+    pub fn write_analog(&self, samp_arr: &Array2<f64>, timeout: Option<f64>) -> Result<usize, DAQmxError> {
         let timeout = match timeout {
-            WriteTimeout::Finite(timeout) => timeout,
-            WriteTimeout::Infinite => DAQMX_VAL_WAITINFINITELY as f64,
+            Some(timeout) => timeout as CFloat64,
+            None => DAQMX_VAL_WAITINFINITELY,
         };
         let mut nwritten: CInt32 = 0;
         daqmx_call(|| unsafe {
@@ -513,15 +507,6 @@ impl NiTask {
             DAQmxGetWriteTotalSampPerChanGenerated(self.handle, &mut data as *mut CUint64)
         })?;
         Ok(data as u64)
-    }
-}
-
-impl NiTask {
-    pub fn bufwrite(&self, signal: Array2<f64>, task_type: TaskType) -> Result<usize, DAQmxError> {
-        match task_type {
-            TaskType::AO => self.write_analog(&signal),
-            TaskType::DO => self.write_digital_port(&signal.map(|&x| x as u32))
-        }
     }
 }
 

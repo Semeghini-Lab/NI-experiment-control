@@ -88,6 +88,7 @@ pub trait BaseDevice {
     fn get_samp_clk_in(&self) -> Option<String>;
     fn get_samp_clk_out(&self) -> Option<String>;
     fn get_ref_clk_in(&self) -> Option<String>;
+    fn get_min_bufwrite_timeout(&self) -> Option<f64>;
     // ToDo: this is a temporary dirty fix. Remove after crate merge
 
     // Immutable accessors (getters)
@@ -772,6 +773,7 @@ pub struct Device {
                                 )
                                 */
     ref_clk_in: Option<String>,
+    min_bufwrite_timeout: Option<f64>,  // Some(timeout_seconds) or None - wait infinitely
 }
 
 impl Device {
@@ -803,6 +805,7 @@ impl Device {
             samp_clk_in: None,
             samp_clk_out: None,
             ref_clk_in: None,
+            min_bufwrite_timeout: Some(5.0),
         }
     }
 
@@ -840,6 +843,10 @@ impl Device {
     pub fn set_ref_clk_in(&mut self, terminal: Option<String>) {
         self.ref_clk_in = terminal;
     }
+
+    pub fn set_min_bufwrite_timeout(&mut self, min_timeout: Option<f64>) {
+        self.min_bufwrite_timeout = min_timeout;
+    }
 }
 
 impl BaseDevice for Device {
@@ -859,6 +866,9 @@ impl BaseDevice for Device {
     }
     fn get_ref_clk_in(&self) -> Option<String> {
         self.get_ref_clk_in()
+    }
+    fn get_min_bufwrite_timeout(&self) -> Option<f64> {
+        self.min_bufwrite_timeout.clone()
     }
     // ToDo: this is a temporary dirty fix. Remove after crate merge
 
