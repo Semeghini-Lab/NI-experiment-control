@@ -349,8 +349,12 @@ impl NiTask {
     pub fn stop(&self) -> Result<(), DAQmxError> {
         daqmx_call(|| unsafe { DAQmxStopTask(self.handle) })
     }
-    pub fn wait_until_done(&self, timeout: f64) -> Result<(), DAQmxError> {
-        daqmx_call(|| unsafe { DAQmxWaitUntilTaskDone(self.handle, timeout as CFloat64) })
+    pub fn wait_until_done(&self, timeout: Option<f64>) -> Result<(), DAQmxError> {
+        let timeout = match timeout {
+            Some(timeout) => timeout as CFloat64,
+            None => DAQMX_VAL_WAITINFINITELY,
+        };
+        daqmx_call(|| unsafe { DAQmxWaitUntilTaskDone(self.handle, timeout) })
     }
     pub fn disallow_regen(&self) -> Result<(), DAQmxError> {
         daqmx_call(|| unsafe { DAQmxSetWriteRegenMode(self.handle, DAQMX_VAL_DONOTALLOWREGEN) })

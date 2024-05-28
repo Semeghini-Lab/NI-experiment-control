@@ -3,7 +3,7 @@ use parking_lot::{Condvar, Mutex};
 
 #[derive(Clone, Copy)]
 pub enum WorkerCmd {
-    Stream,
+    Stream(bool),
     Clear,
 }
 
