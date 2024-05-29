@@ -153,8 +153,9 @@ impl Experiment {
         // Collect info from all failed workers and return the full error message.
 
         // For each failed worker:
-        // * dispose of thread_report_receiver
-        // * join the thread to collect error info (join() will automatically consume and dispose of the thread handle)
+        // * dispose of worker_report_receiver
+        // * join the thread to collect error info [join() will automatically consume and dispose of the thread handle]
+        // * transfer Device object from `self.running_devs` back to the main `self.devices`  // FixMe: this is a temporary dirty hack. Transfer device objects back to the main map (they were transferred out to be able to wrap them into Arc<Mutex<>> for multithreading)
         let mut err_msg_map = IndexMap::new();
         for dev_name in failed_worker_names.iter() {
             self.worker_report_recvrs.shift_remove(dev_name).unwrap();
@@ -173,7 +174,12 @@ impl Experiment {
                     err_msg_map.insert(dev_name.to_string(), format!("Worker has panicked"))
                 },
             };
+
+            let dev_container = self.running_devs.shift_remove(dev_name).unwrap();
+            let dev = Arc::into_inner(dev_container).unwrap().into_inner();  // this line extracts Device instance from Arc<Mutex<>> container
+            self.devices.insert(dev_name.to_string(), dev);
         }
+
         // Assemble and return the full error message string
         let mut full_err_msg = String::new();
         for (dev_name, err_msg) in err_msg_map {
@@ -181,15 +187,6 @@ impl Experiment {
                 "[{dev_name}] {err_msg}\n"
             ))
         }
-
-        // FixMe: this is a temporary dirty hack.
-        //  Transfer device objects back to the main map (they were transferred out to be able to wrap them into Arc<Mutex<>> for multithreading)
-        for dev_name in failed_worker_names.iter() {
-            let dev_container = self.running_devs.shift_remove(dev_name).unwrap();
-            let dev = Arc::into_inner(dev_container).unwrap().into_inner();  // this line extracts Device instance from Arc<Mutex<>> container
-            self.devices.insert(dev_name.to_string(), dev);
-        }
-
         // println!("[collect_thread_reports()] list of failed threads: {:?}", failed_worker_names);
         // println!("[collect_thread_reports()] full error message:\n{}", full_err_msg);
         Err(full_err_msg)
@@ -262,6 +259,7 @@ impl Experiment {
             return Err(daqmx_err.to_string())
         };
 
+        // Prepare a few more inter-thread sync objects and launch worker threads
         for (dev_name, dev_container) in self.running_devs.iter() {
             // - worker command receiver
             let cmd_recvr = self.worker_cmd_chan.new_recvr();
@@ -287,7 +285,7 @@ impl Experiment {
             };
             self.worker_handles.insert(dev_name.to_string(), handle);
         }
-        // Wait for all workers to report completion (handle error collection if necessary)
+        // Wait for all workers to report config completion (handle error collection if necessary)
         self.collect_worker_reports()
     }
     pub fn stream_run_(&mut self, calc_next: bool) -> Result<(), String> {
@@ -295,17 +293,69 @@ impl Experiment {
         self.collect_worker_reports()
     }
     pub fn close_run_(&mut self) {
+        // Undo static reference clock export
+        let ref_clk_exp_undo_result = self.undo_export_ref_clk_();
+
+        // Command all workers to break out of the event loop and return
+        self.worker_cmd_chan.send(WorkerCmd::Clear);
+
+        // Join all worker threads
+        //  At this point it is expected that all workers should just join cleanly and each return Ok(()):
+        //      if there were any errors during `cfg_run_()` or `stream_run_()` calls,
+        //      those threads should have been handled and removed from `self.worker_handles` during `collect_worker_reports()` calls
+        //
+        //  So if now any of the remaining workers doesn't join or joins but returns a WorkerError
+        //  - this is something very unexpected. Try to join all other threads first and launch a panic at the end.
+        let mut join_err_msg_map = IndexMap::new();
+        for (dev_name, handle) in self.worker_handles.drain(..) {
+            match handle.join() {
+                Ok(worker_result) => {
+                    match worker_result {
+                        Ok(()) => {/* this is the only option that we expect */},
+                        Err(worker_error) => {
+                            // The worker has returned gracefully but the return is a WorkerError
+                            join_err_msg_map.insert(dev_name, worker_error.to_string());
+                        },
+                    }
+                },
+                Err(_panic_info) => {
+                    // The worker has panicked
+                    join_err_msg_map.insert(dev_name, format!("The worker appears to have panicked"));
+                },
+            };
+        }
+
+        // Dispose of all worker report receivers
+        self.worker_report_recvrs.clear();
 
         // FixMe: this is a dirty hack.
         //  Transfer device objects to a separate IndexMap to be able to wrap them into Arc<Mutex<>> for multithreading
         // Return all used device objects back to the main IndexMap
-        for (dev_name, dev_box) in self.running_devs.into_iter() {
+        for (dev_name, dev_box) in self.running_devs.drain(..) {
             let dev = Arc::into_inner(dev_box).unwrap().into_inner();
             self.devices.insert(dev_name, dev)
         }
 
-        let _ = self.undo_export_ref_clk_();
-        todo!()
+        // Finally, return
+        if join_err_msg_map.is_empty() && ref_clk_exp_undo_result.is_ok() {
+            // println!("[clear_run()] joined all threads. Completed clearing run. Returning");
+            return;
+        }
+        //  If any unexpected error has occurred:
+        //  * some workers unexpectedly failed
+        //  * static ref_clk export undoing has failed,
+        //  assemble and panic with the full error message string
+        let mut full_err_msg = String::new();
+        full_err_msg.push_str("Error during closing run:\n");
+        if let Err(daqmx_err) = ref_clk_exp_undo_result {
+            full_err_msg.push_str(&format!("Failed to undo static reference clock export: {}\n", daqmx_err.to_string()));
+        }
+        for (dev_name, err_msg) in join_err_msg_map {
+            full_err_msg.push_str(&format!(
+                "[{dev_name}] {err_msg}\n"
+            ))
+        }
+        panic!("{full_err_msg}");
     }
 }
 

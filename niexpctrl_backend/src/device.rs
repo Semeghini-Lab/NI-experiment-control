@@ -244,7 +244,8 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
     fn worker_loop(
         &mut self,
         bufsize_ms: f64,
-        mut cmd_recvr: CmdRecvr, report_sendr: Sender<()>,
+        mut cmd_recvr: CmdRecvr,
+        report_sendr: Sender<()>,
         start_sync: StartSync,
     ) -> Result<(), WorkerError> {
         let mut stream_bundle = self.cfg_run_(bufsize_ms)?;
@@ -257,11 +258,10 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
                     report_sendr.send(())?;
                 },
                 WorkerCmd::Clear => {
-                    self.close_run_(stream_bundle)?;
                     break
                 }
             }
-        }
+        };
         Ok(())
     }
 
@@ -345,9 +345,6 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
             stream_bundle.write_buf(samp_arr)?;
         }
         Ok(())
-    }
-    fn close_run_(&self, stream_bundle: StreamBundle) -> Result<(), WorkerError> {
-        todo!()
     }
 
     /*
