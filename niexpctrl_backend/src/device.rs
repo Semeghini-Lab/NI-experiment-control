@@ -299,7 +299,7 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         };
 
         // Calc and write the initial sample chunk into the buffer
-        let (mut start_pos, mut end_pos) = stream_bundle.counter.tick_next();
+        let (start_pos, end_pos) = stream_bundle.counter.tick_next().unwrap();
         let samp_arr = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
         stream_bundle.write_buf(samp_arr)?;
 
@@ -308,7 +308,7 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         Ok(stream_bundle)
     }
     fn stream_run_(&self, stream_bundle: &mut StreamBundle, start_sync: &StartSync, calc_next: bool) -> Result<(), WorkerError> {
-        // Synchronise task start according to start trigger role
+        // Synchronise task start according to the start trigger role
         match start_sync {
             StartSync::Primary(recvr_vec) => {
                 for recvr in recvr_vec {
@@ -323,19 +323,26 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
             StartSync::None => stream_bundle.ni_task.start()?
         };
 
-        // Streaming loop
+        // Main streaming loop
+        while let Some((start_pos, end_pos)) = stream_bundle.counter.tick_next() {
+            let samp_arr = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
+            stream_bundle.write_buf(samp_arr)?;
+        }
 
         // Now need to wait for the final sample chunk to be generated out by the card before stopping the task.
-        // In the mean time, can calculate and write the initial chunk for the next repetition in the case we are on repeat
-        if calc_next {
-            let (mut start_pos, mut end_pos) = stream_bundle.counter.tick_next();
-            let samp_arr = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
-            stream_bundle.ni_task.wait_until_done()?;
+        // In the mean time, we can calculate the initial chunk for the next repetition in the case we are on repeat.
+        if !calc_next {
+            stream_bundle.ni_task.wait_until_done(stream_bundle.buf_write_timeout.clone())?;
             stream_bundle.ni_task.stop()?;
-            stream_bundle.write_buf(samp_arr)?;
         } else {
-            stream_bundle.ni_task.wait_until_done()?;
+            stream_bundle.counter.reset();
+            let (start_pos, end_pos) = stream_bundle.counter.tick_next();
+            let samp_arr = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
+
+            stream_bundle.ni_task.wait_until_done(stream_bundle.buf_write_timeout.clone())?;
             stream_bundle.ni_task.stop()?;
+
+            stream_bundle.write_buf(samp_arr)?;
         }
         Ok(())
     }

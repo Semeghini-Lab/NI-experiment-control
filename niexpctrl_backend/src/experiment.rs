@@ -136,7 +136,7 @@ impl Experiment {
         Ok(())
     }
 
-    fn collect_thread_reports(&mut self) -> Result<(), String> {
+    fn collect_worker_reports(&mut self) -> Result<(), String> {
         // Wait for each worker thread to report completion or stop working (by returning or panicking)
         let mut failed_worker_names = Vec::new();
         for (dev_name, recvr) in self.worker_report_recvrs.iter() {
@@ -288,10 +288,11 @@ impl Experiment {
             self.worker_handles.insert(dev_name.to_string(), handle);
         }
         // Wait for all workers to report completion (handle error collection if necessary)
-        self.collect_thread_reports()
+        self.collect_worker_reports()
     }
     pub fn stream_run_(&mut self, calc_next: bool) -> Result<(), String> {
-        todo!()
+        self.worker_cmd_chan.send(WorkerCmd::Stream(calc_next));
+        self.collect_worker_reports()
     }
     pub fn close_run_(&mut self) {
 
