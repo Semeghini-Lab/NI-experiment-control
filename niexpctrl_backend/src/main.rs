@@ -63,5 +63,5 @@ fn main() {
     exp.linramp("PXI1Slot3", "ao10", 0., 1., 0., 1., true);
 
     exp.compile(None);
-    exp.stream_exp(50., 1);
+    // exp.stream_exp(50., 1);
 }

@@ -268,7 +268,7 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
     fn cfg_run_(&self, bufsize_ms: f64) -> Result<StreamBundle, WorkerError> {
         let buf_dur = bufsize_ms / 1000.0;
         let buf_write_timeout = match self.get_min_bufwrite_timeout() {
-            Some(min_timeout) => Some(std::cmp::max(10.0*buf_dur, min_timeout)),
+            Some(min_timeout) => Some(f64::max(10.0*buf_dur, min_timeout)),
             None => None,
         };
 
@@ -336,7 +336,7 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
             stream_bundle.ni_task.stop()?;
         } else {
             stream_bundle.counter.reset();
-            let (start_pos, end_pos) = stream_bundle.counter.tick_next();
+            let (start_pos, end_pos) = stream_bundle.counter.tick_next().unwrap();
             let samp_arr = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
 
             stream_bundle.ni_task.wait_until_done(stream_bundle.buf_write_timeout.clone())?;

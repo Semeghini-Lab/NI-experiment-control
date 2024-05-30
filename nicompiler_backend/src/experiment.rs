@@ -776,9 +776,9 @@ pub trait BaseExperiment {
     /// * `src` - The name of the sample clock source.
     ///
     /// See also: [`BaseDevice::cfg_samp_clk_src`]
-    fn device_cfg_samp_clk_src(&mut self, name: &str, src: &str) {
+    /* fn device_cfg_samp_clk_src(&mut self, name: &str, src: &str) {
         self.device_op(name, |dev| (*dev).set_samp_clk_src(src))
-    }
+    } */
 
     /// Configures the trigger settings of a device in the experiment while ensuring synchronization.
     ///
@@ -801,7 +801,7 @@ pub trait BaseExperiment {
     /// This method will panic if the synchronization condition related to a device exporting triggers is violated.
     ///
     /// See also: [`BaseDevice::cfg_trig`]
-    fn device_set_start_trig_term(&mut self, name: &str, terminal: &str) {
+    /* fn device_set_start_trig_term(&mut self, name: &str, terminal: &str) {
         // assert!(
         //     !export_trig
         //         || (export_trig
@@ -813,7 +813,7 @@ pub trait BaseExperiment {
         //     name
         // );
         self.device_op(name, |dev| (*dev).set_start_trig_term(trig_line));
-    }
+    } */
 
     /// Configures the reference clock settings of a device in the experiment.
     ///
@@ -828,7 +828,7 @@ pub trait BaseExperiment {
     /// * `export_ref_clk` - A boolean that determines whether to export (if `true`) or import (if `false`) the reference clock.
     ///
     /// See also: [`BaseDevice::cfg_ref_clk`]
-    fn device_import_ref_clk(
+    /* fn device_import_ref_clk(
         &mut self,
         name: &str,
         src: &str,
@@ -837,7 +837,7 @@ pub trait BaseExperiment {
         self.device_op(name, |dev| {
             (*dev).import_ref_clk(src, rate)
         })
-    }
+    } */
 
     /// Retrieves the `edit_stop_time` for a specific device.
     ///
@@ -1399,9 +1399,9 @@ macro_rules! impl_exp_boilerplate {
                 BaseExperiment::total_run_time(self)
             }
 
-            pub fn check_trig_config(&self) {
+            /* pub fn check_trig_config(&self) {
                 BaseExperiment::check_trig_config(self)
-            }
+            } */
 
             pub fn compile(&mut self, stop_time: Option<f64>) -> f64 {
                 BaseExperiment::compile(self, stop_time)
@@ -1440,15 +1440,15 @@ macro_rules! impl_exp_boilerplate {
                 BaseExperiment::add_do_channel(self, name, port_id, line_id, default_value);
             }
 
-            pub fn device_cfg_samp_clk_src(&mut self, name: &str, src: &str) {
+            /* pub fn device_cfg_samp_clk_src(&mut self, name: &str, src: &str) {
                 BaseExperiment::device_cfg_samp_clk_src(self, name, src);
-            }
+            } */
 
-            pub fn device_set_start_trig_term(&mut self, name: &str, terminal: &str) {
+            /* pub fn device_set_start_trig_term(&mut self, name: &str, terminal: &str) {
                 BaseExperiment::device_set_start_trig_term(self, name, terminal);
-            }
+            } */
 
-            pub fn device_import_ref_clk(
+            /* pub fn device_import_ref_clk(
                 &mut self,
                 name: &str,
                 src: &str,
@@ -1460,7 +1460,7 @@ macro_rules! impl_exp_boilerplate {
                     src,
                     rate,
                 );
-            }
+            } */
 
             pub fn device_compiled_channel_names(
                 &mut self,

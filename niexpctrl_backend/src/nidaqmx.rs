@@ -177,7 +177,7 @@ extern "C" {
     fn DAQmxGetWriteTotalSampPerChanGenerated(handle: TaskHandle, data: *mut CUint64) -> CInt32;
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct DAQmxError {
     msg: String
 }
@@ -242,7 +242,7 @@ pub fn daqmx_call<F: FnOnce() -> CInt32>(func: F) -> Result<(), DAQmxError> {
             .into_owned();
 
         // Write the error to log file
-        let log_to_file = |err_msg: String| -> Result<(), ()> {
+        let log_to_file = |err_msg: String| -> Result<(), std::io::Error> {
             let mut file = OpenOptions::new()
                 .write(true)
                 .append(true)
@@ -251,7 +251,7 @@ pub fn daqmx_call<F: FnOnce() -> CInt32>(func: F) -> Result<(), DAQmxError> {
             writeln!(file, "DAQmx Error: {error_string}")?;
             Ok(())
         };
-        if log_to_file(error_string).is_err() {println!("Failed to write error to nidaqmx_error.logs")};
+        if log_to_file(error_string.clone()).is_err() {println!("Failed to write error to nidaqmx_error.logs")};
         // Return the error
         Err(DAQmxError::new(format!("DAQmx Error: {error_string}")))
     }

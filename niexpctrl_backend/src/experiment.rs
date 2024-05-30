@@ -211,29 +211,29 @@ impl Experiment {
 
         // - inter-worker start_trig sync channels
         let mut start_sync = HashMap::new();
-        if let Some(primary_dev_name) = &self.start_trig_primary {
+        if let Some(primary_dev_name) = self.start_trig_primary.clone() {
             // Sanity checks
-            if !running_dev_names.contains(primary_dev_name) {
+            if !running_dev_names.contains(&primary_dev_name) {
                 return Err(format!("Either the primary device name '{primary_dev_name}' is invalid or this device didn't get any instructions and will not run at all"))
             };
-            if self.devices.get(primary_dev_name).unwrap().get_start_trig_out().is_none() {
+            if self.devices.get(&primary_dev_name).unwrap().get_start_trig_out().is_none() {
                 return Err(format!("Device '{primary_dev_name}' was designated to be the start trigger primary, but has no trigger output terminal specified"))
             };
 
             // Create and pack sender-receiver pairs
             let mut recvr_vec = Vec::new();
             // - first create all the secondaries
-            for dev_name in running_dev_names.iter().filter(|dev_name| dev_name != primary_dev_name) {
+            for dev_name in running_dev_names.iter().filter(|dev_name| dev_name.to_string() != primary_dev_name.clone()) {
                 let (sender, recvr) = channel();
                 recvr_vec.push(recvr);
                 start_sync.insert(
                     dev_name.to_string(),
                     StartSync::Secondary(sender)
-                )
+                );
             }
             // - now create the primary
             start_sync.insert(
-                primary_dev_name.to_string(),
+                primary_dev_name,
                 StartSync::Primary(recvr_vec)
             );
         } else {
@@ -241,7 +241,7 @@ impl Experiment {
                 start_sync.insert(
                     dev_name.to_string(),
                     StartSync::None,
-                )
+                );
             }
         }
 
@@ -269,24 +269,42 @@ impl Experiment {
             self.worker_report_recvrs.insert(dev_name.to_string(), report_recvr);
 
             // Launch worker thread
-            let dev_mutex = dev_container.clone();
-            let spawn_result = thread::Builder::new().name(dev_name.to_string())
-                .spawn(move || -> Result<(), WorkerError> {
-                    let mut dev = dev_mutex.lock();
-                    dev.worker_loop(
-                        bufsize_ms,
-                        cmd_recvr, report_sendr,
-                        start_sync.remove(dev_name).unwrap()
-                    )
-                });
-            let handle = match spawn_result {
-                Ok(handle) => handle,
-                Err(err) => return Err(err.to_string())
-            };
+            let handle = Experiment::launch_worker_thread(
+                dev_name.to_string(),
+                dev_container.clone(),
+                bufsize_ms,
+                cmd_recvr,
+                report_sendr,
+                start_sync.remove(dev_name).unwrap(),
+            )?;
             self.worker_handles.insert(dev_name.to_string(), handle);
         }
         // Wait for all workers to report config completion (handle error collection if necessary)
         self.collect_worker_reports()
+    }
+    fn launch_worker_thread(
+        dev_name: String,
+        dev_mutex: Arc<Mutex<Device>>,
+        bufsize_ms: f64,
+        cmd_recvr: CmdRecvr,
+        report_sendr: Sender<()>,
+        start_sync: StartSync
+    ) -> Result<JoinHandle<Result<(), WorkerError>>, String> {
+        let spawn_result = thread::Builder::new()
+            .name(dev_name)
+            .spawn(move || {
+                let mut dev = dev_mutex.lock();
+                dev.worker_loop(
+                    bufsize_ms,
+                    cmd_recvr,
+                    report_sendr,
+                    start_sync
+                )
+            });
+        match spawn_result {
+            Ok(handle) => Ok(handle),
+            Err(err) => Err(err.to_string())
+        }
     }
     pub fn stream_run_(&mut self, calc_next: bool) -> Result<(), String> {
         self.worker_cmd_chan.send(WorkerCmd::Stream(calc_next));
@@ -333,7 +351,7 @@ impl Experiment {
         // Return all used device objects back to the main IndexMap
         for (dev_name, dev_box) in self.running_devs.drain(..) {
             let dev = Arc::into_inner(dev_box).unwrap().into_inner();
-            self.devices.insert(dev_name, dev)
+            self.devices.insert(dev_name, dev);
         }
 
         // Finally, return
