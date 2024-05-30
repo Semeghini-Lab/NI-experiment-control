@@ -88,14 +88,14 @@ use crate::worker_cmd_chan::{CmdChan, CmdRecvr, WorkerCmd};
 #[pyclass]
 pub struct Experiment {
     devices: IndexMap<String, Device>,
-    // FixMe [after Device move to streamer crate]:
-    //  NiTask handles and StreamCounters should be saved in Device fields
+    running_devs: IndexMap<String, Arc<Mutex<Device>>>,  // FixMe: this is a temporary dirty hack. Transfer device objects back to the main map (they were transferred out to be able to wrap them into Arc<Mutex<>> for multithreading)
+    // Streamer-wide settings
     ref_clk_provider: Option<(String, String)>,  // Some((dev_name, terminal_name))
     start_trig_primary: Option<String>,  // Some(dev_name)
-    running_devs: IndexMap<String, Arc<Mutex<Device>>>,
-    worker_handles: IndexMap<String, JoinHandle<Result<(), WorkerError>>>,
-    worker_report_recvrs: IndexMap<String, Receiver<()>>,
+    // Worker thread communication objects
     worker_cmd_chan: CmdChan,
+    worker_report_recvrs: IndexMap<String, Receiver<()>>,
+    worker_handles: IndexMap<String, JoinHandle<Result<(), WorkerError>>>,  // FixMe [after Device move to streamer crate]: Maybe store individual device thread handle and report receiver in the Device struct
 }
 
 impl_exp_boilerplate!(Experiment);
@@ -367,106 +367,16 @@ impl Experiment {
     }
 
     fn cfg_run(&mut self, bufsize_ms: f64) {  // -> Result<(), String>
-
-        /* ToDo:
-        Add consistency check here:
-        no clash between any exports (ref clk, start_trig, samp_clk)
-        */
-
-        // Static ref clk export
-        let mut exporting_devs: Vec<&Device> = self.devices.values().filter(|dev| {
-            match dev.ref_clk() {
-                Some((_line, export, _rate)) => export,
-                None => false,
-            }
-        }).collect();
-        match exporting_devs.len() {
-            0 => {},
-            1 => {
-                let dev = exporting_devs[0];
-                let name = dev.name();
-                let (line, _export, _rate) = dev.ref_clk().unwrap();
-                /* ToDo:
-                Try tristating the terminal on all other cards to ensure the line is not driven
-                */
-                nidaqmx::connect_terms(
-                    &format!("/{name}/10MHzRefClock"),
-                    &format!("/{name}/{line}")
-                );
-            },
-            _ => panic!("Only one device can export reference clock")
-        };
-
-        // Configure NI DAQmx tasks on all compiled devices
-        let res_vec: Vec<_> = self.compiled_devices().par_iter_mut().map(
-            |dev| -> _ {
-                let (task, counter) = dev.cfg_run(bufsize_ms);
-                (dev.name().to_string(), Arc::new(Mutex::new(task)), counter)
-            }
-        ).collect();
-
-        /*
-        let mut thread_handles = Vec::new();
-        for dev in self.compiled_devices() {
-            let dev_arc = Arc::new(Mutex::new(dev));
-            let join_handle = thread::Builder::new().name(dev.name().to_string())
-                .spawn(move || {
-                    dev_arc.cfg_run(bufsize_ms)
-                });
-            thread_handles.push(join_handle.unwrap());
-        }
-        for handle in thread_handles {
-            // FixMe [after Device move to streamer crate]: NiTask+StreamCounter should be saved in Device fields
-            let dev_name = handle.thread().name().unwrap().to_string();
-            let (ni_task, stream_counter) = handle.join().unwrap();
-            self.ni_tasks.insert(
-                dev_name.clone(),
-                ni_task
-            );
-            self.stream_counters.insert(
-                dev_name,
-                stream_counter
-            );
-        }
-        */
+        todo!()
     }
 
-    /*
     fn stream_run(&mut self, calc_next: bool) {
-        let shared_sem = Arc::new(Semaphore::new(0));
-        let mut join_handles = Vec::new();
-
-        for dev in self.devices().values() {
-            let sem_clone = shared_sem.clone();
-            join_handle = thread::Builder::new().name(dev.name().to_string())
-                .spawn(move || {
-                    dev.stream_run(
-                        sem_clone,
-                        self.compiled_devices().len(),
-                        calc_next,
-                        // FixMe [after Device move to streamer crate]: this should be stored in Device fields:
-                        self.ni_tasks.get(dev.name()).unwrap(),
-                        self.stream_counters.get_mut(dev.name()).unwrap(),
-                        10 * (self.bufsize_ms / 1000.0)
-                    )
-                }).unwrap();
-        }
-        for handle in join_handles {
-            handle.join()
-        }
+        todo!()
     }
 
     fn clean_run(&mut self) {
-        // FixMe [after Device move to streamer crate]: call Device.clear_run() instead
-        self.ni_tasks.clear();
-        self.stream_counters.clear();
-        self.bufsize_ms = 0.0;
-    }
-
-    fn check_line_not_driven(&self, line: &str, exclude_dev: &str) {  //  -> Result<bool, String>
         todo!()
     }
-    */
 
     /// Starts the streaming process for all compiled devices within the experiment.
     ///
@@ -483,19 +393,22 @@ impl Experiment {
     /// preloaded to ensure continuous streaming.
     /// * `nreps`: Number of repetitions for the streaming process. The devices will continuously stream
     /// their data for this many repetitions.
-    // pub fn stream_exp(&self, bufsize_ms: f64, nreps: usize) {
-    //     // Simple parallelization: invoke stream_task for every device
-    //     let sem_shared = Arc::new(Semaphore::new(1));
-    //     self.compiled_devices().par_iter().for_each(|dev| {
-    //         let sem_clone = sem_shared.clone();
-    //         dev.stream_task(
-    //             &sem_clone,
-    //             self.compiled_devices().len(),
-    //             bufsize_ms,
-    //             nreps,
-    //         );
-    //     });
-    // }
+    /* === The original version ===
+    pub fn stream_exp(&self, bufsize_ms: f64, nreps: usize) {
+        // Simple parallelization: invoke stream_task for every device
+        let sem_shared = Arc::new(Semaphore::new(1));
+        self.compiled_devices().par_iter().for_each(|dev| {
+            let sem_clone = sem_shared.clone();
+            dev.stream_task(
+                &sem_clone,
+                self.compiled_devices().len(),
+                bufsize_ms,
+                nreps,
+            );
+        });
+    }
+
+     */
 
     /// Resets a specific device associated with the experiment using the NI-DAQmx framework.
     ///
@@ -535,9 +448,9 @@ impl Experiment {
     /// exp.reset_devices();
     /// ```
     pub fn reset_devices(&self) {
-        self.devices
-            .values()
-            .for_each(|dev| nidaqmx::reset_ni_device(dev.name()));
+        for dev in self.devices.values() {
+            nidaqmx::reset_ni_device(dev.name());
+        }
     }
 }
 
@@ -563,13 +476,14 @@ impl Experiment {
     pub fn new() -> Self {
         Self {
             devices: IndexMap::new(),
-            // FixMe [after Device move to streamer crate]:
-            //  NiTask+StreamCounter should be saved in Device fields
-            ref_clk_provider: None,
-            running_devs: IndexMap::new(),
-            worker_handles: IndexMap::new(),
-            worker_report_recvrs: IndexMap::new(),
+            running_devs: IndexMap::new(),  // FixMe: this is a temporary dirty hack. Transfer device objects back to the main map (they were transferred out to be able to wrap them into Arc<Mutex<>> for multithreading)
+            // Streamer-wide settings
+            ref_clk_provider: None,  // Some((dev_name, terminal_name))
+            start_trig_primary: None,  // Some(dev_name)
+            // Worker thread communication objects
             worker_cmd_chan: CmdChan::new(),
+            worker_report_recvrs: IndexMap::new(),
+            worker_handles: IndexMap::new(),  // FixMe [after Device move to streamer crate]: Maybe store individual device thread handle and report receiver in the Device struct
         }
     }
 }
