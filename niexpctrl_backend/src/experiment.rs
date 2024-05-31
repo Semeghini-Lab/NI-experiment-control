@@ -166,7 +166,7 @@ impl Experiment {
                     // The worker had an error but returned gracefully. The WorkerError should be contained in the return result
                     match worker_result {
                         Err(worker_error) => err_msg_map.insert(dev_name.to_string(), worker_error.to_string()),
-                        Ok(_) => panic!("Unexpected scenario - worker '{dev_name}' has stopped working (did not report completion on thread_report_recvr) but returned a non-error result"),
+                        Ok(()) => err_msg_map.insert(dev_name.to_string(), format!("Unexpected scenario - worker has dropped its report_sender yet returned Ok")),
                     }
                 },
                 Err(_panic_info) => {
