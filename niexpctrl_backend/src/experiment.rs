@@ -310,7 +310,7 @@ impl Experiment {
         self.worker_cmd_chan.send(WorkerCmd::Stream(calc_next));
         self.collect_worker_reports()
     }
-    pub fn close_run_(&mut self) {
+    pub fn close_run_(&mut self) -> Result<(), String> {
         // Undo static reference clock export
         let ref_clk_exp_undo_result = self.undo_export_ref_clk_();
 
@@ -357,12 +357,12 @@ impl Experiment {
         // Finally, return
         if join_err_msg_map.is_empty() && ref_clk_exp_undo_result.is_ok() {
             // println!("[clear_run()] joined all threads. Completed clearing run. Returning");
-            return;
+            return Ok(());
         }
         //  If any unexpected error has occurred:
         //  * some workers unexpectedly failed
         //  * static ref_clk export undoing has failed,
-        //  assemble and panic with the full error message string
+        //  assemble and return the full error message string
         let mut full_err_msg = String::new();
         full_err_msg.push_str("Error during closing run:\n");
         if let Err(daqmx_err) = ref_clk_exp_undo_result {
@@ -373,16 +373,46 @@ impl Experiment {
                 "[{dev_name}] {err_msg}\n"
             ))
         }
-        panic!("{full_err_msg}");
+        Err(full_err_msg)
+    }
+
+    pub fn run(&mut self, nreps: usize, bufsize_ms: f64) -> Result<(), String> {
+        // Group `cfg_run_()` and `stream_run_()` into one closure for convenient interruption in an error case
+        let mut run_ = || -> Result<(), String> {
+            self.cfg_run_(bufsize_ms)?;
+            for i in 0..nreps {
+                self.stream_run_(i < (nreps - 1))?;
+            };
+            Ok(())
+        };
+        // The actual run:
+        let run_result = run_();
+        let close_result = self.close_run_();
+
+        // Return result
+        if run_result.is_ok() && close_result.is_ok() {
+            Ok(())
+        } else {
+            let mut full_err_msg = String::new();
+            if let Err(run_err_msg) = run_result {
+                full_err_msg.push_str(&run_err_msg);
+                full_err_msg.push_str("\n");
+            };
+            if let Err(close_err_msg) = close_result {
+                full_err_msg.push_str(&close_err_msg);
+                full_err_msg.push_str("\n");
+            }
+            Err(full_err_msg)
+        }
     }
 }
 
 #[pymethods]
 impl Experiment {
 
-    pub fn run(&self, bufsize_ms: f64, nreps: usize) {
-        todo!()
-    }
+    // pub fn run(&self, bufsize_ms: f64, nreps: usize) {
+    //     todo!()
+    // }
 
     fn cfg_run(&mut self, bufsize_ms: f64) {  // -> Result<(), String>
         todo!()
