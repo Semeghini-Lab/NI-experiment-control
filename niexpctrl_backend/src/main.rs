@@ -86,18 +86,30 @@ fn main() {
     // - Dev3
     streamer.devices_().get_mut("Dev3").unwrap().set_start_trig_in(Some(TRIG_LINE.clone()));
     streamer.devices_().get_mut("Dev3").unwrap().set_ref_clk_in(Some(REF_CLK_LINE.clone()));
+    //  export start_trig for convenience (to trigger oscilloscope)
+    streamer.devices_().get_mut("Dev3").unwrap().set_start_trig_out(Some("PFI0".to_string()));
 
     // Add instructions
     // - Dev2
+    streamer.go_constant("Dev2", "ao0", 0.0, 1.0);
     streamer.sine("Dev2", "ao0", 1.0, 1.0, false, 10.0, Some(1.5), None, None);
     streamer.constant("Dev2", "ao0", 3.0, 1.0, -1.0);
     // - Dev3
     streamer.constant("Dev3", "ao0", 0.5, 2.0, 1.0);
 
     streamer.compile(None);
-    let run_res = streamer.run(10, 150.0);
-    match run_res {
-        Ok(()) => println!("Run was successfully completed"),
-        Err(msg) => println!("Run failed. Error message:\n{msg}"),
+
+    for i in 0..3 {
+        println!("\n\n ============= launching run {i} =============== \n\n");
+        let run_res = streamer.run(5, 150.0);
+        println!("============= result of run {i}: =============== ");
+        match run_res {
+            Ok(()) => println!("Run was successfully completed"),
+            Err(msg) => {
+                println!("Run failed. Error message:\n{msg}");
+                break
+            },
+        };
+
     };
 }
