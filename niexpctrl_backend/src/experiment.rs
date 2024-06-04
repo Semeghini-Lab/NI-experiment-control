@@ -100,22 +100,28 @@ pub struct Experiment {
 
 impl_exp_boilerplate!(Experiment);
 
+#[pymethods]
 impl Experiment {
-
-    pub fn set_start_trig_primary(&mut self, dev: Option<String>) {
-        self.start_trig_primary = dev;
-    }
+    #[getter]
     pub fn get_start_trig_primary(&self) -> Option<String> {
         self.start_trig_primary.clone()
     }
-
-    pub fn set_ref_clk_provider(&mut self, provider: Option<(String, String)>) {
-        self.ref_clk_provider = provider;
+    #[setter]
+    pub fn set_start_trig_primary(&mut self, dev: Option<String>) {
+        self.start_trig_primary = dev;
     }
+
+    #[getter]
     pub fn get_ref_clk_provider(&self) -> Option<(String, String)> {
         self.ref_clk_provider.clone()
     }
+    #[setter]
+    pub fn set_ref_clk_provider(&mut self, provider: Option<(String, String)>) {
+        self.ref_clk_provider = provider;
+    }
+}
 
+impl Experiment {
     fn export_ref_clk_(&mut self) -> Result<(), DAQmxError> {
         if let Some((dev_name, term_name)) = &self.ref_clk_provider {
             // ToDo: Try tristating the terminal on all other cards in the streamer to ensure the line is not driven

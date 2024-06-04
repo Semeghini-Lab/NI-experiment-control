@@ -124,7 +124,7 @@
 //! exp.stream_exp(50., 2)
 //! ```
 
-use pyo3::exceptions::{PyException, PyValueError};
+use pyo3::exceptions::{PyException, PyValueError, PyKeyError, PyRuntimeError};
 use pyo3::prelude::*;
 
 pub mod device;
@@ -169,4 +169,129 @@ fn disconnect_terms(_py: Python, src: &str, dest: &str) -> PyResult<()> {
         Ok(()) => Ok(()),
         Err(ni_err) => Err(PyValueError::new_err(ni_err.to_string())),
     }
+}
+
+impl Experiment {
+    fn assert_contains_dev(&self, name: &str) -> PyResult<()> {
+        if self.devices().contains_key(name) {
+            Ok(())
+        } else {
+            Err(PyKeyError::new_err(format!(
+                "Device '{name}' not found. Registered devices are: {:?}",
+                self.devices().keys().collect::<Vec<_>>()
+            )))
+        }
+    }
+    fn get_dev(&self, name: &str) -> PyResult<&Device> {
+        self.assert_contains_dev(name)?;
+        Ok(self.devices().get(name).unwrap())
+    }
+    fn get_dev_mut(&mut self, name: &str) -> PyResult<&mut Device> {
+        self.assert_contains_dev(name)?;
+        Ok(self.devices_().get_mut(name).unwrap())
+    }
+
+    fn assert_contains_chan(&self, dev_name: &str, chan_name: &str) -> PyResult<()> {
+        let dev = self.get_dev(dev_name)?;
+        if dev.channels().contains_key(chan_name) {
+            Ok(())
+        } else {
+            Err(PyKeyError::new_err(format!(
+                "Device {dev_name} does not contain channel {chan_name}. Registered channels are: {:?}",
+                dev.channels().keys().collect::<Vec<_>>()
+            )))
+        }
+    }
+    fn get_chan(&self, dev_name: &str, chan_name: &str) -> PyResult<&Channel> {
+        self.assert_contains_chan(dev_name, chan_name)?;
+        Ok(self.devices().get(dev_name).unwrap().channels().get(chan_name).unwrap())
+    }
+    fn get_chan_mut(&mut self, dev_name: &str, chan_name: &str) -> PyResult<&mut Channel> {
+        self.assert_contains_chan(dev_name, chan_name)?;
+        Ok(self.devices_().get_mut(dev_name).unwrap().channels_().get_mut(chan_name).unwrap())
+    }
+}
+
+#[pymethods]
+impl Experiment {
+    // region Hardware sync settings
+
+    // * Device settings
+    pub fn dev_get_start_trig_in(&self, name: &str) -> PyResult<Option<String>> {
+        let dev = self.get_dev(name)?;
+        Ok(dev.get_start_trig_in())
+    }
+    pub fn dev_set_start_trig_in(&mut self, name: &str, term: Option<String>) -> PyResult<()> {
+        let dev = self.get_dev_mut(name)?;
+        dev.set_start_trig_in(term);
+        Ok(())
+    }
+
+    pub fn dev_get_start_trig_out(&self, name: &str) -> PyResult<Option<String>> {
+        let dev = self.get_dev(name)?;
+        Ok(dev.get_start_trig_out())
+    }
+    pub fn dev_set_start_trig_out(&mut self, name: &str, term: Option<String>) -> PyResult<()> {
+        let dev = self.get_dev_mut(name)?;
+        dev.set_start_trig_out(term);
+        Ok(())
+    }
+
+    pub fn dev_get_samp_clk_in(&self, name: &str) -> PyResult<Option<String>> {
+        let dev = self.get_dev(name)?;
+        Ok(dev.get_samp_clk_in())
+    }
+    pub fn dev_set_samp_clk_in(&mut self, name: &str, term: Option<String>) -> PyResult<()> {
+        let dev = self.get_dev_mut(name)?;
+        dev.set_samp_clk_in(term);
+        Ok(())
+    }
+
+    pub fn dev_get_samp_clk_out(&self, name: &str) -> PyResult<Option<String>> {
+        let dev = self.get_dev(name)?;
+        Ok(dev.get_samp_clk_out())
+    }
+    pub fn dev_set_samp_clk_out(&mut self, name: &str, term: Option<String>) -> PyResult<()> {
+        let dev = self.get_dev_mut(name)?;
+        dev.set_samp_clk_out(term);
+        Ok(())
+    }
+
+    pub fn dev_get_ref_clk_in(&self, name: &str) -> PyResult<Option<String>> {
+        let dev = self.get_dev(name)?;
+        Ok(dev.get_ref_clk_in())
+    }
+    pub fn dev_set_ref_clk_in(&mut self, name: &str, term: Option<String>) -> PyResult<()> {
+        let dev = self.get_dev_mut(name)?;
+        dev.set_ref_clk_in(term);
+        Ok(())
+    }
+
+    pub fn dev_set_min_bufwrite_timeout(&mut self, name: &str,  min_timeout: Option<f64>) -> PyResult<()> {
+        let dev = self.get_dev_mut(name)?;
+        dev.set_min_bufwrite_timeout(min_timeout);
+        Ok(())
+    }
+    // endregion
+
+    // region Run control
+    pub fn _cfg_run(&mut self, bufsize_ms: f64) -> PyResult<()> {
+        match self.cfg_run_(bufsize_ms) {
+            Ok(()) => Ok(()),
+            Err(msg) => Err(PyValueError::new_err(msg)),
+        }
+    }
+    pub fn _stream_run(&mut self, calc_next: bool) -> PyResult<()> {
+        match self.stream_run_(calc_next) {
+            Ok(()) => Ok(()),
+            Err(msg) => Err(PyRuntimeError::new_err(msg)),
+        }
+    }
+    pub fn _close_run(&mut self) -> PyResult<()> {
+        match self.close_run_() {
+            Ok(()) => Ok(()),
+            Err(msg) => Err(PyRuntimeError::new_err(msg)),
+        }
+    }
+    // endregion
 }
