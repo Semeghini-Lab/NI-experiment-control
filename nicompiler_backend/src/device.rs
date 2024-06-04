@@ -812,36 +812,36 @@ impl Device {
     pub fn get_start_trig_in(&self) -> Option<String> {
         self.start_trig_in.clone()
     }
-    pub fn set_start_trig_in(&mut self, terminal: Option<String>) {
-        self.start_trig_in = terminal;
+    pub fn set_start_trig_in(&mut self, term: Option<String>) {
+        self.start_trig_in = term;
     }
 
     pub fn get_start_trig_out(&self) -> Option<String> {
         self.start_trig_out.clone()
     }
-    pub fn set_start_trig_out(&mut self, terminal: Option<String>) {
-        self.start_trig_out = terminal;
+    pub fn set_start_trig_out(&mut self, term: Option<String>) {
+        self.start_trig_out = term;
     }
 
     pub fn get_samp_clk_in(&self) -> Option<String> {
         self.samp_clk_in.clone()
     }
-    pub fn set_samp_clk_in(&mut self, terminal: Option<String>) {
-        self.samp_clk_in = terminal;
+    pub fn set_samp_clk_in(&mut self, term: Option<String>) {
+        self.samp_clk_in = term;
     }
 
     pub fn get_samp_clk_out(&self) -> Option<String> {
         self.samp_clk_out.clone()
     }
-    pub fn set_samp_clk_out(&mut self, terminal: Option<String>) {
-        self.samp_clk_out = terminal;
+    pub fn set_samp_clk_out(&mut self, term: Option<String>) {
+        self.samp_clk_out = term;
     }
 
     pub fn get_ref_clk_in(&self) -> Option<String> {
         self.ref_clk_in.clone()
     }
-    pub fn set_ref_clk_in(&mut self, terminal: Option<String>) {
-        self.ref_clk_in = terminal;
+    pub fn set_ref_clk_in(&mut self, term: Option<String>) {
+        self.ref_clk_in = term;
     }
 
     pub fn set_min_bufwrite_timeout(&mut self, min_timeout: Option<f64>) {
