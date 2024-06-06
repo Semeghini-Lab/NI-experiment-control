@@ -765,15 +765,9 @@ pub struct Device {
     start_trig_in: Option<String>,
     start_trig_out: Option<String>,
     samp_clk_in: Option<String>,
-    samp_clk_out: Option<String>, /*
-                                mxFunctions.DAQmxExportSignal(
-                                    taskHandle=task_handle,
-                                    signalID=mxConst.DAQmx_Val_SampleClock,
-                                    outputTerminal=f'/Dev3/PFI1'
-                                )
-                                */
+    samp_clk_out: Option<String>,
     ref_clk_in: Option<String>,
-    min_bufwrite_timeout: Option<f64>,  // Some(timeout_seconds) or None - wait infinitely
+    min_bufwrite_timeout: Option<f64>,  // Some(min_timeout_seconds) or None - wait infinitely
 }
 
 impl Device {
@@ -844,6 +838,9 @@ impl Device {
         self.ref_clk_in = term;
     }
 
+    pub fn get_min_bufwrite_timeout(&self) -> Option<f64> {
+        self.min_bufwrite_timeout.clone()
+    }
     pub fn set_min_bufwrite_timeout(&mut self, min_timeout: Option<f64>) {
         self.min_bufwrite_timeout = min_timeout;
     }
@@ -868,7 +865,7 @@ impl BaseDevice for Device {
         self.get_ref_clk_in()
     }
     fn get_min_bufwrite_timeout(&self) -> Option<f64> {
-        self.min_bufwrite_timeout.clone()
+        self.get_min_bufwrite_timeout()
     }
     // ToDo: this is a temporary dirty fix. Remove after crate merge
 

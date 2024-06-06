@@ -150,7 +150,7 @@ fn niexpctrl_backend(_py: Python, m: &PyModule) -> PyResult<()> {
 
 #[pyfunction]
 fn reset_dev(_py: Python, name: &str) -> PyResult<()> {
-    match crate::nidaqmx::reset_ni_device(name) {
+    match nidaqmx::reset_device(name) {
         Ok(()) => Ok(()),
         Err(ni_err) => Err(PyValueError::new_err(ni_err.to_string())),
     }
@@ -158,14 +158,14 @@ fn reset_dev(_py: Python, name: &str) -> PyResult<()> {
 }
 #[pyfunction]
 fn connect_terms(_py: Python, src: &str, dest: &str) -> PyResult<()> {
-    match crate::nidaqmx::connect_terms(src, dest) {
+    match nidaqmx::connect_terms(src, dest) {
         Ok(()) => Ok(()),
         Err(ni_err) => Err(PyValueError::new_err(ni_err.to_string())),
     }
 }
 #[pyfunction]
 fn disconnect_terms(_py: Python, src: &str, dest: &str) -> PyResult<()> {
-    match crate::nidaqmx::disconnect_terms(src, dest) {
+    match nidaqmx::disconnect_terms(src, dest) {
         Ok(()) => Ok(()),
         Err(ni_err) => Err(PyValueError::new_err(ni_err.to_string())),
     }
@@ -211,12 +211,23 @@ impl Experiment {
         Ok(self.devices_().get_mut(dev_name).unwrap().channels_().get_mut(chan_name).unwrap())
     }
 }
+/* impl Device {
+    // ToDo: after crate merge
+
+    fn assert_contains_chan(&self, name: &str) -> PyResult<()> {
+        todo!()
+    }
+    fn get_chan(&self, name: &str) -> PyResult<&Channel> {
+        todo!()
+    }
+    fn get_chan_mut(&mut self, name: &str) -> PyResult<&mut Channel> {
+        todo!()
+    }
+} */
 
 #[pymethods]
 impl Experiment {
-    // region Hardware sync settings
-
-    // * Device settings
+    // region Device settings
     pub fn dev_get_start_trig_in(&self, name: &str) -> PyResult<Option<String>> {
         let dev = self.get_dev(name)?;
         Ok(dev.get_start_trig_in())
@@ -267,7 +278,11 @@ impl Experiment {
         Ok(())
     }
 
-    pub fn dev_set_min_bufwrite_timeout(&mut self, name: &str,  min_timeout: Option<f64>) -> PyResult<()> {
+    pub fn dev_get_min_bufwrite_timeout(&self, name: &str) -> PyResult<Option<f64>> {
+        let dev = self.get_dev(name)?;
+        Ok(dev.get_min_bufwrite_timeout())
+    }
+    pub fn dev_set_min_bufwrite_timeout(&mut self, name: &str, min_timeout: Option<f64>) -> PyResult<()> {
         let dev = self.get_dev_mut(name)?;
         dev.set_min_bufwrite_timeout(min_timeout);
         Ok(())
@@ -275,19 +290,19 @@ impl Experiment {
     // endregion
 
     // region Run control
-    pub fn _cfg_run(&mut self, bufsize_ms: f64) -> PyResult<()> {
+    pub fn cfg_run(&mut self, bufsize_ms: f64) -> PyResult<()> {
         match self.cfg_run_(bufsize_ms) {
             Ok(()) => Ok(()),
             Err(msg) => Err(PyValueError::new_err(msg)),
         }
     }
-    pub fn _stream_run(&mut self, calc_next: bool) -> PyResult<()> {
+    pub fn stream_run(&mut self, calc_next: bool) -> PyResult<()> {
         match self.stream_run_(calc_next) {
             Ok(()) => Ok(()),
             Err(msg) => Err(PyRuntimeError::new_err(msg)),
         }
     }
-    pub fn _close_run(&mut self) -> PyResult<()> {
+    pub fn close_run(&mut self) -> PyResult<()> {
         match self.close_run_() {
             Ok(()) => Ok(()),
             Err(msg) => Err(PyRuntimeError::new_err(msg)),

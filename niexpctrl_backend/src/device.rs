@@ -264,7 +264,6 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         };
         Ok(())
     }
-
     fn cfg_run_(&self, bufsize_ms: f64) -> Result<StreamBundle, WorkerError> {
         let buf_dur = bufsize_ms / 1000.0;
         let buf_write_timeout = match self.get_min_bufwrite_timeout() {
@@ -308,7 +307,7 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         Ok(stream_bundle)
     }
     fn stream_run_(&self, stream_bundle: &mut StreamBundle, start_sync: &StartSync, calc_next: bool) -> Result<(), WorkerError> {
-        // Synchronise task start according to the start trigger role
+        // Synchronise task start with other threads
         match start_sync {
             StartSync::Primary(recvr_vec) => {
                 for recvr in recvr_vec {
@@ -404,27 +403,27 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
     /// 3. Configures reference clocking based on the device's `ref_clk_line`. Devices that import the reference clock will
     ///    configure it accordingly, while others will export the signal.
     fn cfg_clk_sync(&self, task: &NiTask, seq_len: usize) -> Result<(), DAQmxError> {
-        // (1) Sample clock timing mode (includes samp_clk_in). Additionally, config samp_clk_out
-        let samp_clk_in = self.get_samp_clk_in().unwrap_or("".to_string());
+        // (1) Sample clock timing mode (includes sample clock source). Additionally, config samp_clk_out
+        let samp_clk_src = self.get_samp_clk_in().unwrap_or("".to_string());
         task.cfg_samp_clk_timing(
-            &samp_clk_in,
+            &samp_clk_src,
             self.samp_rate(),
             seq_len as u64
         )?;
-        if let Some(samp_clk_out) = self.get_samp_clk_out() {
+        if let Some(term) = self.get_samp_clk_out() {
             task.export_signal(
                 DAQMX_VAL_SAMPLECLOCK,
-                &format!("/{}/{}", self.name(), samp_clk_out)
+                &format!("/{}/{}", self.name(), term)
             )?
         };
         // (2) Start trigger:
-        if let Some(start_trig_in) = self.get_start_trig_in() {
-            task.cfg_dig_edge_start_trigger(&format!("/{}/{}", self.name(), start_trig_in))?
+        if let Some(term) = self.get_start_trig_in() {
+            task.cfg_dig_edge_start_trigger(&format!("/{}/{}", self.name(), term))?
         };
-        if let Some(start_trig_out) = self.get_start_trig_out() {
+        if let Some(term) = self.get_start_trig_out() {
             task.export_signal(
                 DAQMX_VAL_STARTTRIGGER,
-                &format!("/{}/{}", self.name(), start_trig_out)
+                &format!("/{}/{}", self.name(), term)
             )?
         };
         // (3) Reference clock
@@ -449,8 +448,8 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         For that reason, we still leave room for arbitrary (static) export from any number of cards,
         but only expose it through the "advanced" function `nidaqmx::connect_terms()`.
         */
-        if let Some(ref_clk_in) = self.get_ref_clk_in() {
-            task.set_ref_clk_src(&format!("/{}/{}", self.name(), ref_clk_in))?;
+        if let Some(term) = self.get_ref_clk_in() {
+            task.set_ref_clk_src(&format!("/{}/{}", self.name(), term))?;
             task.set_ref_clk_rate(10.0e6)?;
         };
 

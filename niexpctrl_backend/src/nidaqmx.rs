@@ -289,7 +289,7 @@ pub fn daqmx_call<F: FnOnce() -> CInt32>(func: F) -> Result<(), DAQmxError> {
 /// # Note
 ///
 /// Ensure that the device name provided is valid and that the device is accessible when invoking this function.
-pub fn reset_ni_device(name: &str) -> Result<(), DAQmxError> {
+pub fn reset_device(name: &str) -> Result<(), DAQmxError> {
     let name_cstr = std::ffi::CString::new(name)?;
     daqmx_call(|| unsafe { DAQmxResetDevice(name_cstr.as_ptr()) })
 }

@@ -73,13 +73,13 @@ fn main() {
     streamer.add_ao_device("Dev3", 1e6);
     streamer.add_ao_channel("Dev2", 0, 0.0);
     streamer.add_ao_channel("Dev3", 0, 0.0);
-    streamer.reset_devices();
+    let _ = streamer.reset_all();
 
     // Hardware sync settings
     let TRIG_LINE: String = "RTSI0".to_string();
     let REF_CLK_LINE: String = "RTSI1".to_string();
     // - streamer-wide
-    streamer.set_start_trig_primary(Some("Dev2".to_string()));
+    streamer.set_starts_last(Some("Dev2".to_string()));
     streamer.set_ref_clk_provider(Some(("Dev2".to_string(), REF_CLK_LINE.clone())));
     // - Dev2
     streamer.devices_().get_mut("Dev2").unwrap().set_start_trig_out(Some(TRIG_LINE.clone()));

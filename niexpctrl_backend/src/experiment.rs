@@ -48,22 +48,19 @@
 use std::collections::HashMap;
 use numpy;
 use pyo3::prelude::*;
-use rayon::prelude::*;
+use pyo3::exceptions::PyValueError;
 use indexmap::IndexMap;
-use std::sync::Arc;
-use parking_lot::Mutex;
-use std::sync::mpsc::{Sender, Receiver, channel};
 use std::thread;
 use std::thread::JoinHandle;
+use std::sync::Arc;
+use std::sync::mpsc::{Sender, Receiver, channel};
+use parking_lot::Mutex;
 
 use nicompiler_backend::*;
 
 use crate::device::*;
 use crate::nidaqmx;
 use crate::nidaqmx::DAQmxError;
-// use crate::nidaqmx::*;
-use crate::utils::Semaphore;
-use crate::utils::StreamCounter;  // FixMe [after Device move to streamer crate]
 use crate::worker_cmd_chan::{CmdChan, CmdRecvr, WorkerCmd};
 
 /// An extended version of the [`nicompiler_backend::Experiment`] struct, tailored to provide direct
@@ -90,8 +87,8 @@ pub struct Experiment {
     devices: IndexMap<String, Device>,
     running_devs: IndexMap<String, Arc<Mutex<Device>>>,  // FixMe: this is a temporary dirty hack. Transfer device objects back to the main map (they were transferred out to be able to wrap them into Arc<Mutex<>> for multithreading)
     // Streamer-wide settings
-    ref_clk_provider: Option<(String, String)>,  // Some((dev_name, terminal_name))
-    start_trig_primary: Option<String>,  // Some(dev_name)
+    ref_clk_provider: Option<(String, String)>,  // Some((dev_name, terminal_name)) or None
+    starts_last: Option<String>,  // Some(dev_name) or None
     // Worker thread communication objects
     worker_cmd_chan: CmdChan,
     worker_report_recvrs: IndexMap<String, Receiver<()>>,
@@ -102,20 +99,47 @@ impl_exp_boilerplate!(Experiment);
 
 #[pymethods]
 impl Experiment {
-    #[getter]
-    pub fn get_start_trig_primary(&self) -> Option<String> {
-        self.start_trig_primary.clone()
-    }
-    #[setter]
-    pub fn set_start_trig_primary(&mut self, dev: Option<String>) {
-        self.start_trig_primary = dev;
+    /// Constructor for the `Experiment` class.
+    ///
+    /// This constructor initializes an instance of the `Experiment` class with an empty collection of devices.
+    /// The underlying representation of this collection is a IndexMap where device names (strings) map to their
+    /// respective `Device` objects.
+    ///
+    /// # Returns
+    /// - An `Experiment` instance with no associated devices.
+    ///
+    /// # Example (python)
+    /// ```python
+    /// from nicompiler_backend import Experiment
+    ///
+    /// exp = Experiment()
+    /// assert len(exp.devices()) == 0
+    /// ```
+    #[new]
+    pub fn new() -> Self {
+        Self {
+            devices: IndexMap::new(),
+            running_devs: IndexMap::new(),  // FixMe: this is a temporary dirty hack. Transfer device objects back to the main map (they were transferred out to be able to wrap them into Arc<Mutex<>> for multithreading)
+            // Streamer-wide settings
+            ref_clk_provider: None,  // Some((dev_name, terminal_name))
+            starts_last: None,  // Some(dev_name)
+            // Worker thread communication objects
+            worker_cmd_chan: CmdChan::new(),
+            worker_report_recvrs: IndexMap::new(),
+            worker_handles: IndexMap::new(),  // FixMe [after Device move to streamer crate]: Maybe store individual device thread handle and report receiver in the Device struct
+        }
     }
 
-    #[getter]
+    pub fn get_starts_last(&self) -> Option<String> {
+        self.starts_last.clone()
+    }
+    pub fn set_starts_last(&mut self, name: Option<String>) {
+        self.starts_last = name;
+    }
+
     pub fn get_ref_clk_provider(&self) -> Option<(String, String)> {
         self.ref_clk_provider.clone()
     }
-    #[setter]
     pub fn set_ref_clk_provider(&mut self, provider: Option<(String, String)>) {
         self.ref_clk_provider = provider;
     }
@@ -215,15 +239,17 @@ impl Experiment {
         // - command broadcasting channel
         self.worker_cmd_chan = CmdChan::new();  // the old instance can be reused, but refreshing here to zero `msg_num` for simplicity
 
-        // - inter-worker start_trig sync channels
+        // - inter-worker start sync channels
         let mut start_sync = HashMap::new();
-        if let Some(primary_dev_name) = self.start_trig_primary.clone() {
-            // Sanity checks
+        if let Some(primary_dev_name) = self.get_starts_last() {
+            // Sanity check
             if !running_dev_names.contains(&primary_dev_name) {
-                return Err(format!("Either the primary device name '{primary_dev_name}' is invalid or this device didn't get any instructions and will not run at all"))
-            };
-            if self.devices.get(&primary_dev_name).unwrap().get_start_trig_out().is_none() {
-                return Err(format!("Device '{primary_dev_name}' was designated to be the start trigger primary, but has no trigger output terminal specified"))
+                return Err(format!(
+                    "NIStreamer.starts_last is set to Some({primary_dev_name}) but this name is not found in the running device list: \n\
+                    {:?}\n\
+                    Either name {primary_dev_name} is invalid or this device didn't get any instructions and will not run at all",
+                    running_dev_names
+                ))
             };
 
             // Create and pack sender-receiver pairs
@@ -411,134 +437,12 @@ impl Experiment {
             Err(full_err_msg)
         }
     }
-}
 
-#[pymethods]
-impl Experiment {
-
-    // pub fn run(&self, bufsize_ms: f64, nreps: usize) {
-    //     todo!()
-    // }
-
-    fn cfg_run(&mut self, bufsize_ms: f64) {  // -> Result<(), String>
-        todo!()
-    }
-
-    fn stream_run(&mut self, calc_next: bool) {
-        todo!()
-    }
-
-    fn clean_run(&mut self) {
-        todo!()
-    }
-
-    /// Starts the streaming process for all compiled devices within the experiment.
-    ///
-    /// This method leverages multi-threading to concurrently stream multiple devices.
-    /// For each device in the experiment, a new thread is spawned to handle its streaming behavior.
-    /// The streaming behavior of each device is defined by the [`StreamableDevice::stream_task`] method.
-    ///
-    /// The method ensures lightweight and safe parallelization, ensuring that devices do not interfere with
-    /// each other during their streaming processes.
-    ///
-    /// # Parameters
-    ///
-    /// * `stream_buftime`: The buffer time for the streaming process. Determines how much data should be
-    /// preloaded to ensure continuous streaming.
-    /// * `nreps`: Number of repetitions for the streaming process. The devices will continuously stream
-    /// their data for this many repetitions.
-    /* === The original version ===
-    pub fn stream_exp(&self, bufsize_ms: f64, nreps: usize) {
-        // Simple parallelization: invoke stream_task for every device
-        let sem_shared = Arc::new(Semaphore::new(1));
-        self.compiled_devices().par_iter().for_each(|dev| {
-            let sem_clone = sem_shared.clone();
-            dev.stream_task(
-                &sem_clone,
-                self.compiled_devices().len(),
-                bufsize_ms,
-                nreps,
-            );
-        });
-    }
-
-     */
-
-    /// Resets a specific device associated with the experiment using the NI-DAQmx framework.
-    ///
-    /// If the named device is found within the experiment, this method will invoke the necessary calls
-    /// to reset it, ensuring it's brought back to a default or known state.
-    ///
-    /// # Parameters
-    ///
-    /// * `name`: The name or identifier of the device to be reset.
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// use niexpctrl_backend::*;
-    ///
-    /// let mut exp = Experiment::new();
-    /// exp.add_ao_device("PXI1Slot3", 1e6);
-    /// exp.reset_device("PXI1Slot3");
-    /// ```
-    pub fn reset_device(&mut self, name: &str) {
-        self.device_op(name, |_dev| nidaqmx::reset_ni_device(name));
-    }
-
-    /// Resets all the devices that are registered and associated with the experiment.
-    ///
-    /// This method iterates over all devices within the experiment and invokes the necessary reset calls
-    /// using the NI-DAQmx framework. It ensures that all devices are brought back to a default or known state.
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// use niexpctrl_backend::*;
-    ///
-    /// let mut exp = Experiment::new();
-    /// exp.add_ao_device("PXI1Slot3", 1e6);
-    /// exp.add_ao_device("PXI1Slot4", 1e6);
-    /// exp.reset_devices();
-    /// ```
-    pub fn reset_devices(&self) {
-        for dev in self.devices.values() {
-            nidaqmx::reset_ni_device(dev.name());
-        }
-    }
-}
-
-#[pymethods]
-impl Experiment {
-    /// Constructor for the `Experiment` class.
-    ///
-    /// This constructor initializes an instance of the `Experiment` class with an empty collection of devices.
-    /// The underlying representation of this collection is a IndexMap where device names (strings) map to their
-    /// respective `Device` objects.
-    ///
-    /// # Returns
-    /// - An `Experiment` instance with no associated devices.
-    ///
-    /// # Example (python)
-    /// ```python
-    /// from nicompiler_backend import Experiment
-    ///
-    /// exp = Experiment()
-    /// assert len(exp.devices()) == 0
-    /// ```
-    #[new]
-    pub fn new() -> Self {
-        Self {
-            devices: IndexMap::new(),
-            running_devs: IndexMap::new(),  // FixMe: this is a temporary dirty hack. Transfer device objects back to the main map (they were transferred out to be able to wrap them into Arc<Mutex<>> for multithreading)
-            // Streamer-wide settings
-            ref_clk_provider: None,  // Some((dev_name, terminal_name))
-            start_trig_primary: None,  // Some(dev_name)
-            // Worker thread communication objects
-            worker_cmd_chan: CmdChan::new(),
-            worker_report_recvrs: IndexMap::new(),
-            worker_handles: IndexMap::new(),  // FixMe [after Device move to streamer crate]: Maybe store individual device thread handle and report receiver in the Device struct
-        }
+    pub fn reset_all(&self) -> Result<(), DAQmxError> {
+        for dev_name in self.devices.keys() {
+            nidaqmx::reset_device(dev_name)?
+        };
+        Ok(())
     }
 }
 
