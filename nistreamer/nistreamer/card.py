@@ -1,30 +1,20 @@
-from niexpctrl_backend import Experiment as RawDLL
+from niexpctrl_backend import Experiment as RawStreamer
 from .channel import AOChanProxy, DOChanProxy
-from typing import Optional, Union, Literal
+from .utils import reset_dev
+from typing import Union
 
 
 class BaseCardProxy:
 
     def __init__(
             self,
-            _dll: RawDLL,
+            _streamer: RawStreamer,
             max_name: str,
-            samp_rate: float,
             nickname=None
     ):
-        self._dll = _dll
+        self._streamer = _streamer
         self.max_name = max_name
         self._nickname = nickname
-
-        # Sample clock
-        self.samp_rate = samp_rate
-        self.samp_clk_src = None  # None (default) means using on-board sample clock
-        # Start trigger
-        self._export_trig = None  # None (default) means not using start trigger
-        self._trig_line = None
-        # PLL-locking to external reference clock signal
-        self._ref_clk_rate = None
-        self._ref_clk_src = None
 
         self._chan_dict = {}
 
@@ -44,9 +34,17 @@ class BaseCardProxy:
     def __repr__(self):
         return (
             f'{self.max_name}\n'
-            f'\tSample clock: {self.samp_clk_info}\n'
-            f'\tStart trigger: {self.trig_info}\n'
-            f'\tReference clock: {self.ref_clk_info}'
+            f'\tStart trigger: \n'
+            f'\t\t in: {self.start_trig_in}\n'
+            f'\t\tout: {self.start_trig_out}\n'
+            f'\tSample clock:\n'
+            f'\t\t in: {self.samp_clk_in}\n'
+            f'\t\tout: {self.samp_clk_out}\n'
+            f'\t10 MHz reference clock: \n'
+            f'\t\t in: {self.ref_clk_in}\n'
+            f'\t\tout: see NIStreamer settings\n'
+            f'\n'
+            f'\tMin buffer write timeout: {self.min_bufwrite_timeout} sec'
         )
 
     @property
@@ -56,82 +54,59 @@ class BaseCardProxy:
         else:
             return self.max_name
 
+    # region Sync settings
     @property
-    def samp_clk_info(self):
-        if self.samp_clk_src is not None:
-            return f'Imported {self.samp_rate:,} Hz sample clock from {self.samp_clk_src}'
-        else:
-            return f'Using {self.samp_rate:,} Hz onboard sample clock'
-
-    @property
-    def trig_info(self):
-        if self._export_trig is True:
-            return f'Exported start trigger to {self._trig_line}'
-        elif self._export_trig is False:
-            return f'Imported start trigger from {self._trig_line}'
-        else:
-            return 'Not using external start trigger'
+    def start_trig_in(self) -> Union[str, None]:
+        return self._streamer.dev_get_start_trig_in(name=self.max_name)
+    @start_trig_in.setter
+    def start_trig_in(self, term: Union[str, None]):
+        self._streamer.dev_set_start_trig_in(name=self.max_name, term=term)
 
     @property
-    def ref_clk_info(self):
-        if self._ref_clk_src is not None:
-            return f'Imported {self._ref_clk_rate * 1e-6:.2f} MHz reference from {self._ref_clk_src}'
-        else:
-            return 'Not importing external reference clock. ' \
-                   'NOTE: this function cannot tell whether or not this device EXPORTED its reference clock'
+    def start_trig_out(self) -> Union[str, None]:
+        return self._streamer.dev_get_start_trig_out(name=self.max_name)
+    @start_trig_out.setter
+    def start_trig_out(self, term: Union[str, None]):
+        self._streamer.dev_set_start_trig_out(name=self.max_name, term=term)
 
-    def cfg_samp_clk_src(self, src: str):
-        self._dll.device_cfg_samp_clk_src(
-            name=self.max_name,
-            src=src
-        )
-        self.samp_clk_src = src
+    @property
+    def samp_clk_in(self) -> Union[str, None]:
+        return self._streamer.dev_get_samp_clk_in(name=self.max_name)
+    @samp_clk_in.setter
+    def samp_clk_in(self, term: Union[str, None]):
+        self._streamer.dev_set_samp_clk_in(name=self.max_name, term=term)
 
-    def cfg_start_trig(self, line: str, export: bool = False):
-        self._dll.device_cfg_trig(
-            name=self.max_name,
-            trig_line=line,
-            export_trig=export
-        )
-        self._export_trig = export
-        self._trig_line = line
+    @property
+    def samp_clk_out(self) -> Union[str, None]:
+        return self._streamer.dev_get_samp_clk_out(name=self.max_name)
+    @samp_clk_out.setter
+    def samp_clk_out(self, term: Union[str, None]):
+        self._streamer.dev_set_samp_clk_out(name=self.max_name, term=term)
 
-    def import_ref_clk(self, src: str, rate: float = 10e6):
-        """Configures PLL-locking of the onboard clock to an external reference clock signal.
-        NOTE: to EXPORT reference clock form a card, use the `utils.share_ref_clk()` function
+    @property
+    def ref_clk_in(self) -> Union[str, None]:
+        return self._streamer.dev_get_ref_clk_in(name=self.max_name)
+    @ref_clk_in.setter
+    def ref_clk_in(self, term: Union[str, None]):
+        self._streamer.dev_set_ref_clk_in(name=self.max_name, term=term)
 
-        :param src: (str) terminal/line to import the reference signal from (i.e. 'PFI0', 'RTSI0', or 'PXI_Trig0')
-        :param rate: (float, optional) expected reference signal frequency (default is 10 MHz)
-        :return: None
-        """
-        self._dll.device_import_ref_clk(
-            name=self.max_name,
-            src=src,
-            rate=rate,
-        )
-        self._ref_clk_src = src
-        self._ref_clk_rate = rate
+    @property
+    def min_bufwrite_timeout(self) -> Union[float, None]:
+        return self._streamer.dev_get_min_bufwrite_timeout(name=self.max_name)
+    @min_bufwrite_timeout.setter
+    def min_bufwrite_timeout(self, min_timeout: Union[str, None]):
+        self._streamer.dev_set_min_bufwrite_timeout(name=self.max_name, min_timeout=min_timeout)
+    # endregion
 
     def clear_edit_cache(self):
-        self._dll.device_clear_edit_cache(name=self.max_name)  # FixMe[Rust]: change `dev_name` to `max_name`
-        self._dll.device_clear_compile_cache(name=self.max_name)  # FixMe[Rust]: change `dev_name` to `max_name`
+        self._streamer.device_clear_edit_cache(name=self.max_name)
+        self._streamer.device_clear_compile_cache(name=self.max_name)
 
     def reset(self):
-        self._dll.reset_device(name=self.max_name)
-
-        # Update proxy values
-        # self.samp_rate = samp_rate  # FixMe - should self.samp_rate be changed?
-        # FixMe: what samp_rate is set after reset?
-        #  It probably doesn't affect samp_rate,
-        #  since actuall call to NIDAQmx to set samp_rate is done duting NIStreamer.stream_exp() call
-        self.samp_clk_src = None
-        self._export_trig = None
-        self._trig_line = None
-        self._ref_clk_rate = None
-        self._ref_clk_src = None
+        reset_dev(name=self.max_name)
 
     def last_instr_end_time(self):
-        return self._dll.device_last_instr_end_time(
+        return self._streamer.device_last_instr_end_time(
             self.max_name
         )
 
@@ -141,16 +116,16 @@ class AOCardProxy(BaseCardProxy):
     def __repr__(self):
         return 'AO card ' + super().__repr__()
 
-    def add_chan(self, chan_idx: int, default_value: float=0., nickname: str = None):
+    def add_chan(self, chan_idx: int, default_value: float = 0., nickname: str = None):
         # Raw rust-maturin wrapper call
-        self._dll.add_ao_channel(
+        self._streamer.add_ao_channel(
             self.max_name, 
             channel_id=chan_idx,  # FixMe[Rust]: maybe change `channel_id` to `chan_idx`,
             default_value=default_value
         )
         # Instantiate proxy object
         chan_proxy = AOChanProxy(
-            _dll=self._dll,
+            _streamer=self._streamer,
             _card_max_name=self.max_name,
             chan_idx=chan_idx,
             nickname=nickname
@@ -164,12 +139,12 @@ class DOCardProxy(BaseCardProxy):
     def __repr__(self):
         return 'DO card ' + super().__repr__()
 
-    def add_chan(self, chan_idx: int, default_value: bool=False, nickname: str = None):
+    def add_chan(self, chan_idx: int, default_value: bool = False, nickname: str = None):
         return self.add_chan_(chan_idx // 8, chan_idx % 8, default_value, nickname)
 
-    def add_chan_(self, port_idx: int, line_idx: int, default_value: bool=False, nickname: str = None):
+    def add_chan_(self, port_idx: int, line_idx: int, default_value: bool = False, nickname: str = None):
         # Raw rust-maturin wrapper call
-        self._dll.add_do_channel(
+        self._streamer.add_do_channel(
             self.max_name, 
             port_id=port_idx,
             # FixMe[Rust]: maybe change `port_id` to `port_idx`
@@ -179,7 +154,7 @@ class DOCardProxy(BaseCardProxy):
         )
         # Instantiate proxy object
         chan_proxy = DOChanProxy(
-            _dll=self._dll,
+            _streamer=self._streamer,
             _card_max_name=self.max_name,
             port_idx=port_idx,
             line_idx=line_idx,

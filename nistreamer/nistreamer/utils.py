@@ -16,6 +16,7 @@ except ImportError:
     )
 
 
+# region NI DAQmx functions
 def connect_terms(src: str, dest: str):
     """Statically (independently of any NI task) connect terminals
 
@@ -30,17 +31,26 @@ def disconnect_terms(src: str, dest: str):
     return raw_disconnect_terms(src=src, dest=dest)
 
 
-def share_ref_clk(dev: str, line: str):
+def share_10mhz_ref(dev: str, term: str):
     connect_terms(
         src=f'/{dev}/10MHzRefClock',
-        dest=f'/{dev}/{line}'
+        dest=f'/{dev}/{term}'
+    )
+
+
+def unshare_10mhz_ref(dev: str, term: str):
+    disconnect_terms(
+        src=f'/{dev}/10MHzRefClock',
+        dest=f'/{dev}/{term}'
     )
 
 
 def reset_dev(name: str):
     return raw_reset_dev(name=name)
+# endregion
 
 
+# region iplot
 class RendOption:
 
     # Available renderers (from https://plotly.com/python/renderers/):
@@ -105,3 +115,4 @@ def iplot(chan_list, t_start=None, t_end=None, nsamps=1000, renderer='browser', 
         )
 
     fig.show(renderer=renderer)
+# endregion
