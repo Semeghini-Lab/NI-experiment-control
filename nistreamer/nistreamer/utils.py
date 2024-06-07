@@ -102,6 +102,8 @@ def iplot(chan_list, t_start=None, t_end=None, nsamps=1000, renderer='browser', 
         t_start, t_end, signal_arr = chan.calc_signal(t_start=t_start, t_end=t_end, nsamps=nsamps)
 
         # Only compute t_arr once since it will be the same for all traces
+        # FixMe BUG: if the first channel in `chan_list` has instructions stopping earlier than on some other channels,
+        #  it will crop t-axis for other channels - should use min(t_start) and max(t_stop) across all channels.
         if t_arr is None:
             t_arr = np.linspace(t_start, t_end, nsamps)
 
