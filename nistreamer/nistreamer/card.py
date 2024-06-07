@@ -34,6 +34,8 @@ class BaseCardProxy:
     def __repr__(self):
         return (
             f'{self.max_name}\n'
+            f'\tSample rate: {self.samp_rate:,} Sa/s\n'
+            f'\n'
             f'\tStart trigger: \n'
             f'\t\t in: {self.start_trig_in}\n'
             f'\t\tout: {self.start_trig_out}\n'
@@ -54,7 +56,12 @@ class BaseCardProxy:
         else:
             return self.max_name
 
-    # region Sync settings
+    # region Hardware settings
+    @property
+    def samp_rate(self) -> float:
+        return self._streamer.dev_get_samp_rate(name=self.max_name)
+
+    # - Sync settings:
     @property
     def start_trig_in(self) -> Union[str, None]:
         return self._streamer.dev_get_start_trig_in(name=self.max_name)
@@ -90,6 +97,7 @@ class BaseCardProxy:
     def ref_clk_in(self, term: Union[str, None]):
         self._streamer.dev_set_ref_clk_in(name=self.max_name, term=term)
 
+    # - Buffer write settings:
     @property
     def min_bufwrite_timeout(self) -> Union[float, None]:
         return self._streamer.dev_get_min_bufwrite_timeout(name=self.max_name)

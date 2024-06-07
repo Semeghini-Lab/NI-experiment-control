@@ -177,7 +177,7 @@ impl Experiment {
             Ok(())
         } else {
             Err(PyKeyError::new_err(format!(
-                "Device '{name}' not found. Registered devices are: {:?}",
+                "Device {name} not found. Registered devices are: {:?}",
                 self.devices().keys().collect::<Vec<_>>()
             )))
         }
@@ -228,6 +228,11 @@ impl Experiment {
 #[pymethods]
 impl Experiment {
     // region Device settings
+    pub fn dev_get_samp_rate(&self, name: &str) -> PyResult<f64> {
+        let dev = self.get_dev(name)?;
+        Ok(dev.get_samp_rate())
+    }
+
     pub fn dev_get_start_trig_in(&self, name: &str) -> PyResult<Option<String>> {
         let dev = self.get_dev(name)?;
         Ok(dev.get_start_trig_in())

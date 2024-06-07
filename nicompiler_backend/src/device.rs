@@ -803,6 +803,10 @@ impl Device {
         }
     }
 
+    pub fn get_samp_rate(&self) -> f64 {
+        self.samp_rate
+    }
+
     pub fn get_start_trig_in(&self) -> Option<String> {
         self.start_trig_in.clone()
     }
