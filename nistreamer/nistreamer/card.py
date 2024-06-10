@@ -34,6 +34,10 @@ class BaseCardProxy:
     def __repr__(self):
         return (
             f'{self.max_name}\n'
+            f'\n'
+            f'Channels: {list(self._chan_dict.keys())}\n'
+            f'\n'
+            f'Hardware settings:\n'
             f'\tSample rate: {self.samp_rate:,} Sa/s\n'
             f'\n'
             f'\tStart trigger: \n'
@@ -44,7 +48,7 @@ class BaseCardProxy:
             f'\t\tout: {self.samp_clk_out}\n'
             f'\t10 MHz reference clock: \n'
             f'\t\t in: {self.ref_clk_in}\n'
-            f'\t\tout: see NIStreamer settings\n'
+            f'\t\tout: see NIStreamer.ref_clk_provider setting\n'
             f'\n'
             f'\tMin buffer write timeout: {self.min_bufwrite_timeout} sec'
         )

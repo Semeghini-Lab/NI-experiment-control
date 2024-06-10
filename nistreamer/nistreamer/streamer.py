@@ -18,16 +18,27 @@ class NIStreamer:
         else:
             raise KeyError(f'There is no card with max_name "{item}"')
 
-    # def __repr__(self):
-    #     # FixMe: TypeError: Object of type AOCard is not JSON serializable
-    #     return (
-    #         f'Experiment class.\n'
-    #         f'The following AO cards have been added already:\n'
-    #         f'{json.dumps(self._ao_card_dict, indent=4)}\n'
-    #         f'\n'
-    #         f'The following DO cards have been added already:\n'
-    #         f'{json.dumps(self._do_card_dict, indent=4)}'
-    #     )
+    def __repr__(self):
+        return (
+            f'NIStreamer instance\n'
+            f'\n'
+            f'AO cards: {list(self._ao_card_dict.keys())}\n'
+            f'DO cards: {list(self._do_card_dict.keys())}\n'
+            f'\n'
+            f'Hardware settings:\n'
+            f'\t10MHz ref provider: {self.ref_clk_provider}\n'
+            f'\t  Starts-last card: {self.starts_last}'
+        )
+
+        # # FixMe: TypeError: Object of type AOCard is not JSON serializable
+        # return (
+        #     f'Experiment class.\n'
+        #     f'The following AO cards have been added already:\n'
+        #     f'{json.dumps(self._ao_card_dict, indent=4)}\n'
+        #     f'\n'
+        #     f'The following DO cards have been added already:\n'
+        #     f'{json.dumps(self._do_card_dict, indent=4)}'
+        # )
 
     def _add_card(
             self,
