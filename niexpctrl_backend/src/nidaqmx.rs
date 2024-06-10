@@ -517,6 +517,9 @@ impl NiTask {
 // Define deletion behavior
 impl Drop for NiTask {
     fn drop(&mut self) {
-        let _ = self.clear();
+        let res = self.clear();
+        if let Err(err) = res {
+            println!("Error when dropping NiTask: {}", err.to_string());
+        };
     }
 }

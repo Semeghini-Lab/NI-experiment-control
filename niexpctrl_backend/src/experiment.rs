@@ -448,6 +448,9 @@ impl Experiment {
 
 impl Drop for Experiment {
     fn drop(&mut self) {
-        self.close_run_();
+        let res = self.close_run_();
+        if let Err(msg) = res {
+            println!("Error when dropping NIStreamer: {msg}")
+        };
     }
 }
