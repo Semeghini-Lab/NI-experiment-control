@@ -48,7 +48,6 @@
 use std::collections::HashMap;
 use numpy;
 use pyo3::prelude::*;
-use pyo3::exceptions::PyValueError;
 use indexmap::IndexMap;
 use std::thread;
 use std::thread::JoinHandle;

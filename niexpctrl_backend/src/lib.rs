@@ -124,7 +124,7 @@
 //! exp.stream_exp(50., 2)
 //! ```
 
-use pyo3::exceptions::{PyException, PyValueError, PyKeyError, PyRuntimeError};
+use pyo3::exceptions::{PyValueError, PyKeyError, PyRuntimeError};
 use pyo3::prelude::*;
 
 pub mod device;

@@ -60,7 +60,7 @@ impl CmdRecvr {
         };
 
         // Read and return the new command:
-        let (msg_num, cmd_val) = &*mutex_guard;
+        let (_msg_num, cmd_val) = &*mutex_guard;
         self.viewed_msg_num += 1;
         Ok(*cmd_val)
     }

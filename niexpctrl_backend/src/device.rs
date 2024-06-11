@@ -28,9 +28,8 @@
 //! - **Task Channel Configuration**: Configures the task channels based on the device's task type.
 
 use crate::nidaqmx::*;
-use crate::utils::{Semaphore, StreamCounter};
+use crate::utils::StreamCounter;
 
-use std::sync::Arc;
 use std::sync::mpsc::{Sender, Receiver, SendError, RecvError};
 use ndarray::Array2;
 
@@ -276,7 +275,7 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
             seq_len,
             (buf_dur * self.samp_rate()).round() as usize,
         );
-        let mut counter = StreamCounter::new(seq_len, buf_size);
+        let counter = StreamCounter::new(seq_len, buf_size);
 
         // DAQmx Setup
         let task = NiTask::new()?;
