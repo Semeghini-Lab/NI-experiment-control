@@ -276,10 +276,6 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
             seq_len,
             (buf_dur * self.samp_rate()).round() as usize,
         );
-        // FixMe: handle a very rare but still possible case:
-        //  if seq_len % buf_size == 1, the very final sample chunk will contain only 1 sample
-        //  and NI DAQmx bufwrite will fail - min sample number to write is 2
-        //  (but once >=2, any other sample number to write is valid)
         let mut counter = StreamCounter::new(seq_len, buf_size);
 
         // DAQmx Setup
