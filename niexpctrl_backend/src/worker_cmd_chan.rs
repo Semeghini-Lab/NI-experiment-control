@@ -4,7 +4,7 @@ use parking_lot::{Condvar, Mutex};
 #[derive(Clone, Copy)]
 pub enum WorkerCmd {
     Stream(bool),
-    Clear,
+    Close,
 }
 
 pub struct CmdChan {
@@ -14,7 +14,7 @@ pub struct CmdChan {
 impl CmdChan {
     pub fn new() -> Self {
         Self {
-            cmd: Arc::new(Mutex::new((0, WorkerCmd::Clear))),
+            cmd: Arc::new(Mutex::new((0, WorkerCmd::Close))),
             condvar: Arc::new(Condvar::new()),
         }
     }

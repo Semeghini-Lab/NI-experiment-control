@@ -257,7 +257,7 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
                     self.stream_run_(&mut stream_bundle, &start_sync, calc_next)?;
                     report_sendr.send(())?;
                 },
-                WorkerCmd::Clear => {
+                WorkerCmd::Close => {
                     break
                 }
             }

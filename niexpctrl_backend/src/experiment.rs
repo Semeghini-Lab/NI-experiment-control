@@ -344,7 +344,7 @@ impl Experiment {
     }
     pub fn close_run_(&mut self) -> Result<(), String> {
         // Command all workers to break out of the event loop and return
-        self.worker_cmd_chan.send(WorkerCmd::Clear);
+        self.worker_cmd_chan.send(WorkerCmd::Close);
 
         // Join all worker threads
         //  At this point it is expected that all workers should just join cleanly and each return Ok(()):
