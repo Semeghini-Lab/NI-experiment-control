@@ -52,11 +52,8 @@ impl CmdRecvr {
         // Check if a new message has already been posted. Wait if not yet posted:
         let (msg_num, _cmd_val) = &*mutex_guard;
         if *msg_num == self.viewed_msg_num {
-            println!("\t no new message yet. Waiting");
             self.condvar.wait(&mut mutex_guard);
-            println!("\t woken up by new message event");
         } else if *msg_num == self.viewed_msg_num + 1 {
-            println!("\t new message is already available. No need to wait");
             // The new command has already been published. No need to wait
         } else {
             return Err(format!("Viewed msg count {} diverged from the published command number {}", self.viewed_msg_num, *msg_num))
@@ -64,7 +61,6 @@ impl CmdRecvr {
 
         // Read and return the new command:
         let (msg_num, cmd_val) = &*mutex_guard;
-        println!("\t reading msg_num = {}", *msg_num);
         self.viewed_msg_num += 1;
         Ok(*cmd_val)
     }
