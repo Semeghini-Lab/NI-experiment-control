@@ -90,16 +90,11 @@ class NIStreamer:
         )
 
     def compile(self, stop_time: Optional[float] = None) -> float:
-        if stop_time is None:
-            self._dll.compile(extra_tail_tick=True) # Adds tail tick by default
-        else:
-            self._dll.compile_with_stoptime(stop_time=stop_time)
-
-        return self._dll.compiled_stop_time()
+        return self._dll.compile(stop_time=stop_time)
 
     def stream_exp(
             self,
-            stream_buftime: Optional[float] = 50,
+            stream_buftime: Optional[float] = 150,
             nreps: Optional[int] = 1
     ):
         self._dll.stream_exp(
@@ -107,12 +102,15 @@ class NIStreamer:
             nreps=nreps
         )
 
-    def add_reset_tick(self):
-        self._dll.add_reset_tick()
+    def add_reset_instr(self, reset_time: Optional[float] = None):
+        self._dll.add_reset_instr(reset_time=reset_time)
 
     def clear_edit_cache(self):
         self._dll.clear_edit_cache()
         self._dll.clear_compile_cache()
+
+    def check_trig_config(self):
+        self._dll.check_trig_config()
 
     def reset_all(self):
         self._dll.reset_devices()

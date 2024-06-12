@@ -188,6 +188,8 @@ pub mod experiment;
 pub mod instruction;
 pub mod utils;
 
+// ToDo: restrict public API access to the following functions:
+//  - mutable field accessors
 pub use channel::*;
 pub use device::*;
 pub use experiment::*;

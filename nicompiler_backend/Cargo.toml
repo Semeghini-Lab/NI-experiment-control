@@ -1,6 +1,6 @@
 [package]
 name = "nicompiler_backend"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "A backend interface for National Instrument (NI) integration, offering streamlined experimental control systems with Rust's performance and safety guarantees."
 license = "MIT"
@@ -13,6 +13,10 @@ crate-type = ["cdylib", "lib"] # Specify the "lib" to make it usable for other r
 [[bin]]
 name = "nicompiler_backend_bin"
 path = "src/main.rs"
+
+[[bin]]
+name = "unittest"
+path = "src/unittest.rs"
 
 [dependencies]
 maplit = "1.0.2"

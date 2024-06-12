@@ -95,7 +95,7 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
 
         // (Not-done) trick: in principle, calculation of the first signal can be done independently of daqmx setup
         // Still have to figure out how to do in rust.
-        let seq_len = (self.compiled_stop_time() * self.samp_rate()) as usize;
+        let seq_len = self.total_samps();  // ToDo: the previous approach was dangerous, truncation may strip the final tick off. Consider using `self.compiled_stop_pos()` or `.round()`
         let buffer_size = std::cmp::min(
             seq_len,
             (stream_buftime * self.samp_rate() / 1000.) as usize,

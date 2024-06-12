@@ -102,6 +102,25 @@ pub trait BaseDevice {
     fn export_ref_clk_(&mut self) -> &mut Option<bool>;
     fn ref_clk_rate_(&mut self) -> &mut Option<f64>;
 
+    /// Shortcut to borrow channel instance by name
+    fn chan(&self, name: &str) -> &Channel {
+        if !self.channels().contains_key(name) {
+            panic!("Device {} does not have channel {}", self.name(), name)
+        }
+        self.channels().get(name).unwrap()
+    }
+    /// Shortcut to mutably borrow channel instance by name
+    fn chan_(&mut self, name: &str) -> &mut Channel {
+        if !self.channels().contains_key(name) {
+            panic!("Device {} does not have channel {}", self.name(), name)
+        }
+        self.channels_().get_mut(name).unwrap()
+    }
+
+    /// Returns sample clock period calculated as `1.0 / self.samp_rate()`
+    fn clock_period(&self) -> f64 {
+        1.0 / self.samp_rate()
+    }
     /// Configures the sample clock source for the device.
     ///
     /// This method sets the `samp_clk_src` field of the device to the provided source string.
@@ -224,6 +243,20 @@ pub trait BaseDevice {
         self.channels_().insert(name.to_string(), new_channel);
     }
 
+    fn add_reset_instr(&mut self, reset_time: f64) {
+        let reset_pos = (reset_time * self.samp_rate()).round() as usize;
+        if reset_pos < self.last_instr_end_pos() {
+            panic!(
+                "Given reset_time {reset_time} was rounded to {reset_pos} clock cycles \
+                which is below the last instruction end_pos {}",
+                self.last_instr_end_pos()
+            )
+        }
+        for chan in self.editable_channels_().iter_mut() {  // ToDo when splitting AO/DO types: remove `editable` filter
+            chan.add_reset_instr(reset_pos)
+        }
+    }
+
     /// A device is compiled if any of its editable channels are compiled.
     /// Also see [`BaseChannel::is_compiled`]
     fn is_compiled(&self) -> bool {
@@ -245,19 +278,43 @@ pub trait BaseDevice {
             .iter()
             .all(|channel| channel.is_fresh_compiled())
     }
-    /// Clears the edit-cache fields for all editable channels.
+    /// Clears the edit-cache fields for all channels.
     /// Also see [`BaseChannel::clear_edit_cache`]
     fn clear_edit_cache(&mut self) {
-        self.editable_channels_()
-            .iter_mut()
-            .for_each(|chan| chan.clear_edit_cache());
+        // Remove all made-up "port" channels
+        self.channels_().retain(|_name, chan| chan.editable());
+
+        for chan in self.channels_().values_mut() {
+            chan.clear_edit_cache()
+        }
     }
-    /// Clears the compile-cache fields for all editable channels.
+    /// Clears the compile-cache fields for all channels.
     /// Also see [`BaseChannel::clear_compile_cache`]
     fn clear_compile_cache(&mut self) {
-        self.editable_channels_()
-            .iter_mut()
-            .for_each(|chan| chan.clear_compile_cache());
+        // Remove all made-up "port" channels
+        self.channels_().retain(|_name, chan| chan.editable());
+
+        for chan in self.channels_().values_mut() {
+            chan.clear_compile_cache()
+        }
+    }
+
+    fn check_end_clipped(&self, stop_tick: usize) -> bool {
+        if stop_tick < self.last_instr_end_pos() {
+            panic!("Given stop_tick {stop_tick} is below the last instruction end_pos {}",
+                   self.last_instr_end_pos())
+        }
+        self.channels()
+            .values()
+            .filter(|chan| chan.editable())  // ToDo when splitting AO/DO types: remove `editable()` filter
+            .filter(|chan| !chan.instr_list().is_empty())
+            .any(|chan| {
+                let last_instr = chan.instr_list().last().unwrap();
+                match last_instr.end_pos() {
+                    Some(end_pos) => end_pos == stop_tick,
+                    None => false
+                }
+            })
     }
 
     /// Compiles all editable channels to produce a continuous instruction stream.
@@ -278,58 +335,93 @@ pub trait BaseDevice {
     /// by a single integer value, allowing for streamlined execution and efficient data transfer.
     ///
     /// # Arguments
-    /// - `stop_pos`: The stop position used to compile the channels.
-    fn compile(&mut self, stop_pos: usize) {
-        self.editable_channels_()
-            .iter_mut()
-            .for_each(|chan| chan.compile(stop_pos));
-        if self.task_type() != TaskType::DO {
-            return;
+    /// - `stop_time`: The stop time used to compile the channels.
+    fn compile(&mut self, stop_time: f64) -> f64 {
+        let stop_tick = (stop_time * self.samp_rate()).round() as usize;
+        if stop_tick < self.last_instr_end_pos() {
+            panic!(
+                "Given stop_time {stop_time} was rounded to {stop_tick} clock cycles which is below the last instruction end_pos {}",
+                self.last_instr_end_pos()
+            )
         }
-        // For DO channels: merge line channels into port channels
-        for match_port in self.unique_port_numbers() {
-            // Collect a sorted list of possible intervals
-            let mut instr_end_set = BTreeSet::new();
-            instr_end_set.extend(
-                self.editable_channels()
-                    .iter()
-                    .filter(|chan| chan.is_edited() && extract_port_line_numbers(chan.name()).0 == match_port)
-                    .flat_map(|chan| chan.instr_end().iter()),
-            );
-            let instr_end: Vec<usize> = instr_end_set.into_iter().collect();
 
-            let mut instr_val = vec![0.; instr_end.len()];
-            for chan in self.editable_channels().iter().filter(|chan| chan.is_edited()) {
-                let (port, line) = extract_port_line_numbers(chan.name());
-                if port == match_port {
-                    let mut chan_instr_idx = 0;
-                    for i in 0..instr_val.len() {
-                        assert!(chan_instr_idx < chan.instr_end().len());
-                        let chan_value =
-                            chan.instr_val()[chan_instr_idx].args.get("value").unwrap();
-                        instr_val[i] += *chan_value as f64 * 2.0f64.powf(line as f64);
-                        if instr_end[i] == chan.instr_end()[chan_instr_idx] {
-                            chan_instr_idx += 1;
+        // If on any of the channels, the last instruction has `end_spec = Some(end_pos, ...)`
+        // and requested `stop_tick` precisely matches `end_pos`,
+        // we ask the card to generate an additional sample at the end to ensure this "closing edge" is reliably formed.
+        //
+        // Explanation:
+        // If there were no extra sample, generation will simply stop at the last sample of the pulse
+        // and what happens next would be hardware-dependent. Specifically NI cards simply keep the last generated value,
+        // resulting in the pulse having the first "opening" edge, but not having the second "closing" edge.
+        //
+        // To avoid this issue (and any similar surprises for other hardware platforms),
+        // we explicitly ask the card to run for one more clock cycle longer and generate the extra sample at the end.
+        // Channel's `compile()` logic will fill this sample with the last instruction's after-end padding
+        // thus reliably forming its' "closing edge".
+        let stop_pos = if self.check_end_clipped(stop_tick) {
+            stop_tick + 1
+        } else {
+            stop_tick
+        };
+        // Compile all channels
+        for chan in self.editable_channels_() {
+            chan.compile(stop_pos)
+        };
+
+        // For DO channels: merge line channels into port channels
+        if self.task_type() == TaskType::DO {
+            // Remove all made-up "port" channels left from the previous compile run
+            //  (although all port channels with new instructions coming would be replaced anyways during `self.channels_().insert()`,
+            //  this step cleans out any old port channels for which there are no instructions this time)
+            self.channels_().retain(|_name, chan| chan.editable());
+
+            for match_port in self.unique_port_numbers() {
+                // Collect a sorted list of possible intervals
+                let mut instr_end_set = BTreeSet::new();
+                instr_end_set.extend(
+                    self.editable_channels()
+                        .iter()
+                        .filter(|chan| chan.is_edited() && extract_port_line_numbers(chan.name()).0 == match_port)
+                        .flat_map(|chan| chan.instr_end().iter()),
+                );
+                let instr_end: Vec<usize> = instr_end_set.into_iter().collect();
+
+                let mut instr_val = vec![0.; instr_end.len()];
+                for chan in self.editable_channels().iter().filter(|chan| chan.is_edited()) {
+                    let (port, line) = extract_port_line_numbers(chan.name());
+                    if port == match_port {
+                        let mut chan_instr_idx = 0;
+                        for i in 0..instr_val.len() {
+                            assert!(chan_instr_idx < chan.instr_end().len());
+                            let chan_value =
+                                chan.instr_val()[chan_instr_idx].args.get("value").unwrap();
+                            instr_val[i] += *chan_value as f64 * 2.0f64.powf(line as f64);
+                            if instr_end[i] == chan.instr_end()[chan_instr_idx] {
+                                chan_instr_idx += 1;
+                            }
                         }
                     }
                 }
+                let port_instr_val: Vec<Instruction> = instr_val
+                    .iter()
+                    .map(|&val| Instruction::new_const(val))
+                    .collect();
+                let mut port_channel = Channel::new(
+                    TaskType::DO,
+                    &format!("port{}", match_port),
+                    self.samp_rate(),
+                    // The default value for merged port channel does not matter since we never explicitly compile them
+                    0.
+                );
+                *port_channel.instr_val_() = port_instr_val;
+                *port_channel.instr_end_() = instr_end;
+                self.channels_()
+                    .insert(port_channel.name().to_string(), port_channel);
             }
-            let port_instr_val: Vec<Instruction> = instr_val
-                .iter()
-                .map(|&val| Instruction::new_const(val))
-                .collect();
-            let mut port_channel = Channel::new(
-                TaskType::DO,
-                &format!("port{}", match_port),
-                self.samp_rate(),
-                // The default value for merged port channel does not matter since we never explicitly compile them
-                0. 
-            );
-            *port_channel.instr_val_() = port_instr_val;
-            *port_channel.instr_end_() = instr_end;
-            self.channels_()
-                .insert(port_channel.name().to_string(), port_channel);
-        }
+        };
+
+        // Return the total run duration to generate all the samples:
+        self.total_run_time()
     }
 
     /// Returns a vector of compiled channels based on the given criteria.
@@ -354,21 +446,62 @@ pub trait BaseDevice {
             .collect()
     }
 
+    /// Returns the total number of samples the card will generate according to the current compile cache.
+    fn total_samps(&self) -> usize {
+        // The assumption is that all the channels of any given device
+        // must have precisely the same number of samples to generate
+        // since all the channels are assumed to be driven by the same sample clock of the device.
+        //
+        // This function first checks `total_samps` are indeed consistent across all compiled channels
+        // and then returns the common `total_samps`.
+
+        // Collect `total_samps` from all compiled channels into an `IndexMap`
+        let samps_per_chan: IndexMap<String, usize> =
+            self.channels()
+                .into_iter()
+                .filter(|(_chan_name, chan)| !chan.instr_end().is_empty())
+                .map(|(chan_name, chan)| (chan_name.to_string(), chan.total_samps()))
+                .collect();
+
+        if samps_per_chan.is_empty() {
+            return 0
+        } else {
+            // To verify consistency, compare all against the first one:
+            let &first_val = samps_per_chan.values().next().unwrap();
+            let all_equal = samps_per_chan.values().all(|&stop_pos| stop_pos == first_val);
+            if all_equal {
+                return first_val
+            } else {
+                panic!(
+                    "Channels of device {} have unequal compiled stop positions:\n\
+                    {:?}\n\
+                    When working at a device level, you are not supposed to compile individual channels directly. \
+                    Instead, call `my_device.compile(stop_pos)` and it will compile all channels with the same `stop_pos`",
+                    self.name(), samps_per_chan
+                )
+            }
+        }
+
+    }
     /// Calculates the maximum stop time among all compiled channels.
     ///
     /// Iterates over all the compiled channels in the device, regardless of their streamability or
     /// editability, and determines the maximum stop time.
-    /// See [`BaseChannel::compiled_stop_time`] for more information.
+    /// See [`BaseChannel::total_run_time`] for more information.
     ///
     /// # Returns
     /// A `f64` representing the maximum stop time (in seconds) across all compiled channels.
-    fn compiled_stop_time(&self) -> f64 {
-        self.compiled_channels(false, false)
-            .iter()
-            .map(|chan| chan.compiled_stop_time())
-            .fold(0.0, f64::max)
+    fn total_run_time(&self) -> f64 {
+        self.total_samps() as f64 * self.clock_period()
     }
 
+    fn last_instr_end_pos(&self) -> usize {
+        self.channels()
+            .values()
+            .filter(|chan| chan.editable())  // ToDo when splitting AO/DO types: remove `editable()` filter
+            .map(|chan| chan.last_instr_end_pos())
+            .fold(0, usize::max)
+    }
     /// Calculates the maximum stop time among all editable channels and optionally adds an extra tick duration.
     ///
     /// This function determines the maximum stop time by iterating over all editable channels. 
@@ -380,17 +513,8 @@ pub trait BaseDevice {
     /// # Returns
     /// A `f64` representing the maximum stop time (in seconds) across all editable channels, 
     /// optionally increased by the duration of one tick.
-    fn edit_stop_time(&self, extra_tail_tick: bool) -> f64 {
-        let base_edit_stop_time = self.editable_channels()
-            .iter()
-            .map(|chan| chan.edit_stop_time())
-            .fold(0.0, f64::max);
-        
-        if extra_tail_tick {
-            base_edit_stop_time + 1. / self.samp_rate()
-        } else {
-            base_edit_stop_time
-        }
+    fn last_instr_end_time(&self) -> f64 {
+        self.last_instr_end_pos() as f64 * self.clock_period()
     }
 
     /// Generates a signal by sampling float-point values from compiled instructions.
@@ -485,6 +609,7 @@ pub trait BaseDevice {
         require_streamable: bool,
         require_editable: bool,
     ) -> Array2<f64> {
+        // ToDo: look through
         let num_chans = self
             .compiled_channels(require_streamable, require_editable)
             .len();
@@ -801,5 +926,104 @@ impl BaseDevice for Device {
 
     fn ref_clk_rate_(&mut self) -> &mut Option<f64> {
         &mut self.ref_clk_rate
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::device::*;
+    use crate::instruction::*;
+
+    #[test]
+    fn last_instr_end_pos() {
+        let mut dev = Device::new("Dev1", TaskType::AO, 1e3);
+        dev.add_channel("ao0", 0.0);
+        dev.add_channel("ao1", 0.0);
+        let mock_func = Instruction::new_const(0.0);
+
+        // No instructions
+        assert_eq!(dev.last_instr_end_pos(), 0);
+
+        // Instruction t=0..1 on ao0
+        dev.chan_("ao0").add_instr(mock_func.clone(),
+            0.0, Some((1.0, false))
+        );
+        assert_eq!(dev.last_instr_end_pos(), 1000);
+
+        // Instruction t=1..2 on ao1
+        dev.chan_("ao1").add_instr(mock_func.clone(),
+            1.0, Some((1.0, false))
+        );
+        assert_eq!(dev.last_instr_end_pos(), 2000);
+
+        // "Go-something" instruction on ao1 at t=2
+        dev.chan_("ao1").add_instr(mock_func.clone(),
+            2.0, None
+        );
+        assert_eq!(dev.last_instr_end_pos(), 2001);
+
+        dev.clear_edit_cache();
+        assert_eq!(dev.last_instr_end_pos(), 0);
+    }
+
+    #[test]
+    fn check_end_clipped() {
+        let mut dev = Device::new("Dev1", TaskType::AO, 1.0);
+        dev.add_channel("ao0", 0.0);
+        let mock_func = Instruction::new_const(0.0);
+
+        // (1) No instructions
+        assert_eq!(dev.check_end_clipped(0), false);
+
+        // (2) Finite duration instruction t = 0..1s:
+        //      start_pos = 0
+        //      end_pos = 1
+        dev.chan_("ao0").add_instr(mock_func.clone(),
+            0.0, Some((1.0, false))
+        );
+        assert_eq!(dev.chan("ao0").last_instr_end_pos(), 1);
+        assert_eq!(dev.check_end_clipped(2), false);
+        assert_eq!(dev.check_end_clipped(1), true);
+        dev.clear_edit_cache();
+
+        // (3) "Go-something" instruction at t = 0s:
+        //      start_pos = 0
+        //      eff_end_pos = 1
+        dev.chan_("ao0").add_instr(mock_func.clone(),
+            0.0, None
+        );
+        assert_eq!(dev.chan("ao0").last_instr_end_pos(), 1);
+        //  A "go-something" instruction is not meant to have the "closing" edge
+        //  so setting `stop_tick` to precisely `eff_end_pos` is not considered clipping
+        assert_eq!(dev.check_end_clipped(1), false);
+    }
+
+    #[test]
+    fn compile() {
+        let mut dev = Device::new("Dev1", TaskType::AO, 1e3);
+        dev.add_channel("ao0", 0.0);
+        dev.add_channel("ao1", 0.0);
+        let mock_func = Instruction::new_const(0.0);
+
+        // Not compiled yet
+        assert_eq!(dev.total_samps(), 0);
+
+        // Add some instructions on both channels
+        dev.chan_("ao0").add_instr(mock_func.clone(),
+            0.0, Some((1.0, false))
+        );
+        dev.chan_("ao1").add_instr(mock_func.clone(),
+            1.0, Some((1.0, false))
+        );
+        assert_eq!(dev.last_instr_end_pos(), 2000);
+
+        // Compile without clipping of the "closing edge" - no extra sample should be added
+        dev.compile(3.0);
+        assert_eq!(dev.total_samps(), 3000);
+
+        // Compile with stop_pos matching the end of a finite-duration instruction on "ao1" -
+        //  an additional sample should be added to form the "closing edge"
+        dev.compile(2.0);
+        assert_eq!(dev.total_samps(), 2001);
     }
 }

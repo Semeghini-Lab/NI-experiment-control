@@ -55,7 +55,7 @@ use crate::instruction::*;
 /// 2. Device-targeted methods which alter or query the behavior of a specific device:
 ///     - [`add_ao_channel`], [`add_do_channel`]
 ///     - [`device_calc_signal_nsamps`], [`device_compiled_channel_names`]
-///     - [`device_edit_stop_time`], [`device_compiled_stop_time`]
+///     - [`device_last_instr_end_time`], [`device_compiled_stop_time`]
 ///     - [`device_clear_compile_cache`], [`device_clear_edit_cache`]
 /// 3. Channel-targeted methods which alter or query the behavior of a particular channel
 ///     - [`constant`], [`sine`], [`high`], [`low`], [`go_high`], [`go_low`]
@@ -80,7 +80,7 @@ use crate::instruction::*;
 /// [`add_ao_channel`]: BaseExperiment::add_ao_channel
 /// [`add_do_channel`]: BaseExperiment::add_do_channel
 /// [`device_calc_signal_nsamps`]: BaseExperiment::device_calc_signal_nsamps
-/// [`device_edit_stop_time`]: BaseExperiment::device_edit_stop_time
+/// [`device_last_instr_end_time`]: BaseExperiment::device_last_instr_end_time
 /// [`device_compiled_stop_time`]: BaseExperiment::device_compiled_stop_time
 /// [`device_clear_compile_cache`]: BaseExperiment::device_clear_compile_cache
 /// [`device_clear_edit_cache`]: BaseExperiment::device_clear_edit_cache
@@ -255,6 +255,21 @@ pub trait BaseExperiment {
         self.add_device_base(Device::new(name, TaskType::DO, samp_rate));
     }
 
+    /// Shortcut to borrow device instance by name
+    fn dev(&self, name: &str) -> &Device {
+        if !self.devices().contains_key(name) {
+            panic!("There is no device {name} registered")
+        }
+        self.devices().get(name).unwrap()
+    }
+    /// Shortcut to mutably borrow device instance by name
+    fn dev_(&mut self, name: &str) -> &mut Device {
+        if !self.devices().contains_key(name) {
+            panic!("There is no device {name} registered")
+        }
+        self.devices_().get_mut(name).unwrap()
+    }
+
     /// Retrieves the latest `edit_stop_time` from all registered devices.
     /// See [`BaseDevice::edit_stop_time`] for more information.
     ///
@@ -272,49 +287,22 @@ pub trait BaseExperiment {
     /// exp.high("PXI1Slot6", "port0/line4", 0., 6.); // stop time at 6
     /// assert_eq!(exp.edit_stop_time(), 6.);
     /// ```
-    fn edit_stop_time(&self, extra_tail_tick: bool) -> f64 {
+    fn last_instr_end_time(&self) -> f64 {
         self.devices()
             .values()
-            .map(|dev| dev.edit_stop_time(extra_tail_tick))
+            .map(|dev| dev.last_instr_end_time())
             .fold(0.0, f64::max)
     }
 
-    /// Retrieves the `compiled_stop_time` from all registered devices.
-    /// See [`BaseDevice::compiled_stop_time`] for more information.
+    /// Retrieves the `total_run_time` from all registered devices.
+    /// See [`BaseDevice::total_run_time`] for more information.
     ///
-    /// The maximum `compiled_stop_time` across all devices.
-    fn compiled_stop_time(&self) -> f64 {
+    /// The maximum `total_run_time` across all devices.
+    fn total_run_time(&self) -> f64 {
         self.devices()
             .values()
-            .map(|dev| dev.compiled_stop_time())
+            .map(|dev| dev.total_run_time())
             .fold(0.0, f64::max)
-    }
-
-    /// Broadcasts the compile command to all devices, relying on the `edit_stop_time`
-    /// as the compilation stop-target.
-    /// If `extra_tail_tick`, then the actual stop time is one tick past the specified 
-    /// edit_stop_time for every device, allowing trailing commands with `keep_val` to take effect. 
-    /// See [`BaseDevice::compile`], [`BaseExperiment::edit_stop_time`], and [`BaseExperiment::compiled_stop_time`] for more information.
-    ///
-    /// # Example
-    /// ```
-    /// # use nicompiler_backend::*;
-    /// let mut exp = Experiment::new();
-    /// exp.add_do_device("PXI1Slot6", 1e6);
-    /// exp.add_do_channel("PXI1Slot6", 0, 0, 0.);
-    /// exp.high("PXI1Slot6", "port0/line0", 1., 4.);
-    ///
-    /// exp.compile(false);
-    /// assert_eq!(exp.compiled_stop_time(), exp.edit_stop_time());
-    /// ```
-    fn compile(&mut self, extra_tail_tick: bool) -> f64 {
-        // Called without arguments, compiles based on stop_time of instructions
-        let stop_time = self.edit_stop_time(extra_tail_tick);
-        self.compile_with_stoptime(stop_time);
-        stop_time
-        // assert!(stop_time == self.compiled_stop_time(), 
-        // "Internal bug: intended stop_time {} yet compiled to stop_time {}", stop_time, self.compiled_stop_time());
-        // stop_time
     }
 
     /// Compiles the experiment by broadcasting the compile command to all devices.
@@ -353,20 +341,41 @@ pub trait BaseExperiment {
     /// exp.compile_with_stoptime(5.); // Experiment signal will stop at t=5 now
     /// assert_eq!(exp.compiled_stop_time(), 5.);
     /// ```
-    fn compile_with_stoptime(&mut self, stop_time: f64) {
+    fn compile(&mut self, stop_time: Option<f64>) -> f64 {
+        // Sanity check: inter-device trigger configuration is valid
+        self.check_trig_config();  // ToDo: move this to hardware-specific streaming sub-crate
+
+        let stop_time = match stop_time {
+            Some(stop_time) => {
+                if stop_time < self.last_instr_end_time() {
+                    panic!(
+                        "Attempted to compile with stop_time={stop_time} [s] while the last instruction end time is {} [s]\n\
+                        If you intended to provide stop_time=last_instr_end_time, use stop_time=None",
+                        self.last_instr_end_time()
+                    )
+                };
+                stop_time
+            },
+            None => self.last_instr_end_time()
+        };
+        for dev in self.devices_().values_mut() {
+            dev.compile(stop_time);
+        }
+        return self.total_run_time()
+    }
+
+    /// This is a sanity check to ensure inter-device trigger configuration is valid
+    fn check_trig_config(&self) {
         assert!(
             self.devices().values().all(|d| d.export_trig().is_none())
                 || self
-                    .devices()
-                    .values()
-                    .filter(|d| d.export_trig() == Some(true))
-                    .count()
-                    == 1,
+                .devices()
+                .values()
+                .filter(|d| d.export_trig() == Some(true))
+                .count()
+                == 1,
             "Cannot compile an experiment with devices expecting yet no device exporting trigger"
         );
-        self.devices_()
-            .values_mut()
-            .for_each(|dev| dev.compile(((stop_time) * dev.samp_rate()) as usize));
     }
 
     /// Retrieves a list of devices that have been successfully compiled.
@@ -416,6 +425,7 @@ pub trait BaseExperiment {
     ///
     /// This method is useful to reset or clear any temporary data or states stored during the editing phase for each device.
     fn clear_edit_cache(&mut self) {
+        self.clear_compile_cache();
         self.devices_()
             .values_mut()
             .for_each(|dev| dev.clear_edit_cache());
@@ -426,6 +436,11 @@ pub trait BaseExperiment {
     /// This function computes the last `edit_stop_time` of the experiment and uses it
     /// to determine the appropriate time to insert the reset tick. A reset tick is a
     /// point in time where all editable channels are reset to a value of 0.
+    ///
+    /// # Arguments
+    ///
+    /// * `t`: if `Some(t)`, time point at which to insert the all-channel reset instruction.
+    /// If `None`, reset is inserted at the latest end of all existing instructions across all channels.
     ///
     /// # Returns
     ///
@@ -462,7 +477,7 @@ pub trait BaseExperiment {
     /// assert!(sig[[0, 9]] == 1. && sig[[0, 10]] == 0.); // go_high takes effect on the tick corresponding to specified time. 
     /// assert!(sig[[1, 9]] == 1. && sig[[1, 10]] == 1.); 
     /// 
-    /// let reset_tick_time = exp.add_reset_tick();
+    /// let reset_tick_time = exp.add_reset_instr();
     /// // Reset tick happens at the earliest unspecified interval across all channels
     /// assert!(reset_tick_time == 1.0); 
     /// exp.compile_with_stoptime(5.);
@@ -471,14 +486,24 @@ pub trait BaseExperiment {
     /// assert!(sig[[1, 9]] == 1. && sig[[1, 10]] == 0.); // Also zeros channel 1 at t=1
     /// // println!("{:?}, reset_tick_time={}", sig, reset_tick_time);
     /// ```
-    fn add_reset_tick(&mut self) -> f64 {
-        let edit_stop_time = self.edit_stop_time(false);
-        self.devices_().values_mut().for_each(|dev| {
-            dev.editable_channels_().iter_mut().for_each(|chan|{
-                chan.constant(0., edit_stop_time, 1./ chan.samp_rate(), true);
-            });
-        });
-        edit_stop_time
+    fn add_reset_instr(&mut self, reset_time: Option<f64>) {
+        let last_instr_end_time = self.last_instr_end_time();
+        let reset_time = match reset_time {
+            Some(reset_time) => {
+                if reset_time < last_instr_end_time {
+                    panic!(
+                        "Requested to insert the all-channel reset instruction at t = {reset_time} [s] \
+                        but some channels have instructions spanning until {last_instr_end_time} [s].\n\
+                        If you intended to provide `reset_time=last_instr_end_time`, use `reset_time=None`"
+                    )
+                }
+                reset_time
+            },
+            None => last_instr_end_time
+        };
+        for dev in self.devices_().values_mut() {
+            dev.add_reset_instr(reset_time)
+        }
     }
 
     /// Clears the compile cache for all registered devices.
@@ -856,22 +881,19 @@ pub trait BaseExperiment {
     /// # Returns
     ///
     /// Returns the edit stop time for the specified device.
-    fn device_edit_stop_time(&mut self, name: &str) -> f64 {
-        self.device_op(name, |dev| (*dev).edit_stop_time(false))
+    fn device_last_instr_end_time(&mut self, name: &str) -> f64 {
+        self.device_op(name, |dev| (*dev).last_instr_end_time())
     }
 
-    /// Retrieves the maximum `compiled_stop_time` from all registered devices.
-    ///
-    /// This method determines the longest stop time across all devices
-    /// that have been compiled, which may be useful for synchronization purposes.
+    /// Retrieves the `total_run_time` for the specified device.
     ///
     /// # Returns
     ///
-    /// The maximum `compiled_stop_time` across all devices.
+    /// The `total_run_time` for this device.
     ///
-    /// See [`BaseDevice::compiled_stop_time`] for more details on individual device stop times.
-    fn device_compiled_stop_time(&mut self, name: &str) -> f64 {
-        self.device_op(name, |dev| (*dev).compiled_stop_time())
+    /// See [`BaseDevice::total_run_time`] for more details.
+    fn device_total_run_time(&mut self, name: &str) -> f64 {
+        self.device_op(name, |dev| (*dev).total_run_time())
     }
 
     /// Clears the compilation cache for a specific device.
@@ -987,7 +1009,9 @@ pub trait BaseExperiment {
     /// * `t`: The start time of the constant instruction.
     /// * `duration`: Duration for which the constant value is applied.
     /// * `value`: The constant value to apply.
-    /// * `keep_val`: Flag indicating whether to maintain the value beyond the specified duration.
+    ///
+    /// Note: after `duration` elapses, output value is automatically set to channel default and kept there
+    /// until the next instruction or global end. Use [`go_constant`] if you want to keep the same value instead.
     ///
     /// # Panics
     ///
@@ -1020,10 +1044,31 @@ pub trait BaseExperiment {
         t: f64,
         duration: f64,
         value: f64,
-        keep_val: bool,
     ) {
         self.typed_channel_op(dev_name, chan_name, TaskType::AO, |chan| {
-            (*chan).constant(value, t, duration, keep_val);
+            (*chan).constant(value, t, Some((duration, false)));
+        });
+    }
+    /// Sets the specified analogue output (AO) channel to a specified constant value for a short duration.
+    ///
+    /// It allows the user to set the AO channel to an arbitrary value.
+    ///
+    /// The duration for which the value is held is determined as the inverse of the channel's sampling rate,
+    /// ensuring that the signal remains constant for one tick.
+    ///
+    /// # Arguments
+    ///
+    /// * `dev_name`: The name of the target device.
+    /// * `chan_name`: The name of the target AO channel within the device.
+    /// * `t`: The start time for the signal to take the specified value.
+    /// * `value`: The desired constant value for the signal.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if the channel is not of type AO.
+    fn go_constant(&mut self, dev_name: &str, chan_name: &str, t: f64, value: f64) {
+        self.typed_channel_op(dev_name, chan_name, TaskType::AO, |chan| {
+            (*chan).constant(value, t, None);
         });
     }
 
@@ -1072,7 +1117,23 @@ pub trait BaseExperiment {
     ) {
         self.typed_channel_op(dev_name, chan_name, TaskType::AO, |chan| {
             let instr = Instruction::new_sine(freq, amplitude, phase, dc_offset);
-            (*chan).add_instr(instr, t, duration, keep_val)
+            (*chan).add_instr(instr, t, Some((duration, keep_val)))
+        });
+    }
+    /// Same as [`sine`] but without specific end time ("keep running until the next instruction or global end")
+    fn go_sine(
+        &mut self,
+        dev_name: &str,
+        chan_name: &str,
+        t: f64,
+        freq: f64,
+        amplitude: Option<f64>,
+        phase: Option<f64>,
+        dc_offset: Option<f64>,
+    ) {
+        self.typed_channel_op(dev_name, chan_name, TaskType::AO, |chan| {
+            let instr = Instruction::new_sine(freq, amplitude, phase, dc_offset);
+            (*chan).add_instr(instr, t, None)
         });
     }
 
@@ -1090,10 +1151,9 @@ pub trait BaseExperiment {
     /// This method will panic if the channel is not of type DO.
     fn high(&mut self, dev_name: &str, chan_name: &str, t: f64, duration: f64) {
         self.typed_channel_op(dev_name, chan_name, TaskType::DO, |chan| {
-            (*chan).constant(1., t, duration, false);
+            (*chan).constant(1., t, Some((duration, false)));
         });
     }
-
     /// Sets the specified digital output (DO) channel to a low state for the given duration.
     ///
     /// # Arguments
@@ -1108,10 +1168,9 @@ pub trait BaseExperiment {
     /// This method will panic if the channel is not of type DO.
     fn low(&mut self, dev_name: &str, chan_name: &str, t: f64, duration: f64) {
         self.typed_channel_op(dev_name, chan_name, TaskType::DO, |chan| {
-            (*chan).constant(0., t, duration, false);
+            (*chan).constant(0., t, Some((duration, false)));
         });
     }
-
     /// Sets the specified digital output (DO) channel to a high state, until the next instruction.
     ///
     /// The duration is determined as the inverse of the channel's sampling rate. A `go_high` instruction
@@ -1128,10 +1187,9 @@ pub trait BaseExperiment {
     /// This method will panic if the channel is not of type DO.
     fn go_high(&mut self, dev_name: &str, chan_name: &str, t: f64) {
         self.typed_channel_op(dev_name, chan_name, TaskType::DO, |chan| {
-            (*chan).constant(1., t, 1. / (*chan).samp_rate(), true);
+            (*chan).constant(1., t, None);
         });
     }
-
     /// Sets the specified digital output (DO) channel to a low state for a short duration.
     ///
     /// The duration is determined as the inverse of the channel's sampling rate. A `go_low` instruction
@@ -1148,30 +1206,7 @@ pub trait BaseExperiment {
     /// This method will panic if the channel is not of type DO.
     fn go_low(&mut self, dev_name: &str, chan_name: &str, t: f64) {
         self.typed_channel_op(dev_name, chan_name, TaskType::DO, |chan| {
-            (*chan).constant(0., t, 1. / (*chan).samp_rate(), true);
-        });
-    }
-
-    /// Sets the specified analogue output (AO) channel to a specified constant value for a short duration.
-    ///
-    /// It allows the user to set the AO channel to an arbitrary value.
-    ///
-    /// The duration for which the value is held is determined as the inverse of the channel's sampling rate, 
-    /// ensuring that the signal remains constant for one tick.
-    ///
-    /// # Arguments
-    ///
-    /// * `dev_name`: The name of the target device.
-    /// * `chan_name`: The name of the target AO channel within the device.
-    /// * `t`: The start time for the signal to take the specified value.
-    /// * `value`: The desired constant value for the signal. 
-    ///
-    /// # Panics
-    ///
-    /// This method will panic if the channel is not of type AO. 
-    fn go_constant(&mut self, dev_name: &str, chan_name: &str, t: f64, value: f64) {
-        self.typed_channel_op(dev_name, chan_name, TaskType::AO, |chan| {
-            (*chan).constant(value, t, 1. / (*chan).samp_rate(), true);
+            (*chan).constant(0., t, None);
         });
     }
 
@@ -1206,7 +1241,7 @@ pub trait BaseExperiment {
     ) {
         self.typed_channel_op(dev_name, chan_name, TaskType::AO, |chan| {
             let instr = Instruction::new_linramp(start_val, end_val, t, t+duration);
-            (*chan).add_instr(instr, t, duration, keep_val)
+            (*chan).add_instr(instr, t, Some((duration, keep_val)))
         });
     }
 
@@ -1307,6 +1342,12 @@ pub trait BaseExperiment {
     fn channel_clear_compile_cache(&mut self, dev_name: &str, chan_name: &str) {
         self.channel_op(dev_name, chan_name, |chan| (*chan).clear_compile_cache());
     }
+
+    fn channel_last_instr_end_time(&mut self, dev_name: &str, chan_name: &str) -> f64 {
+        self.channel_op(dev_name, chan_name, |chan| {
+            (*chan).last_instr_end_time()
+        })
+    }
 }
 
 /// A concrete struct consisting of a collection of devices.
@@ -1378,20 +1419,20 @@ macro_rules! impl_exp_boilerplate {
                 BaseExperiment::add_do_device(self, name, samp_rate);
             }
 
-            pub fn edit_stop_time(&self) -> f64 {
-                BaseExperiment::edit_stop_time(self, false)
+            pub fn last_instr_end_time(&self) -> f64 {
+                BaseExperiment::last_instr_end_time(self)
             }
 
-            pub fn compiled_stop_time(&self) -> f64 {
-                BaseExperiment::compiled_stop_time(self)
+            pub fn total_run_time(&self) -> f64 {
+                BaseExperiment::total_run_time(self)
             }
 
-            pub fn compile(&mut self, extra_tail_tick: bool) -> f64 {
-                BaseExperiment::compile(self, extra_tail_tick)
+            pub fn check_trig_config(&self) {
+                BaseExperiment::check_trig_config(self)
             }
 
-            pub fn compile_with_stoptime(&mut self, stop_time: f64) {
-                BaseExperiment::compile_with_stoptime(self, stop_time);
+            pub fn compile(&mut self, stop_time: Option<f64>) -> f64 {
+                BaseExperiment::compile(self, stop_time)
             }
 
             pub fn is_edited(&self) -> bool {
@@ -1410,8 +1451,8 @@ macro_rules! impl_exp_boilerplate {
                 BaseExperiment::clear_edit_cache(self);
             }
 
-            pub fn add_reset_tick(&mut self) -> f64 {
-                BaseExperiment::add_reset_tick(self)
+            pub fn add_reset_instr(&mut self, reset_time: Option<f64>) {
+                BaseExperiment::add_reset_instr(self, reset_time)
             }
 
             pub fn clear_compile_cache(&mut self) {
@@ -1489,12 +1530,12 @@ macro_rules! impl_exp_boilerplate {
                 Ok(numpy::PyArray::from_array(py, &arr).to_object(py))
             }
 
-            pub fn device_edit_stop_time(&mut self, name: &str) -> f64 {
-                BaseExperiment::device_edit_stop_time(self, name)
+            pub fn device_last_instr_end_time(&mut self, name: &str) -> f64 {
+                BaseExperiment::device_last_instr_end_time(self, name)
             }
 
-            pub fn device_compiled_stop_time(&mut self, name: &str) -> f64 {
-                BaseExperiment::device_compiled_stop_time(self, name)
+            pub fn device_total_run_time(&mut self, name: &str) -> f64 {
+                BaseExperiment::device_total_run_time(self, name)
             }
 
             pub fn device_clear_compile_cache(&mut self, name: &str) {
@@ -1513,9 +1554,11 @@ macro_rules! impl_exp_boilerplate {
                 t: f64,
                 duration: f64,
                 value: f64,
-                keep_val: bool,
             ) {
-                BaseExperiment::constant(self, dev_name, chan_name, t, duration, value, keep_val);
+                BaseExperiment::constant(self, dev_name, chan_name, t, duration, value);
+            }
+            pub fn go_constant(&mut self, dev_name: &str, chan_name: &str, t: f64, value:f64) {
+                BaseExperiment::go_constant(self, dev_name, chan_name, t, value);
             }
 
             pub fn sine(
@@ -1535,6 +1578,20 @@ macro_rules! impl_exp_boilerplate {
                     dc_offset,
                 );
             }
+            pub fn go_sine(
+                &mut self,
+                dev_name: &str,
+                chan_name: &str,
+                t: f64,
+                freq: f64,
+                amplitude: Option<f64>,
+                phase: Option<f64>,
+                dc_offset: Option<f64>,
+            ) {
+                BaseExperiment::go_sine(
+                    self, dev_name, chan_name, t, freq, amplitude, phase, dc_offset,
+                );
+            }
 
             pub fn high(&mut self, dev_name: &str, chan_name: &str, t: f64, duration: f64) {
                 BaseExperiment::high(self, dev_name, chan_name, t, duration);
@@ -1552,10 +1609,6 @@ macro_rules! impl_exp_boilerplate {
                 BaseExperiment::go_low(self, dev_name, chan_name, t);
             }
 
-            pub fn go_constant(&mut self, dev_name: &str, chan_name: &str, t: f64, value:f64) {
-                BaseExperiment::go_constant(self, dev_name, chan_name, t, value);
-            }
-
             pub fn linramp(
                 &mut self,
                 dev_name: &str,
@@ -1569,12 +1622,17 @@ macro_rules! impl_exp_boilerplate {
                 BaseExperiment::linramp(self, dev_name, chan_name, t, duration, start_val, end_val, keep_val);
             }
 
+            // CHANNEL METHODS
             pub fn channel_clear_compile_cache(&mut self, dev_name: &str, chan_name: &str) {
                 BaseExperiment::channel_clear_compile_cache(self, dev_name, chan_name);
             }
 
             pub fn channel_clear_edit_cache(&mut self, dev_name: &str, chan_name: &str) {
                 BaseExperiment::channel_clear_edit_cache(self, dev_name, chan_name);
+            }
+
+            pub fn channel_last_instr_end_time(&mut self, dev_name: &str, chan_name: &str) -> f64 {
+                BaseExperiment::channel_last_instr_end_time(self, dev_name, chan_name)
             }
 
             pub fn channel_calc_signal_nsamps(
@@ -1620,3 +1678,218 @@ impl Experiment {
 }
 
 impl_exp_boilerplate!(Experiment);
+
+#[cfg(test)]
+/// One of the main parts of the `BaseExperiment` logic is to handle a collection of devices
+/// with different and incommensurate sample clock rates.
+/// Their clock grids generally don't align, so timing has to be in `f64` at the `BaseExperiment` level
+/// while each device, when give a float time, should round it to its' own `usize` clock grid.
+///
+/// Clock grid mismatch mostly affects the operations at the global sequence end - compiling
+/// with some (or None) stop time, adding reset instruction, and calculating total run time.
+///
+/// In particular:
+/// * Devices cannot always physically stop at the same time. Even if requested to compile
+///   to the same total duration, actual run time of each device may be different;
+/// * The `usize clock grid` -> `common f64 time` (typically max across all devices) -> back to `usize clock grid`
+///   conversion process can potentially lead to "last sample clipping" errors due to unsafe rounding.
+///
+/// -----------------------------------------------
+/// For all the tests below we pick:
+///     Dev1: samp_rate = 1000 Sa/s
+///     Dev2: samp_rate = 123 Sa/s
+/// Their clock grids do not match anywhere except for integer multiple of 1s.
+///
+/// We typically add pulses to both devices with nominally identical edge times of 0.1s, 0.2s, ..., 0.9s, 1.0s
+///
+/// * For Dev1, these times match clock grid and the actual pulses will have the expected edges:
+///     0.100  0.200  0.300  0.400  0.500  0.600  0.700  0.800  0.900  1.000
+///
+/// * For Dev2, these times don't match clock grid and rounding will make edges "jump" around originally specified values:
+///     0.098  0.203  0.301  0.398  0.496  0.602  0.699  0.797  0.902  1.000
+///
+/// As a result, the `last_instr_end_time` for Dev2 is sometimes slightly above, slightly below,
+/// or precisely equal to that for Dev1, giving the full range of how finial edges could compare
+/// across different devices.
+///
+/// We can also run from 0s to 10s to repeat the 1s mismatch period 10 times.
+mod test {
+    mod compile_stop_time {
+        use crate::experiment::*;
+        use crate::instruction::*;
+
+        #[test]
+        /// Test to ensure there are no panics with compiling with `stop_time = None`
+        /// (flash with the `last_instr_end_time`) for the case of incommensurate clock grids.
+        ///
+        /// **Successful test**: no device should panic at `dev.compile(exp.last_instr_end_time())`
+        /// due to its' last instruction being clipped.
+        fn incommensurate_clocks() {
+            let mut exp = Experiment::new();
+            exp.add_do_device("Dev1", 1000.0);
+            exp.add_do_device("Dev2", 123.0);
+            exp.dev_("Dev1").add_channel("port0/line0", 0.0);
+            exp.dev_("Dev2").add_channel("port0/line0", 0.0);
+
+            let mock_func = Instruction::new_const(1.0);  // actual function doesn't matter
+
+            // Array of nominal stop times:
+            //  from 0s to 1s in steps of 100ms to go through the full mismatch period
+            //  actually go from 0s to 10s to repeat this 10 times
+            let interv = 100e-3;
+            let dur = 50e-3;
+            let stop_time_arr: Vec<f64> = (1..101).into_iter().map(|i| interv * i as f64).collect();
+
+            for stop_time in stop_time_arr {
+                for dev in exp.devices_().values_mut() {
+                    for chan in dev.editable_channels_() {
+                        chan.add_instr(
+                            mock_func.clone(),
+                            stop_time - dur, Some((dur, false))
+                        )
+                    }
+                }
+                // The actual test - this call should not panic due to any last instructions being clipped:
+                exp.compile(None);
+
+                // Additional (not really necessary) check to ensure no instructions were clipped
+                //  (hard to check for the exact individual total_run_times
+                //  because it would require keeping track of the rounding jumps at instruction adding
+                //  and the extra tail tick when compiling):
+                let dev1 = exp.dev("Dev1");
+                assert!(dev1.last_instr_end_time() - 1e-10 < dev1.total_run_time());
+                let dev2 = exp.dev("Dev2");
+                assert!(dev2.last_instr_end_time() - 1e-10 < dev2.total_run_time());
+
+                /*
+                println!("\n=============================================");
+                let dev1 = exp.dev("Dev1");
+                println!("dev1.last_instr_end_time() = {}", dev1.last_instr_end_time());
+                println!("dev1.total_samps() = {}", dev1.total_samps());
+                println!("dev1.total_run_time() = {}", dev1.total_run_time());
+
+                println!("\n");
+                let dev2 = exp.dev("Dev2");
+                println!("dev2.last_instr_end_time() = {}", dev2.last_instr_end_time());
+                println!("dev2.total_samps() = {}", dev2.total_samps());
+                println!("dev2.total_run_time() = {}", dev2.total_run_time());
+                */
+            }
+        }
+
+        #[test]
+        /// When the requested compile stop time matches an integer tick across all clock grids
+        /// and is far away from any closing edges of last pulses (so no extra sample is added anywhere),
+        /// total run time must be precisely equal to the requested stop time.
+        ///
+        /// We pick
+        ///     Dev1: samp_rate = 1000 Sa/s
+        ///     Dev2: samp_rate = 123 Sa/s
+        /// Their clock ticks generally do not match, but align for integer multiple of 1s.
+        ///
+        /// So compiling with `stop_time = Some(1.0)` far away from any closing pulse edges
+        /// must give `total_run_time = 1.0`
+        fn predictable_total_run_time() {
+            let mut exp = Experiment::new();
+            exp.add_do_device("Dev1", 1000.0);
+            exp.add_do_device("Dev2", 123.0);
+            exp.dev_("Dev1").add_channel("port0/line0", 0.0);
+            exp.dev_("Dev2").add_channel("port0/line0", 0.0);
+
+            let mock_func = Instruction::new_const(0.0);  // actual function doesn't matter
+
+            exp.dev_("Dev1").chan_("port0/line0").add_instr(
+                mock_func.clone(),
+                0.0, Some((0.5, false))
+            );
+            exp.dev_("Dev2").chan_("port0/line0").add_instr(
+                mock_func.clone(),
+                0.0, Some((0.5, false))
+            );
+
+            exp.compile(Some(1.0));
+            assert!(
+                f64::abs(exp.total_run_time() - 1.0) < 1e-10
+            );
+        }
+    }
+
+    mod add_reset_instr {
+        use crate::experiment::*;
+        use crate::instruction::*;
+
+        #[test]
+        /// Main goal - no device should panic due to reset instruction colliding with the end
+        /// of its latest instruction.
+        fn incommensurate_clocks() {
+            let mut exp = Experiment::new();
+            exp.add_do_device("Dev1", 1000.0);
+            exp.add_do_device("Dev2", 123.0);
+            exp.dev_("Dev1").add_channel("port0/line0", 0.0);
+            exp.dev_("Dev2").add_channel("port0/line0", 0.0);
+
+            let mock_func = Instruction::new_const(0.0);
+
+            // Prepare the range of nominal "last_instr_end_time":
+            //      0.1, 0.2, ..., 0.9, 1.0, 1.1, ..., 9.9, 10.0
+            let interv = 100e-3;
+            let dur = 50e-3;
+            let stop_time_arr: Vec<f64> = (1..101).into_iter().map(|i| interv * i as f64).collect();
+            // println!("stop_time_arr = {stop_time_arr:?}");
+
+            for stop_time in stop_time_arr {
+                exp.clear_edit_cache();
+                for dev in exp.devices_().values_mut() {
+                    for chan in dev.editable_channels_() {  // ToDo when splitting AO/DO types: remove `editable` filter
+                        chan.add_instr(
+                            mock_func.clone(),
+                            stop_time - dur, Some((dur, true))
+                        )
+                    }
+                }
+                // Neither of the following calls should panic:
+                exp.add_reset_instr(None);
+                exp.compile(None);
+            }
+        }
+
+        #[test]
+        /// When requested reset time matches an integer clock tick across all devices,
+        /// reset should happen precisely at this time
+        fn predictable_reset_time() {
+            let mut exp = Experiment::new();
+            exp.add_do_device("Dev1", 1000.0);
+            exp.add_do_device("Dev2", 123.0);
+            exp.dev_("Dev1").add_channel("port0/line0", 0.0);
+            exp.dev_("Dev2").add_channel("port0/line0", 0.0);
+
+            let mock_func = Instruction::new_const(1.0);
+            for dev in exp.devices_().values_mut() {
+                for chan in dev.editable_channels_() {
+                    chan.add_instr(mock_func.clone(), 0.0, None)
+                }
+            }
+            // In this test, clock grids align at `t = 1.0s`
+            let reset_time = 1.0;
+            exp.add_reset_instr(Some(reset_time));
+            exp.compile(None);
+
+            // Confirm that all channels actually give their reset values at `t = match_time`
+            for dev in exp.devices().values() {
+                for chan in dev.editable_channels() {
+                    // Reset is the last instruction, so its' start position is the end of the previous instruction:
+                    let actual_reset_pos = chan.instr_end()[chan.instr_end().len() - 2];
+                    let expected_reset_pos = (reset_time * chan.samp_rate()).round() as usize;
+                    assert_eq!(actual_reset_pos, expected_reset_pos);
+
+                    // Additionally, confirm the reset function indeed gives the reset value
+                    // (this only probes the function of the reset instruction and does not probe reset time)
+                    let reset_func = chan.instr_val().last().unwrap();
+                    assert!(f64::abs(
+                        reset_func.eval_point(reset_time) - chan.reset_value()  // ToDo: this could be written as `chan.calc_signal_nsamps(1.0, 1.0, 1)[0]`, but currently `fill_signal_nsamps()` requires `start_pos < end_pos`
+                    ) < 1e-10)
+                }
+            }
+        }
+    }
+}
