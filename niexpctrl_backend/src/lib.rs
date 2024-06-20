@@ -227,6 +227,13 @@ impl Experiment {
 
 #[pymethods]
 impl Experiment {
+    // region Channel methods
+    pub fn chan_get_default_val(&self, dev_name: &str, chan_name: &str) -> PyResult<f64> {
+        let chan = self.get_chan(dev_name, chan_name)?;
+        Ok(chan.default_value())
+    }
+    // endregion
+
     // region Device settings
     pub fn dev_get_samp_rate(&self, name: &str) -> PyResult<f64> {
         let dev = self.get_dev(name)?;

@@ -13,11 +13,21 @@ class BaseChanProxy:
         self._nickname = nickname
 
     def __repr__(self, card_info=False):
-        return f'Channel {self.chan_name} on card {self._card_max_name}'
+        return (
+            f'Channel {self.chan_name} on card {self._card_max_name}\n'
+            f'Default value: {self.default_val}'
+        )
 
     @property
     def chan_name(self):
         raise NotImplementedError
+
+    @property
+    def default_val(self):
+        return self._streamer.chan_get_default_val(
+            dev_name=self._card_max_name,
+            chan_name=self.chan_name
+        )
 
     @property
     def nickname(self):
@@ -175,6 +185,15 @@ class DOChanProxy(BaseChanProxy):
     @property
     def chan_name(self):
         return f'port{self.port_idx}/line{self.line_idx}'
+
+    @property
+    def default_val(self):
+        float_val = self._streamer.chan_get_default_val(
+            dev_name=self._card_max_name,
+            chan_name=self.chan_name
+        )
+        # ToDo: remove this hack when AO/DO types are split in Rust backend
+        return True if float_val > 0.5 else False
 
     def go_high(self, t):
         self._streamer.go_high(

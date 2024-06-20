@@ -45,23 +45,22 @@ class NIStreamer:
             card_type: Literal['AO', 'DO'],
             max_name: str,
             samp_rate: float,
-            nickname: Optional[str] = None
+            nickname: Optional[str] = None,
+            proxy_class=None
     ):
         if card_type == 'AO':
             raw_streamer_method = RawStreamer.add_ao_device
-            proxy_class = AOCardProxy
             target_dict = self._ao_card_dict
         elif card_type == 'DO':
             raw_streamer_method = RawStreamer.add_do_device
-            proxy_class = DOCardProxy
             target_dict = self._do_card_dict
         else:
             raise ValueError(f'Invalid card type "{card_type}". Valid type strings are "AO" and "DO"')
 
-        # Raw (maturin wrapped) DLL call
+        # Raw (maturin wrapped) Rust NIStreamer call
         raw_streamer_method(
             self._streamer,
-            max_name,  # FixMe[Rust]: change `physical_name` to `max_name`
+            name=max_name,
             samp_rate=samp_rate
         )
         # Proxy object
@@ -77,26 +76,30 @@ class NIStreamer:
             self,
             max_name: str,
             samp_rate: float,
-            nickname: Optional[str] = None
+            nickname: Optional[str] = None,
+            proxy_class=AOCardProxy
     ):
         return self._add_card(
             card_type='AO',
             max_name=max_name,
             samp_rate=samp_rate,
-            nickname=nickname
+            nickname=nickname,
+            proxy_class=proxy_class
         )
 
     def add_do_card(
             self,
             max_name: str,
             samp_rate: float,
-            nickname: Optional[str] = None
+            nickname: Optional[str] = None,
+            proxy_class=DOCardProxy
     ):
         return self._add_card(
             card_type='DO',
             max_name=max_name,
             samp_rate=samp_rate,
-            nickname=nickname
+            nickname=nickname,
+            proxy_class=proxy_class
         )
 
     @property
