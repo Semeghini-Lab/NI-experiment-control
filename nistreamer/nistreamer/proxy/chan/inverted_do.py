@@ -1,7 +1,7 @@
 from nistreamer.channel import DOChanProxy
 
 
-class InvertedDOChanProxy(DOChanProxy):
+class InvertedDOChan(DOChanProxy):
     @property
     def default_val(self):
         return 'Off' if super().default_val else 'On'
