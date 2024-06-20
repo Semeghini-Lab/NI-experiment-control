@@ -1,14 +1,14 @@
-from niexpctrl_backend import Experiment as RawDLL  # FixMe[Rust]: rename Experiment to NIStreamer
+from niexpctrl_backend import Experiment as RawStreamer  # FixMe[Rust]: rename Experiment to NIStreamer
 
 
 class BaseChanProxy:
     def __init__(
             self,
-            _dll: RawDLL,
+            _streamer: RawStreamer,
             _card_max_name: str,
             nickname: str = None
     ):
-        self._dll = _dll
+        self._streamer = _streamer
         self._card_max_name = _card_max_name
         self._nickname = nickname
 
@@ -27,11 +27,11 @@ class BaseChanProxy:
             return self.chan_name
 
     def clear_edit_cache(self):
-        self._dll.channel_clear_edit_cache(
+        self._streamer.channel_clear_edit_cache(
             dev_name=self._card_max_name,
             chan_name=self.chan_name
         )
-        self._dll.channel_clear_compile_cache(
+        self._streamer.channel_clear_compile_cache(
             dev_name=self._card_max_name,
             chan_name=self.chan_name
         )
@@ -56,7 +56,7 @@ class BaseChanProxy:
         #  to accept `Option<start_time>` and `Option<end_time>`
         t_end = t_end if t_end is not None else self.last_instr_end_time()
 
-        signal_arr = self._dll.channel_calc_signal_nsamps(
+        signal_arr = self._streamer.channel_calc_signal_nsamps(
             dev_name=self._card_max_name,
             chan_name=self.chan_name,
             start_time=t_start,  # FixMe[Rust]: unify `start_time` and `t_start`
@@ -67,7 +67,7 @@ class BaseChanProxy:
         return t_start, t_end, signal_arr
 
     def last_instr_end_time(self):
-        return self._dll.channel_last_instr_end_time(
+        return self._streamer.channel_last_instr_end_time(
             dev_name=self._card_max_name,
             chan_name=self.chan_name
         )
@@ -76,7 +76,7 @@ class BaseChanProxy:
 class AOChanProxy(BaseChanProxy):
     def __init__(
             self,
-            _dll: RawDLL,
+            _streamer: RawStreamer,
             _card_max_name: str,
             chan_idx: int,
             nickname: str = None
@@ -86,7 +86,7 @@ class AOChanProxy(BaseChanProxy):
 
         BaseChanProxy.__init__(
             self,
-            _dll=_dll,
+            _streamer=_streamer,
             _card_max_name=_card_max_name,
             nickname=nickname
         )
@@ -97,7 +97,7 @@ class AOChanProxy(BaseChanProxy):
         return f'ao{self.chan_idx}'
 
     def constant(self, t, dur, val):
-        self._dll.constant(
+        self._streamer.constant(
             dev_name=self._card_max_name,
             chan_name=self.chan_name,
             t=t,
@@ -107,7 +107,7 @@ class AOChanProxy(BaseChanProxy):
         return dur
     
     def go_constant(self, t, val):
-        self._dll.go_constant(
+        self._streamer.go_constant(
             dev_name=self._card_max_name,
             chan_name=self.chan_name,
             t=t,
@@ -115,7 +115,7 @@ class AOChanProxy(BaseChanProxy):
         )
 
     def sine(self, t, dur, amp, freq, phase=0, dc_offs=0, keep_val=False):
-        self._dll.sine(
+        self._streamer.sine(
             dev_name=self._card_max_name,
             chan_name=self.chan_name,
             t=t,
@@ -130,7 +130,7 @@ class AOChanProxy(BaseChanProxy):
         return dur
     
     def go_sine(self, t, amp, freq, phase=0, dc_offs=0):
-        self._dll.go_sine(
+        self._streamer.go_sine(
             dev_name=self._card_max_name,
             chan_name=self.chan_name,
             t=t,
@@ -142,7 +142,7 @@ class AOChanProxy(BaseChanProxy):
         )
 
     def linramp(self, t, dur, start_val, end_val, keep_val=True):
-        self._dll.linramp(
+        self._streamer.linramp(
             dev_name=self._card_max_name,
             chan_name=self.chan_name,
             t=t,
@@ -157,7 +157,7 @@ class AOChanProxy(BaseChanProxy):
 class DOChanProxy(BaseChanProxy):
     def __init__(
             self,
-            _dll: RawDLL,
+            _streamer: RawStreamer,
             _card_max_name: str,
             port_idx: int,
             line_idx: int,
@@ -165,11 +165,10 @@ class DOChanProxy(BaseChanProxy):
     ):
         BaseChanProxy.__init__(
             self,
-            _dll=_dll,
+            _streamer=_streamer,
             _card_max_name=_card_max_name,
             nickname=nickname
         )
-
         self.port_idx = port_idx
         self.line_idx = line_idx
 
@@ -178,21 +177,21 @@ class DOChanProxy(BaseChanProxy):
         return f'port{self.port_idx}/line{self.line_idx}'
 
     def go_high(self, t):
-        self._dll.go_high(
+        self._streamer.go_high(
             dev_name=self._card_max_name,
             chan_name=self.chan_name,
             t=t
         )
 
     def go_low(self, t):
-        self._dll.go_low(
+        self._streamer.go_low(
             dev_name=self._card_max_name,
             chan_name=self.chan_name,
             t=t
         )
 
     def high(self, t, dur):
-        self._dll.high(
+        self._streamer.high(
             dev_name=self._card_max_name,
             chan_name=self.chan_name,
             t=t,
@@ -201,7 +200,7 @@ class DOChanProxy(BaseChanProxy):
         return dur
 
     def low(self, t, dur):
-        self._dll.low(
+        self._streamer.low(
             dev_name=self._card_max_name,
             chan_name=self.chan_name,
             t=t,

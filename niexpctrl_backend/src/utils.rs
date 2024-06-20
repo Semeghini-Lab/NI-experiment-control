@@ -42,14 +42,8 @@ impl StreamCounter {
         }
     }
 
-    /// Calculates the next position based on the current position and the interval.
-    /// If the calculated position exceeds or equals `end_pos`, it returns `end_pos`.
-    ///
-    /// # Returns
-    ///
-    /// The next position.
-    pub fn next_pos(&mut self) -> usize {
-        min(self.pos + self.interval, self.end_pos)
+    pub fn reset(&mut self) {
+        self.pos = 0;
     }
 
     /// Gets the current position.
@@ -61,18 +55,32 @@ impl StreamCounter {
         self.pos
     }
 
+    /// Calculates the next position based on the current position and the interval.
+    /// If the calculated position exceeds or equals `end_pos`, it returns `end_pos`.
+    ///
+    /// # Returns
+    ///
+    /// The next position.
+    pub fn next_pos(&mut self) -> usize {
+        min(self.pos + self.interval, self.end_pos)
+    }
+
+    pub fn reached_end(&self) -> bool {
+        self.pos == self.end_pos
+    }
+
     /// Advances the position by the interval and returns a tuple of the current position and the next position.
     /// If the position reaches `end_pos`, it wraps around to the beginning.
     ///
     /// # Returns
     ///
     /// A tuple of the form `(current_position, next_position)`.
-    pub fn tick_next(&mut self) -> (usize, usize) {
-        let result = (self.pos(), self.next_pos());
-        self.pos = self.next_pos();
-        if self.pos == self.end_pos {
-            self.pos = 0
+    pub fn tick_next(&mut self) -> Option<(usize, usize)> {
+        if self.reached_end() {
+            return None;
         }
+        let result = Some((self.pos(), self.next_pos()));
+        self.pos = self.next_pos();
         result
     }
 }

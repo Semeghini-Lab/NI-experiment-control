@@ -1,6 +1,7 @@
 import numpy as np
-from typing import Union
-
+from niexpctrl_backend import connect_terms as raw_connect_terms
+from niexpctrl_backend import disconnect_terms as raw_disconnect_terms
+from niexpctrl_backend import reset_dev as raw_reset_dev
 # Import plotly
 PLOTLY_INSTALLED = False
 try:
@@ -15,6 +16,41 @@ except ImportError:
     )
 
 
+# region NI DAQmx functions
+def connect_terms(src: str, dest: str):
+    """Statically (independently of any NI task) connect terminals
+
+    :param src:
+    :param dest:
+    :return:
+    """
+    return raw_connect_terms(src=src, dest=dest)
+
+
+def disconnect_terms(src: str, dest: str):
+    return raw_disconnect_terms(src=src, dest=dest)
+
+
+def share_10mhz_ref(dev: str, term: str):
+    connect_terms(
+        src=f'/{dev}/10MHzRefClock',
+        dest=f'/{dev}/{term}'
+    )
+
+
+def unshare_10mhz_ref(dev: str, term: str):
+    disconnect_terms(
+        src=f'/{dev}/10MHzRefClock',
+        dest=f'/{dev}/{term}'
+    )
+
+
+def reset_dev(name: str):
+    return raw_reset_dev(name=name)
+# endregion
+
+
+# region iplot
 class RendOption:
 
     # Available renderers (from https://plotly.com/python/renderers/):
@@ -66,6 +102,8 @@ def iplot(chan_list, t_start=None, t_end=None, nsamps=1000, renderer='browser', 
         t_start, t_end, signal_arr = chan.calc_signal(t_start=t_start, t_end=t_end, nsamps=nsamps)
 
         # Only compute t_arr once since it will be the same for all traces
+        # FixMe BUG: if the first channel in `chan_list` has instructions stopping earlier than on some other channels,
+        #  it will crop t-axis for other channels - should use min(t_start) and max(t_stop) across all channels.
         if t_arr is None:
             t_arr = np.linspace(t_start, t_end, nsamps)
 
@@ -79,3 +117,4 @@ def iplot(chan_list, t_start=None, t_end=None, nsamps=1000, renderer='browser', 
         )
 
     fig.show(renderer=renderer)
+# endregion

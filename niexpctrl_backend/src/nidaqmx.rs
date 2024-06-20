@@ -65,6 +65,7 @@
 //! For more details on the NI-DAQmx C driver and its capabilities, please refer to the
 //! [NI-DAQmx C Reference](https://www.ni.com/docs/en-US/bundle/ni-daqmx-c-api-ref/page/cdaqmx/help_file_title.html).
 
+use std::ffi::NulError;
 use libc;
 use ndarray::Array2;
 use std::fs::OpenOptions;
@@ -89,7 +90,9 @@ pub const DAQMX_VAL_WAITINFINITELY: CFloat64 = -1.0;
 pub const DAQMX_VAL_CHANPERLINE: CInt32 = 0;
 pub const DAQMX_VAL_CHANFORALLLINES: CInt32 = 1;
 pub const DAQMX_VAL_STARTTRIGGER: CInt32 = 12491;
+pub const DAQMX_VAL_SAMPLECLOCK: CInt32 = 12487;
 pub const DAQMX_VAL_10MHZREFCLOCK: CInt32 = 12536;
+pub const DAQMX_VAL_DO_NOT_INVERT_POLARITY: CInt32 = 0;
 
 #[link(name = "NIDAQmx")]
 extern "C" {
@@ -160,8 +163,9 @@ extern "C" {
         reserved: *mut CBool32,
     ) -> CInt32;
 
-    fn DAQmxExportSignal(handle: TaskHandle, signalID: CInt32, outputTerminal: CConstStr)
-        -> CInt32;
+    fn DAQmxConnectTerms(sourceTerminal: CConstStr, destinationTerminal: CConstStr, signalModifiers: CInt32) -> CInt32;
+    fn DAQmxDisconnectTerms(sourceTerminal: CConstStr, destinationTerminal: CConstStr) -> CInt32;
+    fn DAQmxExportSignal(handle: TaskHandle, signalID: CInt32, outputTerminal: CConstStr) -> CInt32;
     fn DAQmxSetRefClkSrc(handle: TaskHandle, src: CConstStr) -> CInt32;
     fn DAQmxSetRefClkRate(handle: TaskHandle, rate: CFloat64) -> CInt32;
     fn DAQmxCfgDigEdgeStartTrig(
@@ -171,6 +175,26 @@ extern "C" {
     ) -> CInt32;
     fn DAQmxGetWriteCurrWritePos(handle: TaskHandle, data: *mut CUint64) -> CInt32;
     fn DAQmxGetWriteTotalSampPerChanGenerated(handle: TaskHandle, data: *mut CUint64) -> CInt32;
+}
+
+#[derive(Clone)]
+pub struct DAQmxError {
+    msg: String
+}
+impl DAQmxError {
+    pub fn new(msg: String) -> Self {
+        Self {msg}
+    }
+}
+impl ToString for DAQmxError {
+    fn to_string(&self) -> String {
+        self.msg.clone()
+    }
+}
+impl From<NulError> for DAQmxError {
+    fn from(value: NulError) -> Self {
+        DAQmxError::new(format!("Failed to convert '{}' to CString", value.to_string()))
+    }
 }
 
 /// Calls a DAQmx C-function and handles potential errors.
@@ -204,9 +228,11 @@ extern "C" {
 /// This function will panic if:
 /// * The DAQmx driver call returns a negative error code.
 /// * There's a failure in opening or writing to the "nidaqmx_error.logs" file.
-pub fn daqmx_call<F: FnOnce() -> CInt32>(func: F) {
-    let err_code = func();
-    if err_code < 0 {
+pub fn daqmx_call<F: FnOnce() -> CInt32>(func: F) -> Result<(), DAQmxError> {
+    let status_code = func();
+    if status_code >= 0 {
+        Ok(())
+    } else {
         let mut err_buff = [0i8; 2048];
         unsafe {
             DAQmxGetExtendedErrorInfo(err_buff.as_mut_ptr(), 2048 as CUint32);
@@ -216,17 +242,22 @@ pub fn daqmx_call<F: FnOnce() -> CInt32>(func: F) {
             .into_owned();
 
         // Write the error to log file
-        let mut file = OpenOptions::new()
-            .write(true)
-            .append(true)
-            .create(true)
-            .open("./nidaqmx_error.logs")
-            .expect("Failed to open nidaqmx_error.logs");
-        writeln!(file, "DAQmx Error: {}", error_string)
-            .expect("Failed to write error to nidaqmx_error.logs");
-        panic!("DAQmx Error: {}", error_string);
+        let log_to_file = || -> Result<(), std::io::Error> {
+            let mut file = OpenOptions::new()
+                .write(true)
+                .append(true)
+                .create(true)
+                .open("./nidaqmx_error.logs")?;
+            writeln!(file, "DAQmx Error: {error_string}")?;
+            Ok(())
+        };
+        let log_res = log_to_file();
+        if log_res.is_err() {println!("Failed to write error to nidaqmx_error.logs")};
+        // Return the error
+        Err(DAQmxError::new(format!("DAQmx Error: {error_string}")))
     }
 }
+
 /// Resets a specified National Instruments (NI) device.
 ///
 /// This function attempts to reset the provided NI device by invoking the `DAQmxResetDevice` method.
@@ -259,10 +290,19 @@ pub fn daqmx_call<F: FnOnce() -> CInt32>(func: F) {
 /// # Note
 ///
 /// Ensure that the device name provided is valid and that the device is accessible when invoking this function.
-
-pub fn reset_ni_device(name: &str) {
-    let name_cstr = std::ffi::CString::new(name).expect("Failed to convert device name to CString");
-    daqmx_call(|| unsafe { DAQmxResetDevice(name_cstr.as_ptr()) });
+pub fn reset_device(name: &str) -> Result<(), DAQmxError> {
+    let name_cstr = std::ffi::CString::new(name)?;
+    daqmx_call(|| unsafe { DAQmxResetDevice(name_cstr.as_ptr()) })
+}
+pub fn connect_terms(src: &str, dest: &str) -> Result<(), DAQmxError> {
+    let src = std::ffi::CString::new(src)?;
+    let dest = std::ffi::CString::new(dest)?;
+    daqmx_call(|| unsafe { DAQmxConnectTerms(src.as_ptr(), dest.as_ptr(), DAQMX_VAL_DO_NOT_INVERT_POLARITY) })
+}
+pub fn disconnect_terms(src: &str, dest: &str) -> Result<(), DAQmxError> {
+    let src = std::ffi::CString::new(src)?;
+    let dest = std::ffi::CString::new(dest)?;
+    daqmx_call(|| unsafe { DAQmxDisconnectTerms(src.as_ptr(), dest.as_ptr()) })
 }
 
 /// Represents a National Instruments (NI) DAQmx task.
@@ -289,39 +329,40 @@ pub fn reset_ni_device(name: &str) {
 /// # Note
 ///
 /// Ensure you have the necessary NI-DAQmx drivers and libraries installed and accessible when using this struct and its associated methods.
-
 pub struct NiTask {
     handle: TaskHandle,
 }
 
 impl NiTask {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self, DAQmxError> {
         let mut taskhandle: TaskHandle = std::ptr::null_mut();
-        let task_name_cstr =
-            std::ffi::CString::new("").expect("Failed to convert task name to CString");
-        daqmx_call(|| unsafe { DAQmxCreateTask(task_name_cstr.as_ptr(), &mut taskhandle) });
-        Self { handle: taskhandle }
+        let task_name_cstr = std::ffi::CString::new("")?;
+        daqmx_call(|| unsafe { DAQmxCreateTask(task_name_cstr.as_ptr(), &mut taskhandle) })?;
+        Ok(Self { handle: taskhandle })
     }
 
-    pub fn clear(&self) {
-        daqmx_call(|| unsafe { DAQmxClearTask(self.handle) });
+    pub fn clear(&self) -> Result<(), DAQmxError> {
+        daqmx_call(|| unsafe { DAQmxClearTask(self.handle) })
     }
-    pub fn start(&self) {
-        daqmx_call(|| unsafe { DAQmxStartTask(self.handle) });
+    pub fn start(&self) -> Result<(), DAQmxError> {
+        daqmx_call(|| unsafe { DAQmxStartTask(self.handle) })
     }
-    pub fn stop(&self) {
-        daqmx_call(|| unsafe { DAQmxStopTask(self.handle) });
+    pub fn stop(&self) -> Result<(), DAQmxError> {
+        daqmx_call(|| unsafe { DAQmxStopTask(self.handle) })
     }
-    pub fn wait_until_done(&self, timeout: f64) {
-        daqmx_call(|| unsafe { DAQmxWaitUntilTaskDone(self.handle, timeout as CFloat64) });
+    pub fn wait_until_done(&self, timeout: Option<f64>) -> Result<(), DAQmxError> {
+        let timeout = match timeout {
+            Some(timeout) => timeout as CFloat64,
+            None => DAQMX_VAL_WAITINFINITELY,
+        };
+        daqmx_call(|| unsafe { DAQmxWaitUntilTaskDone(self.handle, timeout) })
     }
-    pub fn disallow_regen(&self) {
-        daqmx_call(|| unsafe { DAQmxSetWriteRegenMode(self.handle, DAQMX_VAL_DONOTALLOWREGEN) });
+    pub fn disallow_regen(&self) -> Result<(), DAQmxError> {
+        daqmx_call(|| unsafe { DAQmxSetWriteRegenMode(self.handle, DAQMX_VAL_DONOTALLOWREGEN) })
     }
 
-    pub fn cfg_sample_clk(&self, clk_src: &str, samp_rate: f64, seq_len: u64) {
-        let src_cstring =
-            std::ffi::CString::new(clk_src).expect("Failed to convert clk_src to CString");
+    pub fn cfg_samp_clk_timing(&self, clk_src: &str, samp_rate: f64, seq_len: u64) -> Result<(), DAQmxError> {
+        let src_cstring = std::ffi::CString::new(clk_src)?;
         daqmx_call(|| unsafe {
             DAQmxCfgSampClkTiming(
                 self.handle,
@@ -334,14 +375,13 @@ impl NiTask {
         })
     }
 
-    pub fn cfg_output_buffer(&self, buf_sz: usize) {
-        daqmx_call(|| unsafe { DAQmxCfgOutputBuffer(self.handle, buf_sz as CUint32) });
+    pub fn cfg_output_buffer(&self, buf_size: usize) -> Result<(), DAQmxError> {
+        daqmx_call(|| unsafe { DAQmxCfgOutputBuffer(self.handle, buf_size as CUint32) })
     }
 
-    pub fn create_ao_chan(&self, name: &str) {
-        let name_cstr =
-            std::ffi::CString::new(name).expect("Failed to convert physical name to CString");
-        let assigned_name_cstr = std::ffi::CString::new("").expect("");
+    pub fn create_ao_chan(&self, name: &str) -> Result<(), DAQmxError> {
+        let name_cstr = std::ffi::CString::new(name)?;
+        let assigned_name_cstr = std::ffi::CString::new("")?;
         daqmx_call(|| unsafe {
             DAQmxCreateAOVoltageChan(
                 self.handle,
@@ -355,10 +395,9 @@ impl NiTask {
         })
     }
 
-    pub fn create_do_chan(&self, name: &str) {
-        let name_cstr =
-            std::ffi::CString::new(name).expect("Failed to convert physical name to CString");
-        let assigned_name_cstr = std::ffi::CString::new("").expect("");
+    pub fn create_do_chan(&self, name: &str) -> Result<(), DAQmxError> {
+        let name_cstr = std::ffi::CString::new(name)?;
+        let assigned_name_cstr = std::ffi::CString::new("")?;
         daqmx_call(|| unsafe {
             DAQmxCreateDOChan(
                 self.handle,
@@ -369,106 +408,119 @@ impl NiTask {
         })
     }
 
-    pub fn write_digital_port(&self, signal_arr: &Array2<u32>) -> usize {
+    pub fn write_digital_port(&self, samp_arr: &Array2<u32>, timeout: Option<f64>) -> Result<usize, DAQmxError> {
+        let timeout = match timeout {
+            Some(timeout) => timeout as CFloat64,
+            None => DAQMX_VAL_WAITINFINITELY,
+        };
         let mut nwritten: CInt32 = 0;
         daqmx_call(|| unsafe {
             DAQmxWriteDigitalU32(
                 self.handle,
-                signal_arr.shape()[1] as CInt32,
+                samp_arr.shape()[1] as CInt32,
                 false as CBool32,
-                DAQMX_VAL_WAITINFINITELY,
+                timeout,
                 DAQMX_VAL_GROUPBYCHANNEL,
-                signal_arr.as_ptr(),
+                samp_arr.as_ptr(),
                 &mut nwritten as *mut CInt32,
                 std::ptr::null_mut(),
             )
-        });
-        nwritten as usize
+        })?;
+        Ok(nwritten as usize)
     }
 
-    pub fn write_digital_lines(&self, signal_arr: &Array2<u8>) -> usize {
+    pub fn write_digital_lines(&self, samp_arr: &Array2<u8>, timeout: Option<f64>) -> Result<usize, DAQmxError> {
+        let timeout = match timeout {
+            Some(timeout) => timeout as CFloat64,
+            None => DAQMX_VAL_WAITINFINITELY,
+        };
         let mut nwritten: CInt32 = 0;
         daqmx_call(|| unsafe {
             DAQmxWriteDigitalLines(
                 self.handle,
-                signal_arr.shape()[1] as CInt32,
+                samp_arr.shape()[1] as CInt32,
                 false as CBool32,
-                DAQMX_VAL_WAITINFINITELY,
+                timeout,
                 DAQMX_VAL_GROUPBYCHANNEL,
-                signal_arr.as_ptr(),
+                samp_arr.as_ptr(),
                 &mut nwritten as *mut CInt32,
                 std::ptr::null_mut(),
             )
-        });
-        nwritten as usize
+        })?;
+        Ok(nwritten as usize)
     }
 
-    pub fn write_analog(&self, signal_arr: &Array2<f64>) -> usize {
+    pub fn write_analog(&self, samp_arr: &Array2<f64>, timeout: Option<f64>) -> Result<usize, DAQmxError> {
+        let timeout = match timeout {
+            Some(timeout) => timeout as CFloat64,
+            None => DAQMX_VAL_WAITINFINITELY,
+        };
         let mut nwritten: CInt32 = 0;
         daqmx_call(|| unsafe {
             DAQmxWriteAnalogF64(
                 self.handle,
-                signal_arr.shape()[1] as CInt32,
+                samp_arr.shape()[1] as CInt32,
                 false as CBool32,
-                DAQMX_VAL_WAITINFINITELY,
+                timeout,
                 DAQMX_VAL_GROUPBYCHANNEL,
-                signal_arr.as_ptr(),
+                samp_arr.as_ptr(),
                 &mut nwritten as *mut CInt32,
                 std::ptr::null_mut(),
             )
-        });
-        nwritten as usize
+        })?;
+        Ok(nwritten as usize)
     }
 
-    pub fn set_ref_clk_rate(&self, rate: f64) {
-        daqmx_call(|| unsafe { DAQmxSetRefClkRate(self.handle, rate as CFloat64) });
+    pub fn set_ref_clk_rate(&self, rate: f64) -> Result<(), DAQmxError> {
+        daqmx_call(|| unsafe { DAQmxSetRefClkRate(self.handle, rate as CFloat64) })
     }
 
-    pub fn set_ref_clk_src(&self, src: &str) {
-        let clk_src_cstr =
-            std::ffi::CString::new(src).expect("Failed to convert ref_clk source to CString");
-        daqmx_call(|| unsafe { DAQmxSetRefClkSrc(self.handle, clk_src_cstr.as_ptr()) });
+    pub fn set_ref_clk_src(&self, src: &str) -> Result<(), DAQmxError> {
+        let clk_src_cstr = std::ffi::CString::new(src)?;
+        daqmx_call(|| unsafe { DAQmxSetRefClkSrc(self.handle, clk_src_cstr.as_ptr()) })
     }
 
-    pub fn cfg_ref_clk(&self, src: &str, rate: f64) {
-        self.set_ref_clk_rate(rate);
-        self.set_ref_clk_src(src);
+    pub fn cfg_ref_clk(&self, src: &str, rate: f64) -> Result<(), DAQmxError> {
+        self.set_ref_clk_rate(rate)?;
+        self.set_ref_clk_src(src)?;
+        Ok(())
     }
 
-    pub fn cfg_dig_edge_start_trigger(&self, trigger_source: &str) {
-        let trigger_source_cstr = std::ffi::CString::new(trigger_source)
-            .expect("Failed to convert trigger_source to CString");
+    pub fn cfg_dig_edge_start_trigger(&self, trigger_source: &str) -> Result<(), DAQmxError> {
+        let trigger_source_cstr = std::ffi::CString::new(trigger_source)?;
         daqmx_call(|| unsafe {
             DAQmxCfgDigEdgeStartTrig(self.handle, trigger_source_cstr.as_ptr(), DAQMX_VAL_RISING)
-        });
+        })
     }
 
-    pub fn get_write_current_write_pos(&self) -> u64 {
+    pub fn get_write_current_write_pos(&self) -> Result<u64, DAQmxError> {
         let mut data: CUint64 = 0;
-        daqmx_call(|| unsafe { DAQmxGetWriteCurrWritePos(self.handle, &mut data as *mut CUint64) });
-        data as u64
+        daqmx_call(|| unsafe { DAQmxGetWriteCurrWritePos(self.handle, &mut data as *mut CUint64) })?;
+        Ok(data as u64)
     }
 
-    pub fn export_signal(&self, signal_id: CInt32, output_terminal: &str) {
-        let output_terminal_cstr = std::ffi::CString::new(output_terminal)
-            .expect("Failed to convert output_terminal to CString");
+    pub fn export_signal(&self, signal_id: CInt32, output_terminal: &str) -> Result<(), DAQmxError> {
+        let output_terminal_cstr = std::ffi::CString::new(output_terminal)?;
         daqmx_call(|| unsafe {
             DAQmxExportSignal(self.handle, signal_id, output_terminal_cstr.as_ptr())
-        });
+        })
     }
 
-    pub fn get_write_total_samp_per_chan_generated(&self) -> u64 {
+    pub fn get_write_total_samp_per_chan_generated(&self) -> Result<u64, DAQmxError> {
         let mut data: CUint64 = 0;
         daqmx_call(|| unsafe {
             DAQmxGetWriteTotalSampPerChanGenerated(self.handle, &mut data as *mut CUint64)
-        });
-        data as u64
+        })?;
+        Ok(data as u64)
     }
 }
 
 // Define deletion behavior
 impl Drop for NiTask {
     fn drop(&mut self) {
-        self.clear()
+        let res = self.clear();
+        if let Err(err) = res {
+            println!("Error when dropping NiTask: {}", err.to_string());
+        };
     }
 }
