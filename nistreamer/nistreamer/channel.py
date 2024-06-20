@@ -106,7 +106,7 @@ class AOChanProxy(BaseChanProxy):
     def chan_name(self):
         return f'ao{self.chan_idx}'
 
-    def constant(self, t, dur, val):
+    def const(self, t, dur, val):
         self._streamer.constant(
             dev_name=self._card_max_name,
             chan_name=self.chan_name,
@@ -116,7 +116,7 @@ class AOChanProxy(BaseChanProxy):
         )
         return dur
     
-    def go_constant(self, t, val):
+    def go_const(self, t, val):
         self._streamer.go_constant(
             dev_name=self._card_max_name,
             chan_name=self.chan_name,
