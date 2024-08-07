@@ -164,8 +164,6 @@ class NIStreamer:
             self._streamer.cfg_run(bufsize_ms=bufsize_ms)
             for i in range(nreps):
                 self._streamer.stream_run(calc_next=(i < nreps - 1))
-        except KeyboardInterrupt:
-            pass
         finally:
             self._streamer.close_run()
 
