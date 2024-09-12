@@ -142,8 +142,8 @@ fn main() {
 
 1. Clone the repository and navigate to it.
 2. Activate your desired Python (Anaconda) environment.
-3. Navigate to the `nicompiler_backend` directory and execute `maturin develop --release` to install to the shell's python environment. 
-4. [Placeholder for `niexpctrl` installation steps]
+3. Navigate to the `nicompiler_backend` directory and execute `maturin develop --release` to install to the shell's python environment (ignore any warnings).
+4. Run `pip show nicompiler_backend' to verify installation.
 
 ### Installing `niexpctrl_backend`
 
@@ -153,7 +153,5 @@ fn main() {
    ````C:/Program Files (x86)/National Instruments/Shared/ExternalCompilerSupport/C/lib64/msvc/NIDAQmx.lib````
    
    If not found, update the linker arguments in `niexpctrl_backend/.cargo/config.toml` with the correct path. 
-4. Navigate to the `niexpctrl_backend` directory and run `maturin develop --release` to install to the shell's python environment. 
-5. [Placeholder for `niexpctrl` installation steps]
-
-## Extend functionalities
+4. Navigate to the `niexpctrl_backend` directory and run `maturin develop --release` to install to the shell's python environment (ignore any warnings).
+5. Run `pip show niexpctrl_backend' to verify installation.
