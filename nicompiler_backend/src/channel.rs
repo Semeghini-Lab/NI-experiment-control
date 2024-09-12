@@ -63,7 +63,7 @@
 //! AO channels are both streamable and editable. DO line channels are editable but not streamable, and DO port
 //! channels are non-editable yet streamable.
 
-use ndarray::{array, s, Array1};
+use ndarray::{s, Array1};
 use std::collections::BTreeSet;
 
 use crate::instruction::*;
