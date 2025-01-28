@@ -155,3 +155,14 @@ fn main() {
    If not found, update the linker arguments in `niexpctrl_backend/.cargo/config.toml` with the correct path. 
 4. Navigate to the `niexpctrl_backend` directory and run `maturin develop --release` to install to the shell's python environment (ignore any warnings).
 5. Run `pip show niexpctrl_backend` to verify installation.
+
+## Debugging
+
+### Issue with start trigger
+
+For example:
+
+````RuntimeError: [PXI1Slot7] DAQmx Error: Wait Until Done did not indicate that the task was done within the specified timeout.
+Increase the timeout, check the program, and make sure connections for external timing and triggering are in place.````
+
+Errors due to the start trigger may be caused by two sources. (1) the trigger and clock export is not correctly setup. For an example of how to set this up, see demo/setup.pu. (2) The chassis is not properly configured. Open NI MAX, select the chassis, on the bottom of the page click the "Triggers" tab, and select "Away from Bus 1" for all PXI_TRIG lines.
