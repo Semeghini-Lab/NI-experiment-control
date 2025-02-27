@@ -326,16 +326,17 @@ pub trait StreamableDevice: BaseDevice + Sync + Send {
         // Now need to wait for the final sample chunk to be generated out by the card before stopping the task.
         // In the mean time, we can calculate the initial chunk for the next repetition in the case we are on repeat.
         if !calc_next {
-            stream_bundle.ni_task.wait_until_done(stream_bundle.buf_write_timeout.clone())?;
-            stream_bundle.ni_task.stop()?;
+            stream_bundle.ni_task.stop_by_underrun(stream_bundle.buf_write_timeout.clone())?;
         } else {
+            // Calculate the sample chunk
             stream_bundle.counter.reset();
             let (start_pos, end_pos) = stream_bundle.counter.tick_next().unwrap();
             let samp_arr = self.calc_signal_nsamps(start_pos, end_pos, end_pos - start_pos, true, false);
 
-            stream_bundle.ni_task.wait_until_done(stream_bundle.buf_write_timeout.clone())?;
-            stream_bundle.ni_task.stop()?;
+            // Handle stop:
+            stream_bundle.ni_task.stop_by_underrun(stream_bundle.buf_write_timeout.clone())?;
 
+            // Write the sample chunk in
             stream_bundle.write_buf(samp_arr)?;
         }
         Ok(())
