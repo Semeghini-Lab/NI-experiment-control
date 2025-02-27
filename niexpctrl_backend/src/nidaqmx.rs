@@ -83,6 +83,7 @@ pub type TaskHandle = *mut libc::c_void;
 pub const DAQMX_VAL_RISING: CInt32 = 10280;
 pub const DAQMX_VAL_VOLTS: CInt32 = 10348;
 pub const DAQMX_VAL_FINITESAMPS: CInt32 = 10178;
+pub const DAQMX_VAL_CONTSAMPS: CInt32 = 10123;
 pub const DAQMX_VAL_DONOTALLOWREGEN: CInt32 = 10158;
 pub const DAQMX_VAL_GROUPBYCHANNEL: CBool32 = 0;
 pub const DAQMX_VAL_GROUPBYSCANNUMBER: CBool32 = 1;
@@ -93,6 +94,8 @@ pub const DAQMX_VAL_STARTTRIGGER: CInt32 = 12491;
 pub const DAQMX_VAL_SAMPLECLOCK: CInt32 = 12487;
 pub const DAQMX_VAL_10MHZREFCLOCK: CInt32 = 12536;
 pub const DAQMX_VAL_DO_NOT_INVERT_POLARITY: CInt32 = 0;
+
+pub const BUFFER_UNDERRUN_ERROR_CODE: CInt32 = -200290;
 
 #[link(name = "NIDAQmx")]
 extern "C" {
@@ -230,7 +233,11 @@ impl From<NulError> for DAQmxError {
 /// * There's a failure in opening or writing to the "nidaqmx_error.logs" file.
 pub fn daqmx_call<F: FnOnce() -> CInt32>(func: F) -> Result<(), DAQmxError> {
     let status_code = func();
-    if status_code >= 0 {
+    interpret_daqmx_status_code(status_code)
+}
+
+pub fn interpret_daqmx_status_code(code: CInt32) -> Result<(), DAQmxError> {
+    if code >= 0 {
         Ok(())
     } else {
         let mut err_buff = [0i8; 2048];
@@ -357,6 +364,41 @@ impl NiTask {
         };
         daqmx_call(|| unsafe { DAQmxWaitUntilTaskDone(self.handle, timeout) })
     }
+    /// A specialized version of `Self::wait_until_done` which ignores buffer underrun error.
+    /// All other types of runtime errors will still result in `DAQmxError` return.
+    /// Use this method when relying on buffer underrun as the stop mechanism.
+    pub fn wait_until_done_ignore_underrun(&self, timeout: Option<f64>) -> Result<(), DAQmxError> {
+        let timeout = match timeout {
+            Some(timeout) => timeout as CFloat64,
+            None => DAQMX_VAL_WAITINFINITELY,
+        };
+        let status_code = unsafe { DAQmxWaitUntilTaskDone(self.handle, timeout) };
+        if status_code == BUFFER_UNDERRUN_ERROR_CODE {
+            // Ignore underrun error
+            Ok(())
+        } else {
+            // Properly handle any other status code to catch other types of runtime errors
+            // (write/wait timeout, lost PLL ref signal, output voltage limit exceeded...)
+            interpret_daqmx_status_code(status_code)
+        }
+    }
+    /// Special version of `Self::stop()` which relies on an intentional buffer underrun
+    /// as a way of deterministic generation stop.
+    /// This function only ignores the underrun error and will still return `DAQmxError`
+    /// if any other kind of runtime error occurs.
+    pub fn stop_by_underrun(&self, timeout: Option<f64>) -> Result<(), DAQmxError> {
+        // - wait until all the samples are played out from the buffer
+        //   and NI task stops due to the intentional underrun
+        //   (This call only ignores the underrun error and still returns DAQmxError if any other type of error occurs)
+        self.wait_until_done_ignore_underrun(timeout)?;
+
+        // - dispose of the intentional underrun error by calling stop() once and dumping the return
+        // (if there were any other error type, the previous call would have force-returned already)
+        let _ = self.stop();
+
+        // - the second stop() call should return without any errors
+        self.stop()
+    }
     pub fn disallow_regen(&self) -> Result<(), DAQmxError> {
         daqmx_call(|| unsafe { DAQmxSetWriteRegenMode(self.handle, DAQMX_VAL_DONOTALLOWREGEN) })
     }
@@ -369,7 +411,7 @@ impl NiTask {
                 src_cstring.as_ptr(),
                 samp_rate as CFloat64,
                 DAQMX_VAL_RISING,
-                DAQMX_VAL_FINITESAMPS,
+                DAQMX_VAL_CONTSAMPS,
                 seq_len as CUint64,
             )
         })
